@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useMemo, useEffect, useContext } from "react";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
