@@ -1,0 +1,11 @@
+# Minimalkonfiguration für die Edge Functions dieses Projekts. Migrationen
+# laufen weiterhin über die Supabase-GitHub-Integration (siehe
+# supabase/README.md); diese Datei ist hier ausschließlich für die
+# Function-Konfiguration nötig.
+
+[functions.evaluate-seasons]
+# Wird ausschließlich von pg_cron (über pg_net) mit einem eigenen Secret-Header
+# aufgerufen, niemals von einem Browser mit Nutzer-Session — deshalb kein
+# Supabase-Auth-JWT nötig. Die eigentliche Absicherung ist der Vergleich von
+# x-evaluate-secret gegen EVALUATE_SEASONS_SECRET in index.ts, nicht verify_jwt.
+verify_jwt = false

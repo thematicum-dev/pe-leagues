@@ -19,6 +19,62 @@ Dateinamen-Reihenfolge angewendet:
 14. `20260817090500_join_and_create_season.sql` – `join_season`/`create_and_join_season` RPCs für den Client
 15. `20260817090600_cron_start_due_seasons.sql` – pg_cron-Job, startet abgelaufene Lobbys minütlich
 16. `20260817090700_enable_realtime.sql` – Realtime für `seasons`/`season_players`
+17. `20260817090800_season_evaluation_columns.sql` – `seasons` um `started_at`, Claim-Token und `final_ranking` erweitert
+18. `20260817090900_start_season_sets_started_at.sql` – `start_season()` setzt `started_at`
+19. `20260817091000_season_submission_status.sql` – `season_submission_status()`: aggregierter Status für den Wartezustand
+20. `20260817091100_evaluation_claim_commit.sql` – Claim/Commit-Funktionen für die Rundenauswertung (nur `service_role`)
+21. `20260817091200_cron_evaluate_seasons.sql` – pg_net + Vault-Secret + minütlicher pg_cron-Job, ruft die Edge Function `evaluate-seasons` auf
+
+## Serverseitige Rundenauswertung
+
+Die eigentliche Auswertung eines Halbjahres (Auktionen auflösen,
+Maßnahmen/Personal/Markt fortschreiben, Halbjahr vorrücken) läuft in der
+Edge Function `supabase/functions/evaluate-seasons` und benutzt dafür
+`lib/engine/runQuarter` — dieselbe Logik wie der Übungsmodus, nur über bis
+zu fünf menschliche oder KI-Fondsplätze statt nur einen. `lib/engine/deadline.ts`
+berechnet die Frist des jeweils nächsten Halbjahres (Zeitzone
+Europe/Berlin, DST-sicher, siehe die Tests dort für die beiden
+Umstellungstermine).
+
+Ablauf pro Partie und Halbjahr:
+
+1. `claim_season_for_evaluation()` sperrt die `seasons`-Zeile, prüft
+   erneut, ob die Partie wirklich fällig ist (alle menschlichen Spieler
+   haben abgegeben, oder die Frist ist abgelaufen), und vergibt bei Erfolg
+   ein Claim-Token — alles in einer kurzen Transaktion.
+2. Die Edge Function lädt `season_state`/`turn_submissions` mit dem
+   `service_role`-Key (umgeht RLS gezielt für diesen einen, vertrauenswürdigen
+   Zweck) und führt `runQuarter()` aus.
+3. `commit_season_evaluation()` (bzw. `commit_season_bootstrap()` für den
+   allerersten Dealflow direkt nach `start_season()`) schreibt das Ergebnis
+   nur, wenn das übergebene Token noch zum aktuellen Claim passt.
+
+### Nach dem Deploy einmalig einzurichten
+
+Migration 21 legt zwei Vault-Secrets an (`evaluate_seasons_secret` — der
+zufällig erzeugte Wert, mit dem sich Cron-Aufrufe ausweisen — und
+`evaluate_seasons_function_url` als leerer Platzhalter). Ohne die folgenden
+beiden Schritte ruft `invoke_evaluate_seasons()` nichts auf (es prüft die
+URL und tut bei einem leeren Platzhalter nichts):
+
+1. Edge Function deployen und den in Vault erzeugten Secret-Wert als
+   Function-Secret setzen (derselbe Wert, den die Datenbank kennt):
+   ```
+   supabase functions deploy evaluate-seasons
+   select decrypted_secret from vault.decrypted_secrets where name = 'evaluate_seasons_secret';
+   supabase secrets set EVALUATE_SEASONS_SECRET=<der eben ausgelesene Wert>
+   ```
+2. Die tatsächliche Function-URL in Vault eintragen:
+   ```sql
+   select vault.update_secret(
+     (select id from vault.secrets where name = 'evaluate_seasons_function_url'),
+     'https://<project-ref>.functions.supabase.co/evaluate-seasons'
+   );
+   ```
+
+Danach zur Kontrolle: **Database → Cron Jobs** sollte zusätzlich zu
+`start-due-seasons` den Job `evaluate-seasons` mit der Planung `* * * * *`
+zeigen.
 
 ## Anwenden ohne SQL-Editor (empfohlen, funktioniert am Handy)
 
@@ -49,6 +105,51 @@ sofort und folgenlos ab (Status ist dann bereits `running`/`cancelled`,
 nicht mehr `lobby`). Der Trigger reagiert außerdem bewusst nur auf
 menschliche Beitritte (`is_ai = false`), damit die KI-Einfügungen von
 `start_season()` selbst nicht denselben Trigger rekursiv erneut auslösen.
+
+## Sicherheit der Rundenauswertung
+
+Vier Garantien, in der Reihenfolge geprüft, in der sie in der
+Aufgabenstellung standen:
+
+1. **Keine Abgabe geht an den Browser eines anderen Spielers.**
+   `turn_submissions` hat unverändert nur die `SELECT`-Policy
+   `profile_id = auth.uid()` (siehe unten). Die neue Statusabfrage
+   `season_submission_status()` liefert ausdrücklich nur Zählwerte (wie
+   viele von wie vielen) und den eigenen Status, nie wer was abgegeben hat.
+   Die Edge Function liest `turn_submissions` ausschließlich mit dem
+   `service_role`-Key innerhalb ihrer eigenen, nicht-öffentlichen
+   Server-Umgebung; was daraus in `season_state`/`turn_results` geschrieben
+   wird, ist der bereits ausgewertete öffentliche Zustand (Portfolios aller
+   Fonds), nicht die rohe Abgabe — genau dieselbe Transparenz, die
+   `season_state` für abgeschlossene Halbjahre ohnehin schon für alle
+   Mitspieler vorsieht.
+2. **Der Server prüft jede Abgabe, vertraut keinem gesendeten Wert.**
+   `lib/engine/runQuarter.ts` verwendet aus einer Abgabe ausschließlich
+   Absichten (`dealId`, `multiple`, `leverage`, Maßnahmen-/Personal-/
+   Exit-Referenzen) und berechnet Preise, Kassenstände, Zinsen, IRR/TVPI
+   selbst. Jede Referenz (Deal, Beteiligung, Angebot, Kandidat) wird gegen
+   den tatsächlichen Zustand geprüft; unbekannte, unzulässige oder
+   fehlerhafte Werte (auch nicht-numerische, fehlende oder falsch typisierte
+   Felder) werden ignoriert, nie ungeprüft übernommen — ein manipuliertes
+   `payload` kann höchstens dazu führen, dass die eigene Abgabe wirkungslos
+   bleibt.
+3. **Keine doppelte Abgabe, keine doppelte Auswertung — auch nicht
+   gleichzeitig.** `turn_submissions_unique(season_id, half_year,
+   profile_id)` verhindert eine zweite Abgabe auf Datenbankebene (der
+   Client fängt den daraus resultierenden `23505`-Fehler ab und zeigt den
+   Wartezustand, statt einen Fehler zu melden). Die Auswertung einer Partie
+   läuft über ein Zwei-Phasen-Claim (`claim_season_for_evaluation()` sperrt
+   die Zeile und prüft Fälligkeit erneut, `commit_*` schreibt nur mit
+   gültigem Token) plus dem unique-Constraint auf
+   `season_state(season_id, half_year)` als zweite, unabhängige Sperre.
+4. **Der Browser kann die Auswertung nicht selbst auslösen.**
+   `claim_season_for_evaluation()`, `commit_season_bootstrap()`,
+   `commit_season_evaluation()` und `list_seasons_for_evaluation_sweep()`
+   sind ausschließlich für `service_role` freigegeben (`revoke all ... from
+   public, authenticated, anon`) — ein Postgres-Berechtigungsfehler, keine
+   Anwendungslogik, die man umgehen könnte. Die Edge Function selbst prüft
+   zusätzlich einen Secret-Header, der ausschließlich in Supabase Vault und
+   als Function-Secret hinterlegt ist, nie im Quelltext oder im Browser.
 
 ## Wichtigste Sicherheitsregel
 
