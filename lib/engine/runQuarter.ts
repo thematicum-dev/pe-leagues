@@ -30,7 +30,7 @@ import {
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3,
+  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf,
 } from "./engine";
 
 type Archetype = (typeof ARCHES)[number];
@@ -270,6 +270,25 @@ function finalizeExit(
   const mo = dealMoic(c, net);
   pushFeed(news, quarter, mo >= 2 ? "🚀" : mo >= 1 ? "💰" : "💀", mo >= 1 ? "pos" : "neg",
     `Exit ${c.name} an ${buyer}: ${net.toFixed(1)} Mio. € netto${extra}.`, f.slot);
+}
+
+/* Dealflow und Landmark für Halbjahr 1, unmittelbar nach Partiestart —
+   entspricht start() in components/PeLeagues.tsx
+   (makeDeals(attrs.sourcing, market) mit der Standard-Sourcing-Fähigkeit
+   eines menschlichen Fonds vor seiner eigenen Attributwahl, plus
+   newLandmark()). start_season() (SQL) kann das nicht selbst erzeugen, weil
+   newDeal() den vollen BOOK-Katalog aus lib/engine bräuchte; die
+   Auswertungsfunktion holt das beim nächsten Lauf nach (siehe
+   supabase/functions/evaluate-seasons). */
+export function bootstrapInitialDeals(rng: Rng, market: Record<string, number>) {
+  const sourcing = 2;
+  const n = 0.55 * sourcing;
+  const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
+  const deals: Any[] = [];
+  for (let i = 0; i < 4; i++) deals.push(newDeal(rng, "process", market));
+  for (let i = 0; i < props; i++) deals.push(newDeal(rng, "prop", market, sourcing));
+  const landmark = newLandmark(rng, market);
+  return { deals, landmark };
 }
 
 export interface RunQuarterInput {
@@ -626,6 +645,24 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     },
     feed: news,
   };
+}
+
+/* Endrangliste nach Halbjahr 20: die bestehende 50:50-Wertung aus IRR und
+   TVPI (scoreOf, unverändert aus lib/engine/engine.ts), absteigend
+   sortiert. Wird nach der letzten Auswertung einmalig in
+   seasons.final_ranking geschrieben. */
+export function computeFinalRanking(state: RuntimeState, halfYear: number) {
+  return state.funds
+    .map((f) => ({
+      slot: f.slot,
+      profileId: f.profileId,
+      isAi: f.isAi,
+      name: f.name,
+      tvpi: tvpiOf(f as Any, state.market, halfYear),
+      irr: irrOf(f as Any, state.market, halfYear),
+      score: scoreOf(f as Any, state.market, halfYear),
+    }))
+    .sort((a, b) => b.score - a.score);
 }
 
 function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[]): RuntimeFund[] {
