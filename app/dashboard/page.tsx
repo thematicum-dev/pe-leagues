@@ -1,14 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/auth/actions";
-import { createSeason, joinSeason } from "./actions";
-
-const STATUS_LABEL: Record<string, string> = {
-  lobby: "Lobby offen",
-  running: "Läuft",
-  finished: "Beendet",
-};
+import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -29,20 +22,58 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const { data: myMemberships } = await supabase
+  const { data: myRow } = await supabase
     .from("season_players")
-    .select("season_id, seasons(id, status, current_half_year, lobby_opened_at)")
-    .eq("profile_id", user.id);
+    .select("season_id, seasons!inner(id, status, lobby_opened_at)")
+    .eq("profile_id", user.id)
+    .in("seasons.status", ["lobby", "running"])
+    .maybeSingle();
 
-  const myMembershipSeasonIds = new Set((myMemberships ?? []).map((m) => m.season_id));
+  const myActiveSeason = myRow
+    ? (Array.isArray(myRow.seasons) ? myRow.seasons[0] : myRow.seasons)
+    : null;
 
-  const { data: openLobbies } = await supabase
-    .from("seasons")
-    .select("id, status, lobby_opened_at")
-    .eq("status", "lobby")
-    .order("lobby_opened_at", { ascending: false });
+  let mySeason: MySeasonSummary | null = null;
+  let openLobbies: LobbySummary[] = [];
 
-  const joinableLobbies = (openLobbies ?? []).filter((s) => !myMembershipSeasonIds.has(s.id));
+  if (myActiveSeason) {
+    const { count } = await supabase
+      .from("season_players")
+      .select("id", { count: "exact", head: true })
+      .eq("season_id", myActiveSeason.id);
+
+    mySeason = {
+      id: myActiveSeason.id,
+      status: myActiveSeason.status as "lobby" | "running",
+      lobbyOpenedAt: myActiveSeason.lobby_opened_at,
+      occupancy: count ?? 0,
+    };
+  } else {
+    const { data: lobbies } = await supabase
+      .from("seasons")
+      .select("id, lobby_opened_at")
+      .eq("status", "lobby")
+      .order("lobby_opened_at", { ascending: true });
+
+    const lobbyIds = (lobbies ?? []).map((l) => l.id);
+    const occupancy = new Map<string, number>();
+
+    if (lobbyIds.length > 0) {
+      const { data: playerRows } = await supabase
+        .from("season_players")
+        .select("season_id")
+        .in("season_id", lobbyIds);
+      for (const row of playerRows ?? []) {
+        occupancy.set(row.season_id, (occupancy.get(row.season_id) ?? 0) + 1);
+      }
+    }
+
+    openLobbies = (lobbies ?? []).map((l) => ({
+      id: l.id,
+      lobbyOpenedAt: l.lobby_opened_at,
+      occupancy: occupancy.get(l.id) ?? 0,
+    }));
+  }
 
   return (
     <main className="dashwrap">
@@ -53,55 +84,22 @@ export default async function DashboardPage() {
             <div className="dashsub">{user.email}</div>
           </div>
           <div className="landingactions">
-            <Link href="/practice" className="btn-secondary">
+            <a href="/practice" className="btn-secondary">
               Übungsmodus
-            </Link>
+            </a>
             <form action={signOut}>
-              <button type="submit" className="btn-secondary" style={{ border: "1px solid var(--rule)" }}>
+              <button
+                type="submit"
+                className="btn-secondary"
+                style={{ border: "1px solid var(--rule)" }}
+              >
                 Abmelden
               </button>
             </form>
           </div>
         </div>
 
-        <div className="dashcard">
-          <h2>Deine Partien</h2>
-          {(myMemberships ?? []).length === 0 && (
-            <p className="dashsub">Du bist noch in keiner Mehrspieler-Partie.</p>
-          )}
-          {(myMemberships ?? []).map((m) => {
-            const season = Array.isArray(m.seasons) ? m.seasons[0] : m.seasons;
-            if (!season) return null;
-            return (
-              <div className="seasonrow" key={season.id}>
-                <span>Partie {season.id.slice(0, 8)}</span>
-                <span className="seasonstatus">{STATUS_LABEL[season.status] ?? season.status}</span>
-              </div>
-            );
-          })}
-          <form action={createSeason} style={{ marginTop: 14 }}>
-            <button type="submit" className="btn-primary">
-              Neue Partie eröffnen
-            </button>
-          </form>
-        </div>
-
-        <div className="dashcard">
-          <h2>Offene Lobbys zum Beitreten</h2>
-          {joinableLobbies.length === 0 && (
-            <p className="dashsub">Aktuell keine offenen Lobbys außer deinen eigenen.</p>
-          )}
-          {joinableLobbies.map((season) => (
-            <div className="seasonrow" key={season.id}>
-              <span>Partie {season.id.slice(0, 8)}</span>
-              <form action={joinSeason.bind(null, season.id)}>
-                <button type="submit" className="btn-secondary">
-                  Beitreten
-                </button>
-              </form>
-            </div>
-          ))}
-        </div>
+        <LobbyOverview initialMySeason={mySeason} initialOpenLobbies={openLobbies} />
       </div>
     </main>
   );
