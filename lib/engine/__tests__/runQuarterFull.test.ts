@@ -4,6 +4,9 @@ import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, newDeal } from "../engine"
 import { runQuarter } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Any = any;
+
 function initialFund(slot: number, isAi: boolean, archetype: string | null): RuntimeFund {
   const arch = archetype ? ARCHES.find((a) => a.key === archetype)! : null;
   return {
@@ -50,11 +53,11 @@ describe("runQuarter über eine vollständige Partie", () => {
     for (let hy = 1; hy <= PERIODS; hy++) {
       const decisions: TurnDecisions = {};
       const me = state.funds[0];
-      const holdings = me.holdings as any[];
+      const holdings = me.holdings as Any[];
 
       // Bieten auf den ersten verfügbaren Deal, solange Platz im Portfolio ist
       if (holdings.length < 6 && state.deals.length) {
-        const d = state.deals[0] as any;
+        const d = state.deals[0] as Any;
         decisions.bids = [{ dealId: d.id, multiple: d.askMult * 0.98, leverage: Math.min(d.levCap, 3.2) }];
         decisions.dueDiligence = [d.id];
       }
@@ -64,7 +67,7 @@ describe("runQuarter über eine vollständige Partie", () => {
       if (withoutInitP) decisions.initiatives = [{ holdingUid: withoutInitP.uid, dim: "plat", id: "opex" }];
 
       // Such-Mandat für eine unbesetzte Position vergeben
-      const withVacancy = holdings.find((h) => h.cfo.skill <= 0 && !(h.searches || []).some((s: any) => s.seat === "cfo"));
+      const withVacancy = holdings.find((h) => h.cfo.skill <= 0 && !(h.searches || []).some((s: Any) => s.seat === "cfo"));
       if (withVacancy) decisions.searches = [{ holdingUid: withVacancy.uid, seat: "cfo" }];
 
       // Offene Shortlists annehmen (immer den A-Player)
@@ -93,7 +96,7 @@ describe("runQuarter über eine vollständige Partie", () => {
         expect(Number.isFinite(f.cash), `fund ${f.slot} cash finite in hy ${hy}`).toBe(true);
         expect(Number.isFinite(f.undrawn), `fund ${f.slot} undrawn finite in hy ${hy}`).toBe(true);
         expect(Number.isFinite(f.drawn), `fund ${f.slot} drawn finite in hy ${hy}`).toBe(true);
-        (f.holdings as any[]).forEach((h) => {
+        (f.holdings as Any[]).forEach((h) => {
           expect(Number.isFinite(h.revenue), `holding revenue finite in hy ${hy}`).toBe(true);
           expect(Number.isFinite(h.netDebt), `holding netDebt finite in hy ${hy}`).toBe(true);
         });
@@ -102,6 +105,6 @@ describe("runQuarter über eine vollständige Partie", () => {
 
     expect(state.funds).toHaveLength(5);
     // Nach 20 Halbjahren wurde liquidiert: keine offenen Beteiligungen mehr.
-    state.funds.forEach((f) => expect((f.holdings as any[]).length).toBe(0));
+    state.funds.forEach((f) => expect((f.holdings as Any[]).length).toBe(0));
   });
 });

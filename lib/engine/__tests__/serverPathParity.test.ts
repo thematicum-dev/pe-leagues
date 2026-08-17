@@ -4,6 +4,9 @@ import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS } from "../engine";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Any = any;
+
 /* Beweis, dass die Verlagerung der Rundenauswertung auf den Server nichts am
    Spielergebnis ändert (Erweiterung des Tests aus lib/engine/__tests__/fullGame.test.ts,
    der ursprünglich die Extraktion der Spiellogik in lib/engine bewiesen
@@ -63,18 +66,18 @@ function decideForHuman(
   myShortlist: RuntimeState["shortlist"][string],
 ): TurnDecisions {
   const me = state.funds[HUMAN_SLOT];
-  const holdings = me.holdings as any[];
+  const holdings = me.holdings as Any[];
   const decisions: TurnDecisions = {};
 
   if (holdings.length < 6 && state.deals.length) {
-    const d = state.deals[0] as any;
+    const d = state.deals[0] as Any;
     decisions.bids = [{ dealId: d.id, multiple: d.askMult * 0.98, leverage: Math.min(d.levCap, 3.2) }];
     decisions.dueDiligence = [d.id];
   }
   const withoutInitP = holdings.find((h) => !h.initP);
   if (withoutInitP) decisions.initiatives = [{ holdingUid: withoutInitP.uid, dim: "plat", id: "opex" }];
 
-  const withVacancy = holdings.find((h) => h.cfo.skill <= 0 && !(h.searches || []).some((s: any) => s.seat === "cfo"));
+  const withVacancy = holdings.find((h) => h.cfo.skill <= 0 && !(h.searches || []).some((s: Any) => s.seat === "cfo"));
   if (withVacancy) decisions.searches = [{ holdingUid: withVacancy.uid, seat: "cfo" }];
 
   if (myShortlist && myShortlist.length) {

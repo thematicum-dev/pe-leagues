@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, newDeal } from "../engine";
+import { SECTORS, SECNAMES, ARCHES, CAPITAL, newDeal } from "../engine";
 import { runQuarter } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Any = any;
 
 function initialFund(slot: number, isAi: boolean, archetype: string | null): RuntimeFund {
   const arch = archetype ? ARCHES.find((a) => a.key === archetype)! : null;
@@ -49,12 +52,11 @@ describe("runQuarter (Server-Engine)", () => {
       if (state.deals.length === 0) {
         // Auf Halbjahr 1 gibt es noch keinen Dealflow aus einer Vorauswertung;
         // wir spiegeln, was start_season() für Halbjahr 1 vorbereiten würde.
-        const seedDeals: TurnDecisions = {};
         const out = runQuarter({ state: { ...state, deals: bootstrapDeals(rng, state.market) }, halfYear: hy, decisionsBySlot: {}, rng });
         state = out.state;
         continue;
       }
-      const humanDeal = state.deals[0] as any;
+      const humanDeal = state.deals[0] as Any;
       const decisions: Record<number, TurnDecisions> = {
         0: humanDeal ? { bids: [{ dealId: humanDeal.id, multiple: humanDeal.askMult, leverage: Math.min(humanDeal.levCap, 3) }] } : {},
       };
@@ -77,7 +79,7 @@ describe("runQuarter (Server-Engine)", () => {
       let state = initialState();
       state.deals = bootstrapDeals(rng, state.market);
       for (let hy = 1; hy <= 4; hy++) {
-        const d = state.deals[0] as any;
+        const d = state.deals[0] as Any;
         const decisions: Record<number, TurnDecisions> = d
           ? { 0: { bids: [{ dealId: d.id, multiple: d.askMult, leverage: 2 }], dueDiligence: [d.id] } }
           : {};

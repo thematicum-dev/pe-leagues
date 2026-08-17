@@ -379,7 +379,6 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const w = valid[0];
     const f = F[w.f];
     const eb = ebitdaOf(d);
-    const bidMult = w.mult;
     w.mult = w.mult * (1 - 0.010 * f.attrs.negotiation);
     let hit = 0;
     if (d.type === "prop" && !f.isAi && !ddBySlot[f.slot]?.has(d.id)) {

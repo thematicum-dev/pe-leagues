@@ -234,3 +234,30 @@ body {
   flex-wrap: wrap;
   align-items: center;
 }
+
+.dealrow {
+  align-items: flex-start;
+}
+
+.dealrow .dashform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink2);
+}
+
+.dealrow .ddcheck {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.bidinput {
+  width: 72px;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
