@@ -186,6 +186,14 @@ export default function TurnPanel({
 
     setPending(false);
     if (insertError) {
+      // 23505 = unique_violation: turn_submissions_unique(season_id, half_year,
+      // profile_id) hat einen Doppel-Klick abgefangen -- die Abgabe von vorhin
+      // steht bereits, es ist nichts verlorengegangen.
+      if (insertError.code === "23505") {
+        setSubmitted(true);
+        refreshStatus();
+        return;
+      }
       setError("Das hat nicht geklappt — bitte versuch es erneut.");
       return;
     }
