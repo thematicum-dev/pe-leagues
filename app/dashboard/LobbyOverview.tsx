@@ -1,0 +1,211 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
+export interface LobbySummary {
+  id: string;
+  lobbyOpenedAt: string;
+  occupancy: number;
+}
+
+export interface MySeasonSummary {
+  id: string;
+  status: "lobby" | "running";
+  lobbyOpenedAt: string;
+  occupancy: number;
+}
+
+const RPC_ERROR_MESSAGES: Record<string, string> = {
+  already_in_active_season: "Du bist bereits in einer aktiven Partie.",
+  profile_missing: "Bitte lege zuerst deinen Anzeigenamen fest.",
+  season_not_joinable: "Diese Lobby ist nicht mehr offen — bitte versuch es erneut.",
+  season_full: "Diese Lobby ist bereits voll.",
+  season_not_found: "Diese Partie gibt es nicht mehr.",
+  not_authenticated: "Bitte melde dich erneut an.",
+};
+
+function friendlyError(message: string): string {
+  for (const [key, text] of Object.entries(RPC_ERROR_MESSAGES)) {
+    if (message.includes(key)) return text;
+  }
+  return "Das hat nicht geklappt. Bitte versuch es erneut.";
+}
+
+function formatRemaining(ms: number): string {
+  if (ms <= 0) return "Start läuft …";
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function Countdown({ lobbyOpenedAt }: { lobbyOpenedAt: string }) {
+  const deadline = useMemo(() => new Date(lobbyOpenedAt).getTime() + TWELVE_HOURS_MS, [lobbyOpenedAt]);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return <span className="mono">{formatRemaining(deadline - now)}</span>;
+}
+
+export default function LobbyOverview({
+  initialMySeason,
+  initialOpenLobbies,
+}: {
+  initialMySeason: MySeasonSummary | null;
+  initialOpenLobbies: LobbySummary[];
+}) {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [mySeason, setMySeason] = useState(initialMySeason);
+  const [openLobbies, setOpenLobbies] = useState(initialOpenLobbies);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sobald sich der eigene Partie-Status auf "running" ändert (5 Spieler
+  // erreicht oder 12-Stunden-Frist abgelaufen), direkt zur Partie
+  // weiterleiten.
+  useEffect(() => {
+    if (mySeason?.status === "running") {
+      router.push(`/season/${mySeason.id}`);
+    }
+  }, [mySeason, router]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("lobby-overview")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "season_players" },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { season_id?: string } | null;
+          const seasonId = row?.season_id;
+          if (!seasonId) return;
+
+          const delta = payload.eventType === "INSERT" ? 1 : payload.eventType === "DELETE" ? -1 : 0;
+          if (delta === 0) return;
+
+          setOpenLobbies((list) =>
+            list.map((l) => (l.id === seasonId ? { ...l, occupancy: l.occupancy + delta } : l)),
+          );
+          setMySeason((s) => (s && s.id === seasonId ? { ...s, occupancy: s.occupancy + delta } : s));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "seasons" },
+        (payload) => {
+          const row = payload.new as
+            | { id: string; status: string; lobby_opened_at: string }
+            | undefined;
+
+          if (payload.eventType === "INSERT" && row?.status === "lobby") {
+            setOpenLobbies((list) =>
+              list.some((l) => l.id === row.id)
+                ? list
+                : [...list, { id: row.id, lobbyOpenedAt: row.lobby_opened_at, occupancy: 0 }],
+            );
+          }
+
+          if (payload.eventType === "UPDATE" && row) {
+            if (row.status !== "lobby") {
+              setOpenLobbies((list) => list.filter((l) => l.id !== row.id));
+            }
+            setMySeason((s) =>
+              s && s.id === row.id ? { ...s, status: row.status as "lobby" | "running" } : s,
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  async function handleJoin(seasonId: string) {
+    setError(null);
+    setPending(true);
+    const { error: rpcError } = await supabase.rpc("join_season", { p_season_id: seasonId });
+    setPending(false);
+    if (rpcError) {
+      setError(friendlyError(rpcError.message));
+      return;
+    }
+    router.push(`/season/${seasonId}`);
+  }
+
+  async function handleCreate() {
+    setError(null);
+    setPending(true);
+    const { data, error: rpcError } = await supabase.rpc("create_and_join_season");
+    setPending(false);
+    if (rpcError) {
+      setError(friendlyError(rpcError.message));
+      return;
+    }
+    if (data) router.push(`/season/${data}`);
+  }
+
+  if (mySeason) {
+    return (
+      <div className="dashcard">
+        <h2>Deine Partie</h2>
+        <div className="seasonrow">
+          <span>Partie {mySeason.id.slice(0, 8)}</span>
+          <span className="seasonstatus">
+            {mySeason.status === "running" ? "Läuft" : "Lobby offen"}
+          </span>
+        </div>
+        <p className="dashsub">
+          {mySeason.occupancy} / 5 Plätzen belegt
+          {mySeason.status === "lobby" && (
+            <>
+              {" "}
+              · Start spätestens in <Countdown lobbyOpenedAt={mySeason.lobbyOpenedAt} />
+            </>
+          )}
+        </p>
+        <a className="btn-primary" href={`/season/${mySeason.id}`}>
+          Zur Partie
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashcard">
+      <h2>Übersicht offener Partien</h2>
+      {error && <p className="autherror">{error}</p>}
+      {openLobbies.length === 0 && (
+        <>
+          <p className="dashsub">Aktuell ist keine Lobby offen.</p>
+          <button className="btn-primary" onClick={handleCreate} disabled={pending}>
+            {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
+          </button>
+        </>
+      )}
+      {openLobbies.map((lobby) => (
+        <div className="seasonrow" key={lobby.id}>
+          <span>
+            Partie {lobby.id.slice(0, 8)} · {lobby.occupancy} / 5
+            {" · Start spätestens in "}
+            <Countdown lobbyOpenedAt={lobby.lobbyOpenedAt} />
+          </span>
+          <button className="btn-secondary" onClick={() => handleJoin(lobby.id)} disabled={pending}>
+            {pending ? "Einen Moment …" : "Beitreten"}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
