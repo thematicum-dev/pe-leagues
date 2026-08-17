@@ -3,6 +3,31 @@
 import React, { useState, useMemo, useEffect, useContext } from "react";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
+/* ---------------- Spiellogik ----------------
+   SECTORS, ARCHES, CAPITAL, MAX_SLOTS und die übrigen Parameter sowie alle
+   reinen Rechenfunktionen (newDeal, stepCompany, buildInit, navOf, irrOf, ...)
+   leben jetzt React-frei in lib/engine/ und laufen dort auch auf dem Server.
+   createRng() liefert je Partie eine eigene Zufallsinstanz — kein geteilter
+   Modul-Zustand mehr, der parallele Partien gegenseitig stören könnte.       */
+import { createRng } from "@/lib/engine";
+import type { Rng } from "@/lib/engine";
+import {
+  ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
+  CLS_LABEL, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
+  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
+  IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
+  MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
+  RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
+  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonRisk, anyInit, applyProceeds,
+  buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
+  dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
+  evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
+  initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf, isAngle,
+  isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
+  newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
+  retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
+} from "@/lib/engine";
+
 const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 const TAB_IDX = { deals: 0, port: 1, rank: 2 };
 
@@ -380,11 +405,11 @@ function AnimatedNumber({ value, format, className, style }) {
 }
 
 // Kurzer Konfettiausbruch bei großen Erfolgen — dezent limitiert, kein Dauerfeuer
-function Confetti({ seed }) {
+function Confetti({ seed, rng }: { seed: number; rng: Rng }) {
   const colors = ["#A9863C", "#1F5F5B", "#7A2E2E", "#8478BE", "#E9EDE4"];
   const pieces = useMemo(() => Array.from({ length: 26 }, (_, i) => ({
-    id: i, l: 2 + rnd() * 96, delay: rnd() * .35, dur: 1.1 + rnd() * .6,
-    c: colors[i % colors.length], rot: Math.round(rnd() * 360),
+    id: i, l: 2 + rng.rnd() * 96, delay: rng.rnd() * .35, dur: 1.1 + rng.rnd() * .6,
+    c: colors[i % colors.length], rot: Math.round(rng.rnd() * 360),
   })), [seed]);
   return (
     <div className="confetti" aria-hidden="true">
@@ -411,1139 +436,6 @@ function Toasts({ items }) {
     </div>
   );
 }
-
-/* ---------------- Modell ---------------- */
-
-const SECTORS = {
-  Industrials: { g: 3.0, m: 8.5 },
-  Healthcare:  { g: 5.0, m: 11.0 },
-  Software:    { g: 8.0, m: 13.0 },
-  Services:    { g: 3.5, m: 9.0 },
-  Consumer:    { g: 2.0, m: 8.0 },
-};
-const SECNAMES = Object.keys(SECTORS);
-// Nicht jede Flagge ist ein Risiko: die Buy-&-Build-Plattform ist die These,
-// nicht der Preisdrücker. Wird deshalb getrennt ausgezeichnet.
-const ANGLES = ["Buy-&-Build-Plattform"];
-const isAngle = (fl) => ANGLES.indexOf(fl) >= 0;
-// Anzeigenamen nach gängiger PE-Sektortaxonomie
-const SECLABEL = {
-  Industrials: "Industrials", Healthcare: "Healthcare", Software: "Software & IT Services",
-  Services: "Business Services", Consumer: "Consumer & Retail",
-};
-const SECCOLOR = {
-  Industrials: "#7C8B96", Healthcare: "#3E9B8F", Software: "#8478BE",
-  Services: "#B4894C", Consumer: "#C4635C",
-};
-
-const P1 = ["Bren", "Aur", "Kalt", "Hoch", "Stein", "Wald", "Rhein", "Nord", "Vel", "Mark", "Trave", "Isar", "Ober", "Sal", "Ferr", "Lind", "Grün", "Alt"];
-const P2 = ["ner", "avit", "mann", "burg", "feld", "tec", "mont", "sys", "werk", "thal", "stedt", "gau", "rath", "born", "eck", "hoff", "seil"];
-
-/* Geschäftsmodell-Katalog: DACH-Mittelstandsarchetypen.
-   m = EBITDA-Marge, g = Wachstum p.a., rb = Umsatzband, lev = Leverage-Kapazität,
-   q = Qualitätsscore, fl = typische Risikoflaggen */
-const BOOK = {
-  Industrials: [
-    { s: ["Dichtungstechnik", "Polymertechnik"], cx: 5, nw: 20, m: [11, 17], g: [0, 3], rb: [30, 120], lev: [3.2, 4.2], q: [35, 60], fl: ["Kundenkonzentration", "Margendruck"],
-      d: "Hersteller von Präzisionsdichtungen für Hydraulik- und Pneumatikanwendungen. Serienfertigung an zwei deutschen Standorten, rund 60 % des Umsatzes mit Tier-1-Zulieferern der Nutzfahrzeugindustrie, Rest Bau- und Landmaschinen." },
-    { s: ["Systemtechnik", "Anlagenbau"], cx: 3, nw: 30, m: [8, 13], g: [2, 6], rb: [45, 180], lev: [2.8, 3.6], q: [40, 65], fl: ["Nachfolgesituation", "Kundenkonzentration"],
-      d: "Sondermaschinenbau für Verpackungslinien in der Lebensmittelindustrie. Projektgeschäft mit Vorauszahlungen, 25 % des Umsatzes aus Service und Ersatzteilen, Auftragsbestand von neun Monaten." },
-    { s: ["Oberflächentechnik", "Galvanik"], cx: 9, nw: 10, m: [14, 20], g: [0, 2], rb: [25, 80], lev: [3.0, 3.8], q: [30, 50], fl: ["Investitionsstau", "Margendruck"],
-      d: "Lohnbeschichter für Elektro- und Automobilzulieferer. Standortgebundenes Geschäft mit hoher Anlagenintensität und energiepreisabhängiger Kostenbasis, Kunden im Umkreis von 200 Kilometern." },
-    { s: ["Brandschutz", "Lufttechnik"], cx: 4, nw: 20, m: [15, 22], g: [3, 7], rb: [40, 150], lev: [3.8, 5.0], q: [60, 85], fl: ["Buy-&-Build-Plattform"],
-      d: "Hersteller von Brandschutzklappen und Lüftungskomponenten. Bauaufsichtliche Zulassungen als Eintrittsbarriere, Vertrieb über den technischen Großhandel, Nachfrage getrieben von Sanierungszyklen im Gewerbebau." },
-    { s: ["Elektrotechnik", "Schaltanlagen"], cx: 3, nw: 25, m: [7, 11], g: [2, 5], rb: [35, 140], lev: [2.6, 3.4], q: [25, 45], fl: ["Margendruck", "Kundenkonzentration"],
-      d: "Kabelkonfektionierung und Schaltschrankbau für Maschinenbauer. Lohnintensives Geschäft mit Fertigung in Deutschland und Tschechien, geringe Wechselkosten auf Kundenseite." },
-    { s: ["Messtechnik", "Prüftechnik"], cx: 4, nw: 22, m: [17, 24], g: [3, 6], rb: [30, 110], lev: [4.0, 5.2], q: [65, 88], fl: ["Nachfolgesituation"],
-      d: "Anbieter von Werkstoffprüfmaschinen mit rund 40 % Aftersales-Anteil. Installierte Basis von über 6.000 Geräten weltweit, Kalibrierung und Wartung binden Kunden über Jahrzehnte." },
-    { s: ["Zerspanung", "Feinwerktechnik"], cx: 8, nw: 18, m: [13, 18], g: [4, 9], rb: [20, 70], lev: [3.0, 4.0], q: [50, 75], fl: ["Kundenkonzentration", "Investitionsstau"],
-      d: "Zerspanungsdienstleister für Luftfahrt- und Medizintechnikkomponenten. Nadcap- und ISO-13485-zertifiziert, drei Kunden stehen für zwei Drittel des Umsatzes, langfristige Rahmenverträge." },
-  ],
-  Healthcare: [
-    { s: ["Medical", "Surgical"], cx: 6, nw: 20, m: [18, 26], g: [4, 9], rb: [30, 120], lev: [4.0, 5.2], q: [60, 88], fl: ["Investitionsstau"],
-      d: "Hersteller von Einmalinstrumenten für die minimalinvasive Chirurgie. MDR-Zulassung erneuert, Vertrieb über Klinikeinkaufsverbünde, Produktion mit eigener Reinraumfertigung." },
-    { s: ["Dentaltechnik", "Dentallabore"], cx: 5, nw: 12, m: [14, 20], g: [3, 7], rb: [25, 90], lev: [3.6, 4.6], q: [45, 70], fl: ["Buy-&-Build-Plattform"],
-      d: "Dentallabor-Gruppe mit zentraler CAD/CAM-Fertigung und angeschlossenen Regionallaboren. Wachstum über Zukäufe von Nachfolgekandidaten, Abrechnung über Zahnarztpraxen." },
-    { s: ["Homecare", "Versorgung"], cx: 2, nw: 25, m: [11, 16], g: [4, 8], rb: [40, 160], lev: [3.4, 4.4], q: [40, 62], fl: ["Margendruck"],
-      d: "Homecare-Versorger für Stoma-, Wund- und enterale Ernährungstherapie. Umsatz über Kassenverträge und Ausschreibungen, damit erlösseitig unmittelbar von Erstattungsentscheidungen abhängig." },
-    { s: ["Orthopädie", "Orthetik"], cx: 4, nw: 22, m: [16, 22], g: [2, 6], rb: [25, 95], lev: [3.8, 4.8], q: [50, 75], fl: ["Kundenkonzentration"],
-      d: "Hersteller orthopädischer Bandagen und Orthesen. Eigenmarke im Rezeptgeschäft plus OEM-Fertigung für zwei internationale Konzerne, Vertrieb über Sanitätshäuser." },
-    { s: ["Clinical", "Research"], cx: 3, nw: 15, m: [13, 19], g: [7, 14], rb: [30, 130], lev: [3.2, 4.2], q: [55, 82], fl: ["Kundenkonzentration", "Nachfolgesituation"],
-      d: "Auftragsforschungsinstitut für klinische Studien der Phasen II und III mit Schwerpunkt Onkologie. Auftragsbestand von 18 Monaten, Kunden sind mittelgroße Biotechs ohne eigene Studieninfrastruktur." },
-    { s: ["Radiologie", "Diagnostik"], cx: 12, nw: 5, m: [20, 28], g: [3, 6], rb: [35, 140], lev: [4.2, 5.5], q: [55, 80], fl: ["Investitionsstau", "Buy-&-Build-Plattform"],
-      d: "Betreiber radiologischer Versorgungszentren an sieben Standorten. Kassenzulassungen als Eintrittsbarriere, hoher Investitionsbedarf für MRT- und CT-Erneuerung im kommenden Zyklus." },
-    { s: ["Cleanroom", "Reinraumtechnik"], cx: 5, nw: 18, m: [17, 23], g: [5, 10], rb: [20, 85], lev: [4.0, 5.0], q: [62, 86], fl: [],
-      d: "Zulieferer von Reinraum-Verbrauchsmaterialien für die Pharma- und Biotechproduktion. Nahezu vollständig wiederkehrende Umsätze, qualifizierungspflichtige Produkte mit langen Requalifizierungszyklen." },
-  ],
-  Software: [
-    { s: ["Software", "Systems"], cx: 2, nw: 5, m: [16, 24], g: [4, 9], rb: [15, 70], lev: [4.0, 5.2], q: [50, 75], fl: ["Investitionsstau"],
-      d: "ERP-Speziallösung für Handwerks- und Baubetriebe. Rund 70 % Wartungserlöse aus der On-Premise-Basis, Migration der Bestandskunden in die eigene Cloud läuft seit zwei Jahren." },
-    { s: ["Digital", "Cloud"], cx: 1.5, nw: -5, m: [18, 28], g: [12, 22], rb: [12, 55], lev: [4.2, 5.5], q: [65, 92], fl: [],
-      d: "SaaS für Instandhaltungs- und Einsatzplanung bei Energieversorgern. Reines Abomodell mit Nettoumsatzretention von 108 %, durchschnittliche Vertragslaufzeit drei Jahre." },
-    { s: ["Health IT", "Praxissysteme"], cx: 2, nw: 0, m: [22, 30], g: [3, 7], rb: [18, 75], lev: [4.4, 5.5], q: [60, 88], fl: ["Margendruck"],
-      d: "Abrechnungs- und Praxisverwaltungssoftware für niedergelassene Ärzte. Hohe Wechselkosten und Marktanteil in der Nische, Produktzyklen von Regulierung und Telematikinfrastruktur getrieben." },
-    { s: ["Retail Systems", "Warenwirtschaft"], cx: 2, nw: 5, m: [15, 22], g: [4, 8], rb: [20, 90], lev: [3.8, 4.8], q: [50, 72], fl: ["Kundenkonzentration"],
-      d: "Warenwirtschaft für Apotheken mit angeschlossener Zahlungsabwicklung. Umsatzmix aus Lizenz, Wartung und Transaktionsgebühren, Nachfrage regulatorisch getrieben." },
-    { s: ["Mobility", "Fleet"], cx: 2, nw: 0, m: [12, 20], g: [10, 18], rb: [10, 50], lev: [3.6, 4.6], q: [55, 80], fl: [],
-      d: "Plattform für Fuhrpark- und Schadenmanagement. Erlös je Fahrzeug und Monat plus Provisionen aus Werkstattvermittlung, Wachstum über Flottenkunden ab 200 Fahrzeugen." },
-    { s: ["IT Services", "Consulting"], cx: 1.5, nw: 18, m: [9, 14], g: [3, 8], rb: [30, 130], lev: [3.0, 3.8], q: [35, 55], fl: ["Margendruck", "Nachfolgesituation"],
-      d: "IT-Dienstleister mit SAP-Beratung und Managed Services. Personalintensives Geschäft mit 45 % wiederkehrenden Umsätzen, Auslastung und Fluktuation sind die entscheidenden Stellgrößen." },
-    { s: ["Bau Software", "Aufmaß"], cx: 2, nw: 8, m: [17, 25], g: [5, 10], rb: [12, 45], lev: [4.0, 5.0], q: [55, 78], fl: ["Investitionsstau"],
-      d: "Software für Bauabrechnung, Aufmaß und Nachtragsmanagement. Umstellung vom Einmallizenz- auf das Abomodell begonnen, mobile Erfassung auf der Baustelle als Differenzierung." },
-  ],
-  Services: [
-    { s: ["Gebäudetechnik", "Facility"], cx: 3, nw: 18, m: [10, 15], g: [3, 7], rb: [35, 150], lev: [3.4, 4.4], q: [45, 68], fl: ["Buy-&-Build-Plattform"],
-      d: "Technischer Gebäudeservice für Heizung, Lüftung und Klima. Wartungsverträge mit Laufzeiten von drei bis fünf Jahren, regionale Verdichtung um vier Ballungsräume." },
-    { s: ["Logistik", "Kontraktlogistik"], cx: 6, nw: 12, m: [6, 10], g: [4, 9], rb: [50, 200], lev: [2.6, 3.4], q: [25, 45], fl: ["Kundenkonzentration", "Margendruck"],
-      d: "Kontraktlogistik für Retourenabwicklung im Onlinehandel. Volumengetriebenes Geschäft mit geringer Marge, zwei Großkunden stellen mehr als die Hälfte des Umsatzes." },
-    { s: ["Prüfdienste", "Zertifizierung"], cx: 5, nw: 12, m: [18, 25], g: [4, 8], rb: [25, 95], lev: [4.0, 5.2], q: [60, 85], fl: [],
-      d: "Akkreditierter Prüf- und Zertifizierungsdienstleister für Elektrogeräte und Maschinen. Wiederkehrende Prüfzyklen und normative Pflichten sichern planbare Auslastung." },
-    { s: ["Personal", "Pflegedienste"], cx: 1, nw: 20, m: [7, 12], g: [5, 11], rb: [30, 120], lev: [2.8, 3.6], q: [25, 45], fl: ["Margendruck", "Kundenkonzentration"],
-      d: "Personaldienstleister für Pflege- und Medizinberufe. Arbeitnehmerüberlassung mit tariflicher Bindung, Ergebnis hängt an der Rekrutierungsquote und an Einsatzstunden pro Mitarbeiter." },
-    { s: ["Kalibrierung", "Servicetechnik"], cx: 5, nw: 12, m: [16, 22], g: [3, 6], rb: [15, 60], lev: [3.8, 4.8], q: [55, 78], fl: ["Nachfolgesituation"],
-      d: "Kalibrierdienstleister für Industriemesstechnik. Gesetzlich vorgeschriebene Intervalle erzeugen wiederkehrende Aufträge, Kundenbindung über Gerätehistorie und Prüfmitteldatenbank." },
-    { s: ["Waschanlagen", "Autoservice"], cx: 11, nw: 0, m: [22, 30], g: [2, 6], rb: [20, 80], lev: [4.2, 5.5], q: [40, 65], fl: ["Investitionsstau", "Buy-&-Build-Plattform"],
-      d: "Betreiber von Portal- und Waschstraßenanlagen an 30 Standorten. Hohe Fixkostenbasis und Standortqualität als Werttreiber, Zukäufe einzelner Betreiber als Wachstumspfad." },
-    { s: ["Ingenieurbüro", "Planung"], cx: 1.5, nw: 25, m: [11, 16], g: [2, 6], rb: [20, 75], lev: [3.0, 4.0], q: [40, 62], fl: ["Nachfolgesituation", "Kundenkonzentration"],
-      d: "Ingenieurbüro für Tragwerksplanung und Bauüberwachung. Überwiegend öffentliche Auftraggeber mit HOAI-Vergütung, Schlüsselpersonenrisiko bei den drei Gesellschaftern." },
-  ],
-  Consumer: [
-    { s: ["Petfood", "Tiernahrung"], cx: 5, nw: 20, m: [10, 15], g: [3, 8], rb: [40, 160], lev: [3.4, 4.4], q: [35, 58], fl: ["Kundenkonzentration", "Margendruck"],
-      d: "Hersteller von Nass- und Trockenfutter als Handelsmarke für den Lebensmitteleinzelhandel. Rohstoffpreise werden mit Verzögerung weitergegeben, drei Handelsketten dominieren den Absatz." },
-    { s: ["Outdoor", "Ausrüstung"], cx: 3, nw: 35, m: [12, 18], g: [5, 11], rb: [25, 100], lev: [3.2, 4.2], q: [50, 78], fl: ["Investitionsstau"],
-      d: "Premiummarke für Outdoor- und Bergsportausrüstung. 35 % Direktvertrieb über den eigenen Onlineshop, Rest über Fachhandel, saisonal stark schwankende Working-Capital-Bindung." },
-    { s: ["Backwaren", "Manufaktur"], cx: 6, nw: 3, m: [9, 14], g: [2, 6], rb: [25, 90], lev: [3.0, 4.0], q: [30, 52], fl: ["Investitionsstau", "Margendruck"],
-      d: "Regionale Bäckereikette mit 60 Filialen und zentraler Produktion. Ergebnis getrieben von Standortqualität, Personalkostenquote und Energiepreisen im Backprozess." },
-    { s: ["Nutrition", "Vitalstoffe"], cx: 3, nw: 25, m: [14, 21], g: [6, 13], rb: [15, 70], lev: [3.6, 4.6], q: [45, 70], fl: ["Margendruck"],
-      d: "Anbieter von Nahrungsergänzungsmitteln mit Eigenmarke und Lohnfertigung für Dritte. Wachstum über Onlinekanäle und Apothekenlistung, Werbedruck bestimmt die Marge." },
-    { s: ["Objekteinrichtung", "Möbelwerke"], cx: 4, nw: 28, m: [8, 13], g: [1, 5], rb: [30, 120], lev: [2.8, 3.6], q: [30, 52], fl: ["Kundenkonzentration", "Nachfolgesituation"],
-      d: "Möbelhersteller für die Objektausstattung von Hotels, Büros und Pflegeeinrichtungen. Projektgeschäft mit langen Vorlaufzeiten und hoher Abhängigkeit von der Bauzyklik." },
-    { s: ["Hausgeräte", "Küchenzubehör"], cx: 2.5, nw: 30, m: [11, 17], g: [3, 7], rb: [20, 85], lev: [3.4, 4.4], q: [40, 62], fl: ["Margendruck"],
-      d: "Anbieter von Küchen- und Haushaltszubehör unter eigener Handelsmarke. Absatz über Fachhandel und Marktplätze, Beschaffung überwiegend aus Fernost mit entsprechendem Frachtkostenrisiko." },
-    { s: ["Mineralbrunnen", "Getränke"], cx: 8, nw: 12, m: [15, 22], g: [0, 4], rb: [25, 95], lev: [3.8, 4.8], q: [40, 65], fl: ["Investitionsstau"],
-      d: "Regionaler Mineralbrunnen mit eigener Quelle und Mehrweg-Abfüllung. Wirtschaftlicher Lieferradius von rund 150 Kilometern, Investitionsstau bei Abfülllinie und Kastenpark." },
-  ],
-};
-
-let SEED = 20260803;
-function rnd() { SEED = (SEED * 1664525 + 1013904223) % 4294967296; return SEED / 4294967296; }
-function seedTo(v) { SEED = v; }
-function seedGet() { return SEED; }
-function nrm(s = 1) { return (rnd() + rnd() + rnd() + rnd() - 2) * s; }
-const pick = (a) => a[Math.floor(rnd() * a.length)];
-const band = ([a, b]) => a + rnd() * (b - a);
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const eur = (v) => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString("de-DE") + " Mio. €";
-const x = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 }) + "×";
-const hj = (n) => (Math.round(n) === 1 ? "1 Halbjahr" : Math.round(n) + " Halbjahre");
-const gebote = (n) => (n === 1 ? "1 Gebot" : n + " Gebote");
-const pct = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 }) + " %";
-const pctS = (v) => (Math.abs(v) < 0.05 ? "" : v > 0 ? "+" : "−") + pct(Math.abs(v));
-
-function newDeal(type, market, sourcing = 2) {
-  const sector = pick(SECNAMES);
-  const a = pick(BOOK[sector]);
-  const quality = clamp(band(a.q) + nrm(4), 10, 97);
-  const revenue = band(a.rb) * SIZE_SCALE;
-  const margin = clamp(band(a.m) + nrm(1), 4, 40);
-  /* Preis orientiert sich am Bewertungsmultiple des Ziels, nicht am rohen
-     Sektormultiple — und benutzt exakt denselben Qualitätsfaktor wie die
-     Bewertung (QUAL_COEF). Sonst entstünde beim Closing ein systematischer
-     Aufwertungsgewinn: jeder Deal wäre am Tag des Vollzugs mehr wert als der
-     gezahlte Preis, ganz ohne unternehmerische Leistung.                    */
-  const navF = 0.7 + QUAL_COEF * quality;
-  /* Der Abschlag beim proprietären Deal ist der Ertrag der eigenen Origination:
-     Wer besser sourct, spricht früher mit dem Gesellschafter und zahlt weniger. */
-  const disc = type === "prop" ? 0.5 + rnd() * 0.5 + 0.12 * sourcing : 0;
-  const askMult = clamp(market[sector] * navF * (0.96 + rnd() * 0.08) - disc, 4, 18);
-  /* Bisheriges Wachstum und künftige Performance gegenüber dem Markt hängen
-     zusammen — der Drift ist genau dieser dauerhafte Vorsprung oder Rückstand
-     zum Sektor. Vorher wurde er erst beim Closing gewürfelt und `growth` nach
-     dem Kauf nie wieder benutzt: die einzige Zahl auf der Karte, die nach
-     Prognose aussah, sagte nichts vorher. Jetzt erklärt sie rund die Hälfte der
-     Varianz, der Rest bleibt echte Unsicherheit. GROWTH_MEAN zentriert die
-     Differenz, damit der Drift im Mittel null bleibt und die Bewertung nicht
-     verrutscht.                                                              */
-  const growth = band(a.g) + nrm(1);
-  const drift = clamp(DRIFT_LOAD * (growth - SECTORS[sector].g - GROWTH_MEAN) + nrm(2.6), -6, 6);
-  return {
-    id: "d" + Math.floor(rnd() * 1e9),
-    type, sector, revenue, margin, quality,
-    growth, drift,
-    // fester Schätzfehler des Datenraums; die Analysefähigkeit skaliert ihn nur
-    dnoise: nrm(1),
-    askMult,
-    levCap: clamp(band(a.lev), 2.5, 5.5),
-    capexPct: a.cx, nwcPct: a.nw,
-    // Branchentypische Niveaus des Geschäftsmodells — Referenz für jede Entwicklung
-    benchMargin: (a.m[0] + a.m[1]) / 2, benchCapex: a.cx, benchNwc: a.nw,
-    flag: a.fl.length && rnd() < 0.55 ? pick(a.fl) : null,
-    desc: a.d,
-    name: pick(P1) + pick(P2) + " " + pick(a.s),
-  };
-}
-
-function ebitdaOf(c) { return (c.revenue * c.margin) / 100; }
-
-/* Entwicklung relativ zum Branchenniveau des Geschäftsmodells.
-   Reifegrad 2 einer Dimension = branchentypisch. Darunter holt man schnell auf,
-   darüber muss man dauerhaft nachlegen — sonst Rückfall zum Mittelwert.      */
-const PLAT_BENCH = 2, ACC_BENCH = 2;
-/* Operating Leverage: Umsatz wächst schneller als die Kostenbasis. Empirisch
-   korrelieren Wachstum und Margenexpansion positiv (Gain.pro 2025: 58 % der
-   wachsenden Unternehmen weiten die Marge aus, Median +130 bps, gegenüber
-   44 % der schrumpfenden). Der früher pauschale Malus auf Wachstum ist raus —
-   die Kosten des Wachstums stecken in drag, Capex und NWC während der Laufzeit. */
-const opLeverage = (c) => {
-  const base = c.hist && c.hist[0] ? c.hist[0].rev : c.revenue;
-  return clamp((c.revenue / Math.max(1, base) - 1) * 1.5, 0, 1.5);
-};
-const targetMargin = (c) => (c.benchMargin ?? c.margin) + (c.plat - PLAT_BENCH) * 1.0
-  + opLeverage(c) - overstretch(c) * 1.4
-  // Gehälter stecken bereits in der ausgewiesenen Marge — nur die Veränderung seit Einstieg zählt
-  - (seatLoad(c) - (c.baseLoad ?? seatLoad(c)))
-  /* Nur Growth-Programme belasten die Marge: zusätzliche Vertriebsleute, Marketing
-     und Anlaufverluste in neuen Märkten sind Run-Rate und stehen im EBITDA.
-     Performance-Programme kosten Berater, Abfindungen und Parallelbetrieb — das
-     sind Einmalaufwendungen unterhalb des EBITDA. Sie werden deshalb als
-     Cash-Effekt gegen die Nettoverschuldung gebucht, nicht gegen die Marge.  */
-  - (c.initA ? (c.initA.drag || 0) * (c.vcRun ? 0.5 : 1) : 0)
-  + (c.marginDrift || 0)
-  + (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.3 : 0);
-/* Verfall oberhalb des Branchenniveaus. Bis zur Benchmark ist ein Reifegrad ein
-   Bestandskonto — eine konsolidierte Beschaffung verschwindet nicht wieder.
-   Darüber schon: Preisdisziplin, Vertriebsschlagzahl und Prozessgüte über dem
-   Marktniveau sind Zustände, die aktiv gehalten werden müssen. Ohne laufendes
-   Programm zieht die Organisation zum Mittel zurück. Das ist zugleich der Preis
-   der Zeit: Halten ist nicht mehr kostenlos.                                  */
-const DECAY = 0.08;
-function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
-
-function stepCompany(c, market, ops) {
-  const A = accEff(c), OS = overstretch(c);
-  const opsMult = 1 + 0.1 * ops;
-  // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + nrm(6);
-  const rev0 = c.revenue;
-  c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
-
-  // Marge läuft auf das erreichbare Niveau zu: Aufholen schneller als Halten
-  const target = targetMargin(c);
-  c.vcRun = anyInit(c) ? (c.vcRun || 0) + 1 : 0;
-  const pull = c.margin < target ? 0.30 * opsMult : 0.40;
-  c.margin = clamp(c.margin + (target - c.margin) * pull + nrm(0.6), 3, 45);
-
-  const eb = ebitdaOf(c);
-  // Capex und Working Capital relativ zum Branchenniveau verbessern
-  const cxPct = Math.max(0.5, (c.benchCapex ?? 4) * (1 - 0.07 * (c.plat - PLAT_BENCH)) + A * 0.6
-    + sumInit(c, "cx")
-    - (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.5 : 0));
-  const capex = (c.revenue * cxPct) / 200;
-  const nwcPct = Math.max(-10, (c.benchNwc ?? 15) - (c.plat - PLAT_BENCH) * 2.5 + A * 2
-    + sumInit(c, "nwcRun") + (c.nwcFix || 0));
-  const nwc = (nwcPct / 100) * (c.revenue - rev0);
-
-  /* ebitdaOf liefert einen Jahreswert — er ist die Basis für Bewertung und
-     Leverage. Der Periodenschritt ist aber ein Halbjahr, deshalb geht nur die
-     Hälfte in die Cash-Rechnung ein. Zins, Capex und NWC sind bereits
-     Halbjahresgrößen.                                                        */
-  const ebH = eb / 2;
-  const rate = rateOf(c, eb);
-  const interest = (c.netDebt >= 0 ? c.netDebt * rate : c.netDebt * c.rate * 0.4) / 200;
-  const tax = 0.3 * Math.max(0, ebH - interest - capex);
-  const fcf = ebH - interest - capex - nwc - tax;
-  c.netDebt = c.netDebt - fcf;
-
-  // Rückfall zum Mittel, solange in dieser Dimension keine Initiative läuft
-  if (!c.initP) c.plat = Math.max(PLAT_BENCH, c.plat - decayOf(c.plat));
-  if (!c.initA) c.acc = Math.max(ACC_BENCH, c.acc - decayOf(c.acc));
-
-  c.holdQ += 1;
-  /* Assetqualität folgt der realisierten Umsatz-CAGR seit Einstieg, nicht dem
-     Wachstum einer einzelnen Periode. Vorher entschied das Rauschen von nrm(6)
-     über das Vorzeichen, wodurch der Qualitätskanal für Growth praktisch tot war. */
-  const relMargin = c.margin - (c.benchMargin ?? c.margin);
-  const gPrem = cagrPrem(c);
-  c.quality = clamp(
-    c.quality + clamp(gPrem * 0.30, -1.2, 1.8)
-    // stetig statt binär: wer sich der Benchmark nähert, wird dafür bezahlt,
-    // statt bis zum Überschreiten die volle Strafe zu tragen
-    + clamp(relMargin * 0.35, -0.8, 0.8) + 0.35 * (peopleLvl(c) - 2) - 1.8 * OS
-    - (c.netDebt / eb > 5 ? 0.8 : 0) - Math.min(2.5, Math.max(0, 0.35 * (c.holdQ - 8))),
-    5, 99
-  );
-  const covLev = c.netDebt / Math.max(0.5, eb);
-  c.breach = covLev > (c.covLimit ?? 6.5) ? (c.breach || 0) + 1 : 0;
-  // Für die Anzeige festhalten: die Karte zeigt die tatsächlichen Werte der Periode
-  // Für die Anzeige auf Jahresbasis hochgerechnet, damit Karte und Dealflow
-  // dieselbe Einheit sprechen wie EBITDA und Multiple.
-  c.cf = { eb, interest: interest * 2, capex: capex * 2, nwc: nwc * 2, tax: tax * 2, fcf: fcf * 2, rate };
-  return { fcf, eb, covLev };
-}
-
-const EVENTS = [
-  { t: "Schlüsselkunde kündigt", m: "analysis", bad: 1,
-    f: (c) => { c.revenue *= 0.80; c.drift = (c.drift || 0) - 0.8; } },
-  // Wirkt tatsächlich auf den Sitz — feuert nur, wenn er besetzt ist
-  { t: "CEO verlässt das Unternehmen", m: "operations", bad: 1,
-    ok: (c) => c.ceo.skill > 0,
-    f: (c) => { c.ceo = vacate(c.ceo); c.quality -= 6; c.margin -= 0.5; } },
-  { t: "CFO wirft hin", m: "operations", bad: 1,
-    ok: (c) => c.cfo.skill > 0,
-    f: (c) => { c.cfo = vacate(c.cfo); c.quality -= 3; } },
-  { t: "Wettbewerber senkt Preise", m: "operations", bad: 1,
-    f: (c) => { c.margin -= 2.5; c.marginDrift = (c.marginDrift || 0) - 1.5; } },
-  { t: "Add-on-Gelegenheit genutzt", m: null, bad: 0,
-    ok: (c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) < (c.covLimit ?? 6.5) - 1.5,
-    f: (c) => { c.revenue *= 1.25; c.netDebt += ebitdaOf(c) * 1.6; } },
-  { t: "Investitionsstau aufgedeckt", m: "analysis", bad: 1,
-    f: (c) => { c.netDebt += ebitdaOf(c) * 0.8; c.capexPct = (c.capexPct ?? 4) + 1.5; } },
-  { t: "Regulatorische Auflage", m: "operations", bad: 1,
-    // Der Healthcare-Sitz 3 halbiert regulatorische Ereignisse
-    ok: (c) => !(c.sector === "Healthcare" && c.r3.skill >= 3 && rnd() < 0.5),
-    f: (c) => { c.margin -= 1.2; c.marginDrift = (c.marginDrift || 0) - 0.8; } },
-  { t: "Großauftrag gewonnen", m: null, bad: 0,
-    f: (c) => { c.revenue *= 1.14; c.quality += 3; } },
-  { t: "Managementteam zieht ein Großprojekt vor", m: null, bad: 0,
-    ok: (c) => anyInit(c),
-    f: (c) => {
-      const k = c.initP ? "initP" : "initA";
-      c[k] = { ...c[k], doneQ: Math.max(1, c[k].doneQ - 1) };
-    } },
-];
-
-const ARCHES = [
-  { key: "sourcing", name: "Nordkap Capital",   attrs: { sourcing: 5, analysis: 2, negotiation: 2, operations: 2, financing: 1 }, aggr: 0.06, lev: 0.75, style: "Origination-getrieben" },
-  { key: "ops",      name: "Hansabruck Partners", attrs: { sourcing: 2, analysis: 3, negotiation: 1, operations: 5, financing: 1 }, aggr: 0.02, lev: 0.6,  style: "Operativer Wertschöpfer" },
-  { key: "fin",      name: "Aurum Partners",   attrs: { sourcing: 1, analysis: 2, negotiation: 3, operations: 1, financing: 5 }, aggr: 0.10, lev: 0.95, style: "Leverage-getrieben" },
-  { key: "all",      name: "Vierturm Beteiligungen", attrs: { sourcing: 3, analysis: 3, negotiation: 2, operations: 2, financing: 2 }, aggr: 0.04, lev: 0.7,  style: "Generalist" },
-];
-
-/* ---------- Bewertungsparameter ----------
-   QUAL_COEF steht bewusst an einer einzigen Stelle: Kaufpreis (newDeal) und
-   Bewertung (markMultiple) müssen denselben Wert benutzen, sonst entsteht ein
-   Aufwertungsgewinn allein durch den Vollzug.                                */
-const QUAL_COEF = 0.006;    // Qualitätsaufschlag je Punkt auf das Sektormultiple
-/* Kopplung zwischen bisherigem Wachstum und erwarteter Performance vs. Markt.
-   DRIFT_LOAD 0,30 auf eine Streuung von 3,2 pp ergibt ein Signal mit sd 0,96 pp
-   gegen ein Residuum von 0,98 pp — die Karte erklärt rund die Hälfte.        */
-const DRIFT_LOAD = 0.45, GROWTH_MEAN = 1.6;
-/* Schätzgüte des Datenraums: Analyse verkleinert den Fehler, beseitigt ihn nie.
-   Ohne Due Diligence gibt es überhaupt keine Schätzung.                       */
-const driftErrSd = (analysis) => clamp(4.6 - 0.90 * analysis, 0.3, 4.6);
-const driftEstOf = (d, analysis) => d.drift + d.dnoise * driftErrSd(analysis);
-const driftBandOf = (analysis) => 1.3 * 0.577 * driftErrSd(analysis);
-const MULT_CAP = 1.60;      // Obergrenze: Vielfaches des Sektormultiples
-
-const CAPITAL = 500;
-const PERIODS = 20;         // 10 Jahre in Halbjahresschritten
-const MIN_HOLD = 6;         // Mindesthaltedauer: 3 Jahre
-/* Zielgrößen skalieren mit dem Fondsvolumen. Ein 500-Mio.-Fonds, der dieselben
-   Unternehmen kauft wie ein 300-Mio.-Fonds, bekommt sein Kapital nicht investiert:
-   Bei fünf Slots und im Schnitt 69 Mio. € Eigenkapital je Deal sind höchstens
-   347 Mio. € gleichzeitig gebunden — der Rest liegt herum und verwässert die
-   Rendite. SIZE_SCALE hebt die Umsatzbänder entsprechend an.                  */
-const SIZE_SCALE = 1.25;
-const MAX_SLOTS = 6;        // gleichzeitige Beteiligungen
-const COV_HEADROOM = 1.2;   // Covenant-Spielraum über der Einstiegsverschuldung
-const RESERVE_PROC = 0.85;  // Reservationspreis in der Auktion, Anteil der Preiserwartung
-const RESERVE_PROP = 0.90;  // Reservationspreis des Gesellschafters beim Off-Market-Deal
-const COV_FLOOR = 4.0;      // Untergrenze des Covenants
-const BASE_RATE = 6.5;      // Basismarge auf die Akquisitionsfinanzierung (Euribor + Marge)
-/* Kreditmarge staffelt sich mit der Verschuldung. Bis 3,0× gilt die Basismarge,
-   darüber kostet jeder weitere Turn 75 bp — so wie ein Kreditvertrag über ein
-   Margin Grid funktioniert. Vorher war Leverage bis zum Covenant gratis und die
-   einzige Bremse der Bruch; jetzt zahlt man für ihn, bevor es weh tut.       */
-const LEV_FREE = 3.0;       // Verschuldungsgrad, bis zu dem die Basismarge gilt
-/* Der Aufschlag war auf 0,55 gesenkt worden, als die Verschuldung noch über den
-   Covenant gebremst werden sollte. Gemessen war maximaler Leverage danach die
-   dominante Strategie: 1,18 Wertung gegen 1,06 bei vorsichtiger Finanzierung,
-   bei praktisch gleichem p10. Fremdkapital muss wieder kosten, was es kostet. */
-const LEV_STEP = 0.85;      // Aufschlag in Prozentpunkten je Turn darüber
-const rateOf = (c, eb) => {
-  const lev = c.netDebt / Math.max(0.5, eb != null ? eb : ebitdaOf(c));
-  return c.rate + Math.max(0, lev - LEV_FREE) * LEV_STEP;
-};
-/* Vergütung in Mio. € p.a. Marktanker ist der Branchenveteran auf Rating 2,5:
-   bei 10 Mio. € EBITDA verdient der CEO 0,50, der CFO 0,30 und die Fachrolle 0,30.
-   Die Unternehmensgröße geht mit der Wurzel ein — Gehälter wachsen deutlich
-   langsamer als das EBITDA. Über dem Anker steigt die Kurve konvex: A-Player sind
-   knapp und kosten überproportional, ein Entwicklungsprofil liegt darunter und
-   wird mit wachsendem Rating automatisch teurer.                             */
-const SEAT_PAY = { ceo: 0.50, cfo: 0.30, r3: 0.30 };
-const PAY_ANCHOR = 2.5;     // Ratingniveau, auf dem SEAT_PAY gilt
-const sizeFactor = (eb) => Math.sqrt(clamp(eb, 2, 60) / 10);
-const ratingFactor = (sk) => 0.30 + 0.70 * Math.pow(Math.max(sk, 0.5) / PAY_ANCHOR, 1.35);
-const payOf = (seat, sk, eb) => SEAT_PAY[seat] * sizeFactor(eb) * ratingFactor(sk);
-const RETAINER_PCT = 0.30;  // Headhunter: 30 % eines Jahresgehalts, Marktstandard
-const signPct = (sk) => 0.10 + 0.05 * sk;   // Signing Bonus als Anteil eines Jahresgehalts
-const SEVER_YEARS = 1.0;    // Abfindung: zwölf Monatsgehälter des Amtsinhabers
-// Der Retainer wird bei Mandatserteilung fällig, also auf Marktniveau, nicht
-// auf dem erst später bekannten Rating des Kandidaten.
-const retainerOf = (seat, eb) => payOf(seat, PAY_ANCHOR, eb) * RETAINER_PCT;
-const signBonusOf = (seat, sk, eb) => payOf(seat, sk, eb) * signPct(sk);
-const severanceOf = (seat, sk, eb) => payOf(seat, sk, eb) * SEVER_YEARS;
-const INIT_SLOTS = 4;       // Initiativ-Slots pro Halbjahr fürs ganze Portfolio
-const LTIP_SHARE = 0.06;    // Sweet Equity des MEP am Exiterlös
-
-// Position 3 je Sektor, treibt Growth; jede Rolle hat einen eigenen Sondereffekt
-const ROLE3 = {
-  Industrials: { n: "CTO", fx: "−0,5 pp Capex durch Design-to-Cost" },
-  Healthcare:  { n: "CTO", fx: "halbiert regulatorische Ereignisse" },
-  Software:    { n: "CTO", fx: "zusätzlich halber Performance-Bonus" },
-  Services:    { n: "Head of BD", fx: "senkt Kundenkonzentrationsrisiko" },
-  Consumer:    { n: "CMO", fx: "+0,4× Multiple beim Exit an Strategen" },
-};
-
-/* Eine vakante Position spart kein Gehalt — sie wird interimistisch besetzt,
-   und Interim ist teurer als der Vorgänger. Ohne diesen Boden hätte der Abgang
-   des CEO die Marge verbessert und Nichtbesetzen wäre dominant gewesen.      */
-const INTERIM = 2.2;             // Budgetlinie einer von Anfang an offenen Position
-const INTERIM_PREMIUM = 1.25;    // Interim ist teurer als der Vorgänger
-const vacate = (s) => ({ skill: 0, was: Math.max(s.skill, INTERIM) });
-const seatPay = (s, seat, eb) => s.skill > 0 ? payOf(seat, s.skill, eb)
-  : payOf(seat, s.was ?? INTERIM, eb) * INTERIM_PREMIUM;
-
-const POACH = 0.0008;                        // Abwerbung: seltenes Randrisiko
-/* Personalkosten in Prozentpunkten der Marge, damit sie sich in targetMargin
-   einreihen: Summe der Jahresgehälter geteilt durch den Umsatz.             */
-const seatLoad = (c) => {
-  const eb = ebitdaOf(c);
-  return (seatPay(c.ceo, "ceo", eb) + seatPay(c.cfo, "cfo", eb) + seatPay(c.r3, "r3", eb))
-    / Math.max(4, c.revenue) * 100;
-};
-const peopleLvl = (c) => (c.ceo.skill + c.cfo.skill + c.r3.skill) / 3;
-// Eine Fachposition kann den CEO nicht überholen — A-Player berichten nicht an C-Player
-const cappedSkill = (c, seat) => seat === "ceo" ? c.ceo.skill : Math.min(c[seat].skill, c.ceo.skill + 1.5);
-const isCapped = (c, seat) => seat !== "ceo" && c[seat].skill > c.ceo.skill + 1.5;
-// Effektives Rating: gedeckelte Fachposition plus halber CEO, plus MEP-Bonus
-const effSkill = (c, seat) => cappedSkill(c, seat) + 0.5 * c.ceo.skill + (c.ltip ? 0.5 : 0)
-  + (seat === "cfo" && c.sector === "Software" ? 0.5 * cappedSkill(c, "r3") : 0);
-/* Risiko hängt nicht an der Dimension, sondern daran, ob eine Maßnahme im
-   Zugriff des Managements liegt oder auf Adoption durch Dritte angewiesen ist.
-   "rel"  — Kosten, Working Capital, Pricing. Liefern zuverlässig (80–90 %) und
-            scheitern nicht binär, sondern unterliefern.
-   "tr"   — ERP, KI. Große interne Transformationsprogramme: aufwendig und
-            binär im Ausgang, aber unter einem starken CFO durchaus beherrschbar.
-            Liegen spürbar unter den verlässlichen Maßnahmen, aber im brauchbaren
-            Bereich — ein Fehlschlag kostet dafür den vollen Sunk Cost.
-   "hard" — Markteintritt. Der Erfolg hängt an Dritten: neuen Kunden in einem Markt,
-            den man noch nicht kennt. Bleibt die schwächste Klasse.             */
-const PARTIAL_DELIVERY = 0.35;   // Teillieferung, wenn eine "rel"-Maßnahme das Ziel verfehlt
-const FAIL_SUNK = 0.15;          // Sunk Cost jedes Fehlschlags in EBITDA-Vielfachen
-const initSuccess = (E, cls = "hard") => cls === "rel"
-  ? clamp(0.60 + 0.055 * E, 0.55, 0.97)
-  : cls === "tr"
-    ? clamp(0.56 + 0.048 * E, 0.50, 0.92)
-    : clamp(0.20 + 0.072 * E, 0.20, 0.82);
-const CLS_LABEL = { rel: "verlässlich", tr: "Transformation", hard: "marktabhängig" };
-// Ein starkes Team liefert schneller: ab effektivem Rating 3,2 in einem Halbjahr.
-const initDur = (E) => Math.max(1, 4 - Math.floor(E / 1.6));
-/* Jede Maßnahme steht je Beteiligung nur einmal zur Verfügung, deshalb wiegt der
-   einzelne Gewinn schwerer als früher. Er hängt weiterhin deutlich am Team:
-   effektives Rating 2 bringt 1,07, Rating 6 bringt 1,68.                       */
-const initGain = (E) => 0.70 + 3.60 * E / (E + 4);
-/* Je weiter über Branchenniveau, desto weniger bringt die nächste Maßnahme. Da
-   erreichte Stufen nicht mehr verfallen, ist das die einzige Bremse gegen
-   unbegrenztes Aufstocken — bewusst mild, damit Ausbauen sich lohnt.          */
-const ceilingFactor = (lvl) => Math.max(0.15, 1 - 0.13 * Math.max(0, lvl - 2));
-const ACC_SPREAD = [0.3, 1.3];   // Streubreite des Ergebnisses bei Acceleration
-
-// Jede Maßnahme steht je Beteiligung genau einmal zur Verfügung.
-/* Wie oft wurde diese Maßnahme in dieser Halteperiode schon aufgelegt?
-   Vorher war jede genau einmal verfügbar. Das machte aus der Value Creation eine
-   Abarbeitungsliste: sieben Maßnahmen, zwei Werkbänke, fertig — und ab der Mitte
-   der Halteperiode gab es nichts mehr zu entscheiden. Jetzt lässt sich jede
-   wiederholen; die Bremse ist wirtschaftlich statt formal. Zwei greifen
-   zusammen: ceilingFactor macht jede weitere Stufe kleiner, und fitOf misst,
-   ob überhaupt noch ein Defizit da ist, an dem die Maßnahme ansetzen kann.
-   Ein zweites Cost-out auf einer Marge, die schon über Branchenniveau liegt,
-   bringt nichts mehr — nicht weil eine Regel es verbietet, sondern weil nichts
-   mehr zu holen ist.                                                          */
-const initRuns = (c, id) => ((c && c.done) || []).filter((x) => x === id).length;
-const initDone = (c, id) => initRuns(c, id) > 0;
-/* Die zweite Auflage ist schwerer als die erste: die naheliegenden Hebel sind
-   gezogen, was bleibt, sitzt tiefer in der Organisation.                      */
-const REPEAT_MAX = 4;
-const repeatMalus = (n) => ({ sm: -0.06 * n, dm: n >= 2 ? 1 : 0, gm: Math.pow(0.82, n) });
-/* Performance und Growth sind zwei Werkbänke, nicht eine: das Cost-out treibt
-   der CFO, die Expansion die Fachrolle. Sie liefen bisher hintereinander, was
-   ein Wertsteigerungsprogramm über sieben Maßnahmen auf sieben Jahre streckte —
-   der Grund, warum kurze Halteperioden im Spiel nichts einbrachten. Jetzt läuft
-   je Beteiligung ein Programm pro Dimension parallel.                         */
-const initIn = (c, dim) => (dim === "plat" ? c.initP : c.initA);
-const initsOf = (c) => [c.initP, c.initA].filter(Boolean);
-const anyInit = (c) => !!(c.initP || c.initA);
-const sumInit = (c, key) => (c.initP && c.initP[key] || 0) + (c.initA && c.initA[key] || 0);
-
-/* Maßnahmenkatalog. cls = Risikoklasse (rel / hard), sm = Modifikator Erfolgsquote,
-   dm = Dauer, gm = Reifegradgewinn, cx = zusätzlicher Investitionsbedarf (pp vom
-   Umsatz), oneOff = Einmalaufwand in EBITDA-Vielfachen (Cash, unterhalb des EBITDA),
-   drag = laufende Margenbelastung (nur Growth), failCost = Sunk Cost bei Fehlschlag,
-   failMargin = dauerhafter Margenschaden                                            */
-const INITS = {
-  plat: [
-    { id: "opex", n: "Cost-out-Programm", cls: "rel", d: "Einkauf bündeln, Gemeinkosten straffen, Standorte verdichten.",
-      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.10, cx: 0 },
-    { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Setzt sofort Liquidität frei.",
-      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.06, cx: 0, release: 0.35, nwcFix: -2 },
-    { id: "erp", n: "ERP & Digitalisierung", cls: "tr", d: "Systemlandschaft ersetzen. Großer Hebel, langer Atem — und ein Fehlschlag bringt gar nichts.",
-      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.30, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
-    { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
-      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.25, cx: 1.0, capexFix: -0.9, failCost: 0.30,
-      req: (c) => effSkill(c, "cfo") >= 4, reqT: "Effektives CFO-Rating mindestens 4" },
-  ],
-  acc: [
-    { id: "pen", n: "Pricing & Cross-Selling", cls: "rel", d: "Bestandskunden ausbauen, Preise durchsetzen. Kurzer Payback, begrenzte Höhe.",
-      sm: 0.07, dm: -1, gm: 0.8, drag: 0.5, cx: 0, spread: [0.7, 1.1] },
-    { id: "exp", n: "Markt- und Segmentexpansion", cls: "hard", d: "Neue Regionen oder Segmente. Breite Streuung, teurer Fehlschlag.",
-      sm: 0.16, dm: 1, gm: 1.3, drag: 1.0, cx: 0, nwcRun: 2, spread: [0.3, 1.4],
-      failCost: 0.25, failMargin: -0.8 },
-    { id: "ma", n: "Add-on M&A", cls: "tr", d: "Zukauf eines Wettbewerbers, fremdfinanziert. Multiple-Arbitrage — und Covenant-Risiko.",
-      sm: -0.05, dm: 1, gm: 0, drag: 0.4, cx: 0, ma: true },
-  ],
-};
-const initById = (dim, id) => INITS[dim].find((i) => i.id === id);
-
-/* ---------- Eignung einer Maßnahme ----------
-   Bisher hatte jede Maßnahme einen festen Ertragsfaktor (gm). Damit war die
-   Antwort auf jede Beteiligung dieselbe: alles machen, so schnell wie möglich.
-   Keine Maßnahme war je falsch, nur unterschiedlich gut — und wo nichts falsch
-   ist, gibt es keine Entscheidung.
-
-   Jetzt hängt der Ertrag am konkreten Defizit des Unternehmens. Cost-out zahlt,
-   wo Marge fehlt, und läuft leer, wo sie schon über dem Branchenniveau liegt.
-   Ein NWC-Programm setzt nur frei, was gebunden ist. ERP und KI sind
-   Fixkostenprogramme und rechnen sich erst ab einer gewissen Größe. Preissetzung
-   braucht ein Asset, dem der Kunde etwas zutraut. Und Expansion lohnt in
-   wachsenden Märkten — in einem stagnierenden verbrennt sie Marge.           */
-function fitOf(id, c) {
-  const eb = ebitdaOf(c);
-  switch (id) {
-    case "opex":  return clamp(0.55 + 0.28 * ((c.benchMargin ?? 12) - c.margin), 0.10, 1.70);
-    case "nwc":   return clamp(0.30 + 0.055 * (c.nwcPct ?? 12), 0.15, 1.60);
-    case "erp":   return clamp(0.30 + 0.050 * eb, 0.25, 1.60);
-    case "ai":    return clamp(0.25 + 0.045 * eb, 0.25, 1.60) * clamp(0.5 + 0.25 * c.plat, 0.5, 1.3);
-    case "pen":   return clamp(0.30 + 0.014 * c.quality, 0.30, 1.70);
-    case "exp":   return clamp(0.15 + 0.16 * (SECTORS[c.sector].g + (c.drift || 0)), 0.05, 1.70);
-    default:      return 1;
-  }
-}
-/* Klartext für den Maßnahmenpicker — der Spieler muss die Eignung sehen können,
-   sonst ist sie verstecktes Wissen statt einer Entscheidungsgrundlage.       */
-function fitLabel(id, c) {
-  const f = fitOf(id, c);
-  const t = f >= 1.25 ? ["hoch", "var(--teal)"] : f >= 0.75 ? ["mittel", "var(--ink2)"]
-    : f >= 0.45 ? ["gering", "var(--ox)"] : ["kaum", "var(--ox)"];
-  const why = {
-    opex: c.margin > (c.benchMargin ?? 12) + 0.5 ? "Marge liegt bereits über dem Branchenniveau"
-      : c.margin < (c.benchMargin ?? 12) - 1 ? "Marge liegt deutlich unter dem Branchenniveau" : "Marge etwa auf Branchenniveau",
-    nwc: (c.nwcPct ?? 12) >= 16 ? "hohe Kapitalbindung, entsprechend viel freisetzbar"
-      : (c.nwcPct ?? 12) <= 8 ? "wenig gebundenes Kapital, wenig zu holen" : "durchschnittliche Kapitalbindung",
-    erp: ebitdaOf(c) >= 18 ? "Größe trägt die Fixkosten des Programms"
-      : ebitdaOf(c) <= 8 ? "für diese Größe ein teures Programm" : "Größe im mittleren Bereich",
-    ai: ebitdaOf(c) >= 18 && c.plat >= 3 ? "Größe und Prozessreife tragen das Programm"
-      : c.plat < 2.5 ? "Prozesse noch zu unreif für Automatisierung" : "Größe im mittleren Bereich",
-    pen: c.quality >= 70 ? "starke Marktstellung, Preise sind durchsetzbar"
-      : c.quality <= 45 ? "schwache Marktstellung, kaum Preissetzungsmacht" : "durchschnittliche Marktstellung",
-    exp: SECTORS[c.sector].g >= 5 ? "wachsender Markt trägt die Expansion"
-      : SECTORS[c.sector].g <= 3 ? "stagnierender Markt — Expansion kostet Marge ohne Gegenwert" : "Markt wächst moderat",
-  }[id] || "";
-  return { f, t: t[0], color: t[1], why };
-}
-
-/* Add-on-Preis: Branchenmultiple und Einstiegsmultiple der Plattform gemittelt,
-   abzüglich der Größenarbitrage. Die Arbitrage schrumpft mit der Plattform —
-   BCG/HHL finden, dass Buy-&-Build bei kleinen Plattformen deutlich outperformt
-   und bei grossen Plattformen hinter Standalone-Deals zurückfällt.            */
-/* Die Größenarbitrage schrumpft nicht nur mit der Plattform, sondern auch mit
-   dem Marktumfeld: In einem heißgelaufenen Sektor sind auch kleine Ziele teuer.
-   Und der Zukauf ist keine Einbahnstraße — sitzt ein Wettbewerber mit am Tisch,
-   verschwindet die Arbitrage ganz. Vorher war jedes Add-on garantiert
-   wertsteigernd, weil der Kaufpreis strukturell unter dem Plattformmultiple lag. */
-const addonArb = (c, market) => {
-  const size = clamp(2.4 - Math.max(0, ebitdaOf(c) - 10) * 0.05, 0.4, 2.4);
-  const heat = market ? clamp((market[c.sector] / SECTORS[c.sector].m - 1) * 3.0, -0.6, 1.6) : 0;
-  return clamp(size - heat - (c.addonComp || 0), -1.2, 2.4);
-};
-/* Der Preis eines Zukaufs bemisst sich am heutigen Bewertungsmultiple der
-   Plattform, nicht an einer Formel aus Sektor und Einstiegspreis. Das war der
-   eigentliche Konstruktionsfehler: Die Plattform wurde nach jeder Maßnahme höher
-   bewertet, der Zukauf blieb bei einer am Einstieg verankerten Zahl — die
-   Arbitrage wuchs also mit der eigenen Arbeit und erreichte am Ende sechs Turns.
-   Jetzt ist sie genau das, was sie sein soll: ein Größenabschlag von bis zu
-   2,4 Turns, der mit der Plattform schrumpft und in heißen Märkten verschwindet. */
-const addonMultiple = (c, market) => Math.max(3, markMultiple(c, market) - addonArb(c, market));
-const addonEbitda = (c) => ebitdaOf(c) * (c.addonSize ?? 0.275);
-const ADDON_HEADROOM = 0.6;   // Mindestpuffer zum Covenant nach dem Zukauf
-/* Pro-forma-Verschuldung nach dem Zukauf:
-   (Nettoverschuldung PortCo + Kaufpreis) / (EBITDA PortCo + EBITDA Add-on)
-   Reißt sie den Covenant, kommt die Finanzierung nicht zustande.              */
-function addonCheck(c, market) {
-  const addEb = addonEbitda(c);
-  const mult = addonMultiple(c, market);
-  const price = addEb * mult;
-  const lev = (c.netDebt + price) / Math.max(0.5, ebitdaOf(c) + addEb);
-  /* Die Banken finanzieren einen Zukauf nicht bis auf den letzten Zentimeter an
-     den Covenant heran — sie verlangen Puffer für den Fall, dass die Integration
-     schiefgeht. ADDON_HEADROOM ist genau dieser Puffer. Vorher genügte formale
-     Einhaltung, und die Plattform stand nach dem Zukauf regelmäßig mit 0,4×
-     Restluft da: Ein einziger Nachfrageeinbruch reichte für den Breach.       */
-  const limit = (c.covLimit ?? 6.5) - ADDON_HEADROOM;
-  return { addEb, mult, price, lev, limit, ok: lev <= limit };
-}
-/* Integrationsrisiko. Vorher hing der Erfolg allein am Rating der Fachrolle —
-   eine Plattform mit unreifen Prozessen und 4,5× Verschuldung integrierte einen
-   Zukauf genauso zuverlässig wie eine durchsanierte. Genau dort scheitert
-   Buy-&-Build in der Praxis: zu früh, zu groß, zu fremdfinanziert.           */
-function addonRisk(c) {
-  const lev = c.netDebt / Math.max(0.5, ebitdaOf(c));
-  return clamp(
-    0.09 * (c.plat - 2.5)                      // reife Prozesse tragen die Integration
-    - 0.07 * Math.max(0, lev - 3.0)            // jeder Turn über 3,0× kostet Handlungsfähigkeit
-    - 0.55 * Math.max(0, (c.addonSize ?? 0.275) - 0.22),  // je größer der Bissen, desto riskanter
-    -0.32, 0.12);
-}
-
-// Acceleration wirkt nur, soweit People und Platform sie tragen
-const accEff = (c) => Math.min(c.acc, peopleLvl(c) + 1, c.plat + 1);
-const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1, c.plat + 1));
-
-
-/* Gemeinsamer Baustein für den Start einer Maßnahme. Spieler und KI benutzen
-   dieselbe Funktion — vorher war die KI mit einem pauschalen Reifegradgewinn
-   von 0,85 unterwegs, während der Spieler über initGain das Drei- bis Vierfache
-   holte. Das war der eigentliche Grund, warum die Kohorte nie mithalten konnte. */
-function buildInit(c, dim, id, market, quarter) {
-  const spec = initById(dim, id);
-  if (!spec) return null;
-  const runs = initRuns(c, id);
-  if (runs >= REPEAT_MAX) return null;
-  const rep = repeatMalus(runs);
-  if (spec.req && !spec.req(c)) return null;
-  const seat = dim === "plat" ? "cfo" : "r3";
-  const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
-  const dur = Math.max(1, initDur(E) + (spec.dm || 0) + rep.dm);
-  const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0), 0.1, 0.97);
-  const ok = rnd() < p;
-  const sp = spec.spread ? spec.spread[0] + rnd() * (spec.spread[1] - spec.spread[0])
-    : dim === "acc" ? ACC_SPREAD[0] + rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
-  let patch = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
-  let debt = ebitdaOf(c) * (spec.oneOff || 0);
-  let chk = null;
-  if (spec.ma) {
-    chk = addonCheck(c, market);
-    if (!chk.ok) return { blocked: chk };
-    /* Der Reifegradgewinn ist bewusst klein: Der Wert eines Zukaufs steckt im
-       zugekauften EBITDA, nicht in einer dauerhaft schnelleren Organik. Vorher
-       gab es hier eine volle Stufe obendrauf — rund zwei Drittel des gemessenen
-       Vorteils kamen aus dieser Doppelzählung.                               */
-    patch = { ...patch, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price, gain: 0.35, ok };
-  } else {
-    patch = { ...patch, gain: initGain(E) * sp * (spec.gm || 1) * rep.gm * fitOf(id, c)
-      * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
-  }
-  return { spec, dur, p, ok, debt, chk, slot: dim === "plat" ? "initP" : "initA",
-    init: { dim, id, name: spec.n, doneQ: quarter + dur, ...patch } };
-}
-
-/* Maßnahmenpräferenz der KI-Fonds. Jeder Archetyp arbeitet seine eigene Liste
-   ab — der Operator zuerst die Kostenseite, der Leverage-Fonds zuerst den
-   Zukauf. Getroffen wird immer die erste noch offene Maßnahme der Dimension. */
-const AI_PLAN = {
-  ops:      { plat: ["opex", "erp", "nwc", "ai"], acc: ["pen", "exp"] },
-  fin:      { plat: ["nwc", "opex"], acc: ["ma", "pen"] },
-  sourcing: { plat: ["opex", "nwc", "erp"], acc: ["ma", "pen", "exp"] },
-  all:      { plat: ["opex", "nwc", "erp", "ai"], acc: ["pen", "ma", "exp"] },
-};
-
-function makeSeats(d) {
-  const r = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
-  const retiring = d.flag === "Nachfolgesituation";
-  return {
-    ceo: { skill: retiring ? r(3, 4) : r(1, 4), retiring },
-    cfo: { skill: rnd() < 0.35 ? 0 : r(1, 3) },
-    r3: { skill: rnd() < 0.45 ? 0 : r(1, 3) },
-  };
-}
-function makeCandidates() {
-  const draw = (mid, sp) => clamp(mid + (rnd() * 2 - 1) * sp, 1, 5);
-  return [
-    { label: "Der Branchenveteran", shown: 2.5, span: 0.5, skill: draw(2.5, 0.5), dev: false, poach: 1,
-      note: "Zwanzig Jahre im Segment. Marktgehalt, keine Überraschungen, kein Sprung." },
-    { label: "Der A-Player aus dem Konzern", shown: 5, span: 0.5, skill: draw(5, 0.5), dev: false, poach: 2,
-      note: "Sofort auf Topniveau — doppeltes Gehalt, wird selbst abgeworben." },
-    { label: "Das Entwicklungsprofil", shown: 2, span: 1.5, skill: draw(2, 1.5), dev: true, poach: 1,
-      note: "Zweite Reihe, erste eigene Führungsrolle. +0,25 Rating je Halbjahr bis 4,5." },
-  ];
-}
-/* ---------- Due Diligence ----------
-   Kosten fallen an, sobald der Auftrag erteilt ist — ob der Deal zustande kommt
-   oder nicht. Alles andere wäre keine Entscheidung: Wenn Prüfung beim Zuschlag
-   gratis ist, prüft man immer alles, und der Datenraum könnte gleich offen
-   danebenliegen. Der Preis skaliert mit der Transaktionsgröße, weil ein
-   Berateraufwand von 2 Mio. € auf ein Ziel mit 5 Mio. € EBITDA absurd wäre und
-   auf eines mit 40 Mio. € geschenkt.                                         */
-const DD_COST = 2;          // Referenzgröße für die Benchmarkstudie
-const ddCostOf = (d) => clamp(0.006 * ebitdaOf(d) * d.askMult, 0.6, 3.5);
-/* Die eigentliche Knappheit ist nicht Geld, sondern das Deal-Team. Wer parallel
-   an drei Datenräumen sitzt, macht keinen davon gut. Die Analysefähigkeit
-   bestimmt, wie viele Prozesse gleichzeitig laufen können — damit bekommt das
-   Attribut neben der Schätzgüte eine zweite, greifbare Wirkung.              */
-const ddCapOf = (analysis) => 1 + Math.floor(analysis / 2);
-const ENTRY_FEE = 0.02;     // Transaktionskosten beim Kauf, in % des EV
-const MGMT_FEE = 0.02;      // Management Fee p.a.
-const HURDLE = 0.08;        // Hurdle (Preferred Return) p.a.
-const CARRY = 0.20;         // Carried Interest
-const INVEST_PERIOD = 10;   // Ende der Investitionsperiode (Halbjahr 10 = Jahr 5)
-const BIL_DISC = 0.5;       // Multiple-Abschlag beim bilateralen Verkauf
-/* Wer am Ende der Fondslaufzeit noch Beteiligungen hält, verkauft unter Zeitdruck
-   an einen Markt, der das weiß. Der Abschlag war mit 1,5 Turns zu milde: "nie
-   verkaufen" war damit genauso gut wie aktive Exitsteuerung, obwohl es keinerlei
-   Können verlangt.                                                            */
-const LIQ_DISC = 2.6;       // Abschlag bei Zwangsabwicklung am Laufzeitende
-const PROC_FEE = 0.03;      // Transaktionskosten bei einer Auktion
-const BIL_FEE = 0.02;       // Transaktionskosten beim bilateralen Verkauf
-const CV_STAKE = 0.6;       // Anteil, der ins Continuation Vehicle verkauft wird
-const CV_DISC = 0.95;       // Abschlag auf den NAV im Secondary-Markt
-const CV_FEE = 0.015;
-const IPO_PLACE = 0.4;      // platzierter Anteil
-const IPO_DISC = 0.90;      // Emissionsabschlag
-const IPO_FEE = 0.04;
-const MAX_PROC = 3;         // gleichzeitig laufende Verkaufsprozesse
-const PROC_Q = 2;           // Dauer eines Verkaufsprozesses in Halbjahren
-const IPO_EBITDA = 25;      // Mindest-EBITDA für ein Börsenfenster
-
-// Gebote am Ende eines Verkaufsprozesses
-function makeOffers(c, market, funds, neg, q) {
-  const fair = fairOf(c, market, neg, q);
-  const out = [];
-  const fit = rnd() < 0.6;
-  out.push({
-    buyer: "Strategischer Käufer", kind: "strat",
-    price: fair * (fit ? 1.00 + rnd() * 0.08 : 0.92 + rnd() * 0.08),
-    risk: 0.12,
-    note: fit ? "Synergien im Kerngeschäft, aber Fusionskontrolle offen" : "Fremder Sektor, rein finanzgetriebenes Interesse",
-  });
-  const sponsors = funds.filter((f, i) => i > 0 && f.cash > fair * 0.9 && f.holdings.length < MAX_SLOTS);
-  if (sponsors.length) {
-    const s = pick(sponsors);
-    out.push({
-      buyer: s.name, kind: "sponsor", price: fair * (0.90 + rnd() * 0.12), risk: 0,
-      note: "Secondary Buyout — sieht nur die veröffentlichten Kennzahlen",
-    });
-  }
-  out.push({
-    buyer: "Family Office", kind: "family",
-    price: fair * (0.86 + rnd() * 0.06), risk: 0,
-    note: "Zahlt am wenigsten, vollzieht aber sicher",
-  });
-  return out.sort((a, b) => b.price - a.price);
-}
-const LM_ANNOUNCE = 8;      // Ankündigung des Trophy Assets
-const LM_DEAL = 10;         // Halbjahr, in dem es in den Dealflow kommt
-
-function newLandmark(market) {
-  const sector = pick(SECNAMES);
-  const cands = BOOK[sector].filter((a) => a.q[1] >= 70);
-  const a = cands.length ? pick(cands) : pick(BOOK[sector]);
-  const revenue = 180 + rnd() * 110;
-  const margin = clamp(band(a.m) + 3, 10, 38);
-  const quality = clamp(band(a.q) + 14, 55, 97);
-  return {
-    id: "lm" + Math.floor(rnd() * 1e9),
-    type: "landmark", sector, revenue, margin, quality,
-    growth: band(a.g) + 1, drift: clamp(nrm(1.5) + 0.4, -6, 6), dnoise: nrm(1),
-    askMult: clamp(market[sector] * (0.7 + 0.006 * quality) * (1.04 + rnd() * 0.06), 5, 19),
-    levCap: clamp(a.lev[1] + 0.3, 3, 5.5),
-    capexPct: a.cx, nwcPct: a.nw,
-    benchMargin: (a.m[0] + a.m[1]) / 2, benchCapex: a.cx, benchNwc: a.nw,
-    flag: null,
-    desc: a.d,
-    name: pick(P1) + pick(P2) + " " + pick(a.s) + " Gruppe",
-  };
-}
-
-/* ---------- Bewertung ----------
-   Kette: EBITDA × Multiple = Enterprise Value
-          EV − Nettoverschuldung = Equity Value (100 %)
-          × Anteilsquote = Wert des gehaltenen Anteils
-          − Abschläge − Transaktionskosten = Erlös an den Fonds
-   Der NAV kennt keinen Verhandlungsaufschlag: Verhandlungsgeschick wirkt
-   erst in einer tatsächlichen Transaktion, nicht in der Bewertung.            */
-
-/* Realisierte Umsatz-CAGR seit Einstieg, relativ zum Sektorwachstum (in pp). */
-// Gibt null zurück, solange keine Halteperiode vorliegt — sonst stünde dort das
-// Sektorwachstum, das ohne Due Diligence gar nicht bekannt sein darf.
-function cagrOf(c) {
-  const base = c.hist && c.hist[0] ? c.hist[0].rev : 0;
-  if (!base || !c.holdQ) return null;
-  const yrs = Math.max(0.5, c.holdQ / 2);
-  return (Math.pow(Math.max(0.05, c.revenue / base), 1 / yrs) - 1) * 100;
-}
-function cagrPrem(c) {
-  const g = cagrOf(c);
-  return g == null ? 0 : g - SECTORS[c.sector].g;
-}
-/* Wachstum treibt das Exit-Multiple. Empirisch der stärkste Zusammenhang der
-   Assetklasse: schnell wachsende Unternehmen werden mit 30–50 % höheren
-   Multiples gehandelt. Greift erst nach einem vollen Jahr Halteperiode, damit
-   beim Closing kein Bewertungssprung entsteht.                                */
-function growthPrem(c) {
-  if (!c.hist || c.hist.length < 3) return 0;
-  return clamp(cagrPrem(c) * 0.050, -0.20, 0.45);
-}
-/* Die Assetqualität trägt das Exit-Multiple stärker als früher: seit der
-   Cashflow-Korrektur liefert die Entschuldung nur noch die Hälfte, der Wert muss
-   aus EBITDA-Wachstum und Multiple-Aufwertung kommen — was der empirischen
-   Zerlegung ohnehin näher liegt als ein Leverage-getriebenes Ergebnis.      */
-/* Altbestandsabschlag. Ein Asset, das seit Jahren im Portfolio liegt, verkauft
-   sich schlechter: Die Käufer wissen, dass die naheliegenden Maßnahmen gehoben
-   sind, der Verkäufer unter Zeitdruck steht und andere Fonds das Objekt bereits
-   angesehen und abgelehnt haben. Ab vier Jahren Haltedauer 2 % je Halbjahr,
-   gedeckelt bei 20 %. Das ist der zweite Preis der Zeit, neben dem IRR.       */
-const STALE_FROM = 8, STALE_STEP = 0.02, STALE_MAX = 0.20;
-const staleDisc = (c) => 1 - Math.min(STALE_MAX, STALE_STEP * Math.max(0, (c.holdQ || 0) - STALE_FROM));
-
-function markMultiple(c, market) {
-  /* Derselbe Qualitätsfaktor wie im Kaufpreis (QUAL_COEF) — ein Deal steht am
-     Tag des Vollzugs zu Anschaffungskosten im Buch. Jede Aufwertung muss danach
-     verdient werden: über EBITDA, über realisiertes Wachstum, über den Markt.
-     MULT_CAP verhindert, dass sich Marktband, Qualität und Wachstumsprämie
-     multiplikativ zu Multiples aufschaukeln, die es im Mittelstand nicht gibt. */
-  const raw = market[c.sector] * (0.7 + QUAL_COEF * c.quality) * (1 + growthPrem(c));
-  return Math.min(raw, market[c.sector] * MULT_CAP) * staleDisc(c);
-}
-/* Endfälligkeitsdruck. Käufer kennen die Laufzeit eines Fonds. Wer in den letzten
-   zwei Jahren verkauft, verhandelt gegen jemanden, der weiß, dass verkauft werden
-   muss — und preist das ein. Ohne diesen Effekt war "alles am Ende abstoßen"
-   genauso gut wie aktive Exitsteuerung, obwohl es kein Können verlangt.      */
-const END_PRESSURE_FROM = 4;   // Halbjahre vor Laufzeitende, ab denen es beginnt
-function endPressure(q) {
-  if (q == null) return 0;
-  const left = PERIODS - q;
-  if (left >= END_PRESSURE_FROM) return 0;
-  return LIQ_DISC * (END_PRESSURE_FROM - left) / END_PRESSURE_FROM;
-}
-
-function dealMultiple(c, market, neg, q) {
-  return Math.max(2, markMultiple(c, market) * (1 + 0.02 * neg) - endPressure(q));
-}
-const evOf = (c, mult) => ebitdaOf(c) * mult;
-const eqvOf = (c, mult) => (evOf(c, mult) - c.netDebt) * (c.st ?? 1);
-
-const navValueOf = (c, market) => Math.max(0, eqvOf(c, markMultiple(c, market)));
-const fairOf = (c, market, neg, q) => Math.max(0, eqvOf(c, dealMultiple(c, market, neg, q)));
-
-function navOf(f, market) {
-  return f.holdings.reduce((s, c) => s + navValueOf(c, market), 0);
-}
-
-/* ---------- Fondsrenditen ----------
-   Der Fonds ist nicht mehr am ersten Tag voll eingezahlt. Kapital wird abgerufen,
-   wenn es gebraucht wird, und fließt zurück, sobald es realisiert ist. Genau
-   daraus entsteht die Zeitdimension, die vorher fehlte:
-
-   - Kapitalabruf (Call): jeder Mittelabfluss des Fonds — Eigenkapital, Fees,
-     Due Diligence — wird zuerst aus recycelbaren Erlösen gedeckt, der Rest bei
-     den Investoren abgerufen.
-   - Verwendung der Erlöse: Bei jedem Exit entscheidest du, wie viel an die
-     Investoren zurückfließt und wie viel im Fonds bleibt. Einbehalten geht nur
-     innerhalb der Investitionsperiode und kumuliert höchstens bis zur Höhe des
-     Commitments; danach wird zwingend voll ausgeschüttet.
-   - Damit misst der TVPI den Gesamtwert je abgerufenem Euro, und der IRR misst,
-     wann dieses Geld zurückkam. Ein Asset zehn Jahre zu halten ist jetzt teuer.  */
-const RECYCLE_CAP = 1.0;    // kumuliert höchstens 100 % des Commitments
-
-/* Gebührenreserve. Die Management Fee liegt innerhalb des Commitments — über die
-   Laufzeit sind das rund 12–15 % davon. Investierbar sind also nie die vollen
-   das volle Commitment, sondern das, was nach Reserve übrig bleibt. Genau das tut jedes
-   Investment Committee, und es beseitigt die Überziehung an der Wurzel, statt
-   sie hinterher zu verrechnen: Vorher rief der Fonds in vier von fünf Partien
-   mehr ab, als überhaupt zugesagt war.                                        */
-function feeReserveOf(f, quarter) {
-  let res = 0;
-  const cost = f.holdings.reduce((s, c) => s + (c.entryEquity || 0), 0);
-  for (let t = quarter + 1; t <= PERIODS; t++) {
-    // Nach der Investitionsperiode bemisst sich die Gebühr am Einstand des
-    // Restportfolios. Konservativ gerechnet mit dem heutigen Bestand.
-    const base = t <= INVEST_PERIOD ? CAPITAL : cost;
-    res += (base * MGMT_FEE) / 2;
-  }
-  return Math.max(0, res - (f.recyc || 0));
-}
-// Was der Spieler tatsächlich einsetzen kann: offenes Commitment plus einbehaltene
-// Erlöse, abzüglich der Gebühren, die bis zum Laufzeitende noch fällig werden.
-const investableOf = (f, quarter) =>
-  Math.max(0, (f.undrawn ?? CAPITAL) + (f.recyc || 0) - feeReserveOf(f, quarter));
-
-/* Mittelabfluss. Reihenfolge: zuerst einbehaltene Erlöse, dann offenes
-   Commitment. Das Commitment ist eine harte Grenze — reicht es nicht, kommt der
-   Abruf nicht zustande. Für Gebühren, die dann ungedeckt bleiben (nach
-   Totalverlusten möglich), läuft eine Verbindlichkeit auf, die mit der nächsten
-   Ausschüttung verrechnet wird. Kein Abruf über das Commitment hinaus.       */
-function spendFund(f, amt, quarter, accrue) {
-  if (!(amt > 0)) return false;
-  const fromRecyc = Math.min(amt, f.recyc || 0);
-  let call = amt - fromRecyc;
-  const room = Math.max(0, f.undrawn ?? CAPITAL);
-  if (call > room + 1e-9) {
-    if (!accrue) return false;               // Kauf scheitert, Commitment erschöpft
-    f.accrued = (f.accrued || 0) + (call - room);
-    call = room;
-  }
-  f.recyc = (f.recyc || 0) - fromRecyc;
-  f.cash -= fromRecyc + call;
-  if (call > 1e-9) {
-    f.undrawn = (f.undrawn ?? CAPITAL) - call;
-    f.calls = [...(f.calls || []), { q: quarter, amt: call }];
-    f.drawn = (f.drawn || 0) + call;
-  }
-  return true;
-}
-
-/* Wie viel eines Exiterlöses überhaupt einbehalten werden darf. Zwei Schranken
-   aus dem LPA: nur innerhalb der Investitionsperiode, und kumuliert höchstens
-   bis zur Höhe des Commitments. Außerhalb wird zwingend voll ausgeschüttet.  */
-function recycleRoom(f, net, quarter) {
-  if (quarter > INVEST_PERIOD) return 0;
-  return Math.min(net, Math.max(0, CAPITAL * RECYCLE_CAP - (f.recycled || 0)));
-}
-
-/* Verwendung eines Erlöses. `keep` ist die Entscheidung des GP in Prozent des
-   Erlöses — Einbehalten bringt TVPI (mehr Kapital arbeitet je abgerufenem Euro)
-   und kostet IRR (der Rückfluss an die Investoren verschiebt sich). Fehlt die
-   Angabe, wird voll ausgeschüttet: das ist die Vorgabe, nicht der Automatismus
-   von vorher.                                                                 */
-function applyProceeds(f, net, costBasis, quarter, keep = 0) {
-  if (!(net > 0)) return;
-  f.proceeds = (f.proceeds || 0) + net;
-  const rec = Math.min(recycleRoom(f, net, quarter), net * clamp(keep, 0, 1));
-  if (rec > 0) {
-    f.recycled = (f.recycled || 0) + rec;
-    f.recyc = (f.recyc || 0) + rec;
-    f.cash += rec;
-  }
-  let dist = net - rec;
-  // Aufgelaufene Gebühren werden vor der Ausschüttung bedient
-  if (dist > 0 && (f.accrued || 0) > 0) {
-    const pay = Math.min(dist, f.accrued);
-    f.accrued -= pay; dist -= pay; f.fees = (f.fees || 0);
-  }
-  if (dist > 1e-9) {
-    f.dists = [...(f.dists || []), { q: quarter, amt: dist }];
-    f.distTotal = (f.distTotal || 0) + dist;
-  }
-}
-
-// Wert in den Händen der Investoren: ausgeschüttet + NAV + noch nicht reinvestierte Erlöse
-const totalValueOf = (f, market) => (f.distTotal || 0) + navOf(f, market) + (f.recyc || 0);
-const drawnOf = (f) => Math.max(1, f.drawn || 0);
-const rvpiOf = (f, market) => navOf(f, market) / drawnOf(f);
-// Brutto-MOIC auf Dealebene: misst Auswahl und Wertsteigerung, nicht das Deployment
-const grossMoicOf = (f, market) => (f.investedTotal || 0) > 0
-  ? ((f.proceeds || 0) + navOf(f, market)) / f.investedTotal : 0;
-
-/* Europäischer Wasserfall über den ganzen Fonds, mit Catch-up. Die Hurdle läuft
-   jetzt auf den tatsächlichen Abrufen und ab deren Zeitpunkt — nicht mehr auf
-   das volle Commitment ab Tag null. Wer spät abruft, hat auch eine kleinere Vorzugsrendite
-   zu überspringen; wer früh viel Kapital bindet, eine größere.                */
-function carryOf(f, market, quarter) {
-  const gain = totalValueOf(f, market) - (f.drawn || 0);
-  const pref = (f.calls || []).reduce(
-    (s, c) => s + c.amt * (Math.pow(1 + HURDLE, Math.max(0, quarter - c.q) / 2) - 1), 0);
-  return gain > pref ? CARRY * gain : 0;
-}
-function tvpiOf(f, market, quarter) {
-  return (totalValueOf(f, market) - carryOf(f, market, quarter)) / drawnOf(f);
-}
-// DPI: was tatsächlich an die Investoren zurückgeflossen ist, je abgerufenem Euro
-function dpiOf(f, market, quarter) {
-  const tv = totalValueOf(f, market);
-  const drag = tv > 0 ? carryOf(f, market, quarter) / tv : 0;
-  return ((f.distTotal || 0) * (1 - drag)) / drawnOf(f);
-}
-
-/* ---------- IRR ----------
-   Zahlungsreihe aus Sicht der Investoren: Abrufe negativ zum Zeitpunkt des
-   Abrufs, Ausschüttungen positiv, der verbleibende NAV plus nicht reinvestierte
-   Liquidität als Schlusszahlung zum Stichtag. Nullstelle über Bisektion, weil
-   die Reihe mehrere Vorzeichenwechsel haben kann und Newton dort abhaut.     */
-function cashflowsOf(f, market, quarter) {
-  const cf = [];
-  (f.calls || []).forEach((c) => cf.push({ t: c.q / 2, v: -c.amt }));
-  (f.dists || []).forEach((d) => cf.push({ t: d.q / 2, v: d.amt * (1 - carryDrag(f, market, quarter)) }));
-  const terminal = (navOf(f, market) + (f.recyc || 0)) * (1 - carryDrag(f, market, quarter));
-  if (terminal > 0) cf.push({ t: quarter / 2, v: terminal });
-  return cf;
-}
-function carryDrag(f, market, quarter) {
-  const tv = totalValueOf(f, market);
-  return tv > 0 ? Math.min(0.5, carryOf(f, market, quarter) / tv) : 0;
-}
-function irrOf(f, market, quarter) {
-  const cf = cashflowsOf(f, market, quarter);
-  if (cf.length < 2 || quarter < 2) return 0;
-  const npv = (r) => cf.reduce((s, p) => s + p.v / Math.pow(1 + r, p.t), 0);
-  let lo = -0.95, hi = 3.0;
-  if (npv(lo) < 0) return -0.95;
-  if (npv(hi) > 0) return 3.0;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    if (npv(mid) > 0) lo = mid; else hi = mid;
-  }
-  return (lo + hi) / 2;
-}
-
-/* ---------- Wertung ----------
-   Je zur Hälfte Multiple und Verzinsung, beide gegen den Anspruch eines guten
-   Buyout-Fonds normiert: 2,0× TVPI und 15 % IRR ergeben je 1,00 Punkt. Eine
-   Wertung von 1,00 ist damit ein Fonds auf Benchmarkniveau, 1,50 ein sehr guter,
-   unter 0,60 wird es für das nächste Fundraising schwierig.
-
-   Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
-   belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
-   Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
-   man ein Asset, das noch weiterläuft.                                       */
-const TVPI_BENCH = 2.0, IRR_BENCH = 0.15;
-function scoreOf(f, market, quarter) {
-  const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
-  const i = irrOf(f, market, quarter) / IRR_BENCH;
-  return 0.5 * clamp(t, -1, 4) + 0.5 * clamp(i, -1, 4);
-}
-
-/* Reifung einer Beteiligung am Periodenende: Onboarding, Search-Mandate,
-   Abschluss laufender Maßnahmen, Entwicklung und Abwerbung der Amtsinhaber.
-   Hauptspiel und Übungsmodus rufen exakt diese Funktion auf — der Übungsmodus
-   läuft dadurch nachweislich auf derselben Logik wie eine echte Partie.      */
-function maturePeople(c, mk, q, me, news, shortlists) {
-  if (c.onboard > 0) c.onboard -= 1;
-  /* Mehrere Positionen dürfen parallel besetzt werden — Headhunter arbeiten
-     extern und binden keine Operating-Kapazität. Pro Position ein Mandat.   */
-  if (c.searches && c.searches.length) {
-    const still = [];
-    c.searches.forEach((se) => {
-      if (q < se.readyQ) { still.push(se); return; }
-      if (me) {
-        /* Nur einmal je Mandat eine Shortlist erzeugen. Vorher wurde bei jedem
-           Periodenschluss eine neue gezogen, solange nicht entschieden war —
-           man konnte die Kandidatenratings beliebig oft neu würfeln, indem man
-           die Entscheidung vor sich her schob.                                */
-        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates() });
-        still.push({ ...se, waiting: true });
-      }
-      else c[se.seat] = { skill: Math.max(c[se.seat].skill, 3) };
-    });
-    c.searches = still;
-  }
-  ["initP", "initA"].forEach((slot) => {
-    const IN = c[slot];
-    if (!IN || q < IN.doneQ) return;
-    const spec = IN.id ? initById(IN.dim, IN.id) : null;
-    if (IN.ma) {
-      const addRev = IN.addEb / Math.max(4, c.benchMargin ?? 12) * 100;
-      if (IN.ok) { c.revenue += addRev; c.acc = Math.min(5, c.acc + 1.0); }
-      else {
-        // Gescheiterte Integration: die Akquisitionsschuld steht voll, das EBITDA
-        // kommt nicht an. Der klassische Weg in den Covenant Breach.
-        c.revenue += addRev * 0.35; c.margin -= 1.8;
-        c.marginDrift = (c.marginDrift || 0) - 1.0; c.quality -= 7;
-      }
-    } else {
-      // Verlässliche Maßnahmen scheitern nicht binär, sie unterliefern.
-      // Adoptionsabhängige Programme liefern gar nichts und kosten den Sunk Cost.
-      const share = IN.ok ? 1 : (spec && spec.cls === "rel" ? PARTIAL_DELIVERY : 0);
-      if (share > 0) {
-        const g = IN.gain * share;
-        if (IN.dim === "plat") c.plat = Math.min(5, c.plat + g);
-        else c.acc = Math.min(5, c.acc + g);
-      }
-      if (IN.ok) {
-        if (spec && spec.release) c.netDebt -= ebitdaOf(c) * spec.release;
-        if (spec && spec.nwcFix) c.nwcFix = (c.nwcFix || 0) + spec.nwcFix;
-        if (spec && spec.capexFix) c.benchCapex = Math.max(0.5, (c.benchCapex ?? 4) + spec.capexFix);
-      } else {
-        c.netDebt += ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK);
-        if (spec && spec.failMargin) c.marginDrift = (c.marginDrift || 0) + spec.failMargin;
-      }
-    }
-    if (me) news.push({
-      q, e: IN.ok ? "🛠️" : (spec && spec.cls === "rel" ? "➖" : "❌"),
-      tone: IN.ok ? "pos" : "neg",
-      t: IN.ma
-        ? (IN.ok
-          ? `<b>${c.name}</b>: Add-on integriert — ${eur(IN.addEb)} EBITDA zu ${x(IN.mult)} gekauft, Bewertung der Plattform liegt bei ${x(markMultiple(c, mk))}.`
-          : `<b>${c.name}</b>: Integration des Add-ons gescheitert. Nur ein gutes Drittel des Umsatzes kommt an, die Akquisitionsschuld steht voll — Leverage jetzt ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}.`)
-        : IN.ok
-          ? `<b>${c.name}</b>: ${IN.name || "Maßnahme"} abgeschlossen, Reifegrad +${IN.gain.toFixed(2)}${IN.dim === "acc" && IN.gain < 0.5 ? " — deutlich unter Erwartung." : IN.dim === "acc" && IN.gain > 1.1 ? " — weit über Erwartung." : "."}`
-          : (spec && spec.cls === "rel"
-            ? `<b>${c.name}</b>: ${IN.name || "Maßnahme"} verfehlt das Ziel — nur Reifegrad +${(IN.gain * PARTIAL_DELIVERY).toFixed(2)} statt +${IN.gain.toFixed(2)}.`
-            : `<b>${c.name}</b>: ${IN.name || "Maßnahme"} gescheitert. Der Abbruch kostet ${eur(ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK))}.`),
-    });
-    c.done = [...(c.done || []), IN.id].filter(Boolean);
-    c[slot] = null;
-  });
-  ["ceo", "cfo", "r3"].forEach((k) => {
-    if (c[k].skill <= 0) return;
-    if (c[k].retiring && c.holdQ >= 3) {
-      c[k] = vacate(c[k]);
-      if (me) news.push({ q, e: "👋", tone: "neg", t: `<b>${c.name}</b>: Der Gründer-CEO zieht sich zurück. Die Position ist vakant.` });
-      return;
-    }
-    if (c[k].dev && c[k].skill < 4.5) c[k] = { ...c[k], skill: Math.min(4.5, c[k].skill + 0.25) };
-    if (rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * (c.ltip ? 0.5 : 1)) {
-      const nm = k === "ceo" ? "CEO" : k === "cfo" ? "CFO" : ROLE3[c.sector].n;
-      c[k] = vacate(c[k]);
-      if (me) news.push({ q, e: "🚪", tone: "neg", t: `<b>${c.name}</b>: Der ${nm} wurde abgeworben. Die Position ist vakant.` });
-    }
-  });
-}
-
-/* Zustand einer Beteiligung. Bewertet dieselben Größen, die ein Portfolio-Review
-   abfragt: Finanzierung, Besetzung, Tragfähigkeit des Wachstums, Wertentwicklung
-   und ob überhaupt etwas läuft. Der Befund mit dem höchsten Gewicht wird gezeigt. */
-function healthOf(c, market) {
-  const eb = ebitdaOf(c);
-  const lev = c.netDebt / Math.max(0.5, eb);
-  const head = (c.covLimit ?? 6.5) - lev;
-  const searching = (c.searches || []).length;
-  const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
-  const moic = (navValueOf(c, market) + (c.cashOut || 0)) / Math.max(0.01, c.costTotal);
-  const fl = [];
-  if (c.breach) fl.push({ w: 100, t: "Covenant gebrochen" });
-  else if (head < 0.4) fl.push({ w: 88, t: `Covenant nur ${x(Math.max(0, head))} Luft` });
-  if (vac > searching) fl.push({ w: 74, t: vac > 1 ? `${vac} Positionen vakant` : "Position vakant" });
-  if (moic < 0.95) fl.push({ w: 66, t: `unter Einstand — ${moic.toFixed(2)}×` });
-  if (overstretch(c) > 0.3) fl.push({ w: 58, t: "Wachstum überdehnt" });
-  if (c.dd && c.margin < (c.benchMargin ?? c.margin) - 1.5) fl.push({ w: 44, t: "Marge unter Benchmark" });
-  if (!anyInit(c) && !searching && c.holdQ >= 2) fl.push({ w: 38, t: "keine Maßnahme aktiv" });
-  fl.sort((a, b) => b.w - a.w);
-  const top = fl[0] || null;
-  return { moic, attention: !!top && top.w >= 55, top, count: fl.length };
-}
-
-/* Value Bridge: eingesetztes Eigenkapital plus vier Effekte ergeben exakt den
-   Nettoerlös. Wird vom Exit im Hauptspiel und vom Übungsmodus identisch genutzt. */
-function makeBridge(c, gross, net) {
-  const st = c.st ?? 1;
-  /* Rekapitalisierungen während der Halteperiode gehören in die Brücke — sonst
-     zeigt sie beim Exit nur den letzten Erlös und unterschlägt jeden Euro, der
-     vorher schon an den Fonds zurückgeflossen ist. Erlöse aus Teilexits stehen
-     bewusst nicht hier: die sind im Track Record bereits eigenständig gebucht. */
-  const recap = c.recapOut || 0;
-  const base = c.costLeft ?? c.entryEquity;
-  const exitMult = ebitdaOf(c) > 0 ? (gross / st + c.netDebt) / ebitdaOf(c) : c.entryMult;
-  const bEbitda = (ebitdaOf(c) - c.entryEbitda) * c.entryMult * st;
-  const bMult = ebitdaOf(c) * (exitMult - c.entryMult) * st;
-  const bDelev = (c.entryDebt - c.netDebt) * st;
-  return {
-    entry: base, ebitda: bEbitda, mult: bMult, delev: bDelev, dist: recap,
-    cost: net - base - bEbitda - bMult - bDelev,
-    exit: net + recap,
-  };
-}
-// Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
-const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
 
 /* ---------------- Komponente ---------------- */
 
@@ -1573,6 +465,11 @@ export default function PeLeagues() {
   const [burst, setBurst] = useState(0);
   const [streak, setStreak] = useState(0);
   const prevScoreRef = React.useRef(null);
+  /* Eine Zufallsinstanz je Partie (Komponenteninstanz) — kein geteilter
+     Modul-Zustand mehr. Startwert entspricht dem bisherigen Default. */
+  const rngRef = React.useRef<Rng | null>(null);
+  if (!rngRef.current) rngRef.current = createRng(20260803);
+  const rng = rngRef.current;
 
   const used = Object.values(attrs).reduce((a, b) => a + b, 0);
   const me = funds[0];
@@ -1597,7 +494,7 @@ export default function PeLeagues() {
     const ais = ARCHES.map((a, i) => ({ id: i + 1, name: a.name, me: false, arch: a, ...base, attrs: a.attrs }));
     setFunds([player, ...ais]);
     setDeals(makeDeals(attrs.sourcing, market));
-    setLandmark(newLandmark(market));
+    setLandmark(newLandmark(rng, market));
     setMarketHist([{ ...market }]);
     setTvpiHist([[player, ...ais].map(() => 0)]);
     setFeed([{ q: 0, e: "🏁", tone: "neu", t: `Vintage 2026 aufgelegt. Fünf Fonds, je ${eur(CAPITAL)}, zehn Jahre.` }]);
@@ -1634,10 +531,10 @@ export default function PeLeagues() {
      0,55 Deals je Punkt, der Nachkommateil entscheidet per Zufall.           */
   function makeDeals(sourcing, mk) {
     const n = 0.55 * sourcing;
-    const props = Math.min(3, Math.floor(n) + (rnd() < n % 1 ? 1 : 0));
+    const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
     const out = [];
-    for (let i = 0; i < 4; i++) out.push(newDeal("process", mk));
-    for (let i = 0; i < props; i++) out.push(newDeal("prop", mk, sourcing));
+    for (let i = 0; i < 4; i++) out.push(newDeal(rng, "process", mk));
+    for (let i = 0; i < props; i++) out.push(newDeal(rng, "prop", mk, sourcing));
     return out;
   }
 
@@ -1672,12 +569,12 @@ export default function PeLeagues() {
            jemand mit am Tisch. Das nimmt dem proprietären Kanal die Garantie,
            ohne ihm den Vorteil zu nehmen.                                     */
         const propChance = d.type === "prop" ? Math.max(0, 0.10 * (a.attrs.sourcing - 2)) : null;
-        const partake = d.type === "prop" ? rnd() < propChance
-          : rnd() < (d.type === "landmark" ? 0.92 : 0.74);
+        const partake = d.type === "prop" ? rng.rnd() < propChance
+          : rng.rnd() < (d.type === "landmark" ? 0.92 : 0.74);
         if (!partake) return;
         const fit = (a.key === "ops" && d.margin < 14) || (a.key === "fin" && d.levCap > 4.2) || (a.key === "sourcing" && d.quality > 60);
         const lmBoost = d.type === "landmark" ? 0.07 : 0;
-        const mult = d.askMult * (1 + a.aggr + lmBoost + (fit ? 0.05 : 0) + nrm(0.03));
+        const mult = d.askMult * (1 + a.aggr + lmBoost + (fit ? 0.05 : 0) + rng.nrm(0.03));
         const lev = Math.min(d.levCap, d.levCap * a.lev);
         const ev = ebitdaOf(d) * mult;
         const eq = ev - ebitdaOf(d) * lev + ev * ENTRY_FEE;
@@ -1710,20 +607,20 @@ export default function PeLeagues() {
       let hit = 0;
       if (d.type === "prop" && w.f === 0 && !dd[d.id]) {
         const p = clamp(0.5 - 0.09 * f.attrs.analysis, 0.05, 0.5);
-        if (rnd() < p) { hit = 0.10 + rnd() * 0.14; }
+        if (rng.rnd() < p) { hit = 0.10 + rng.rnd() * 0.14; }
       }
       const c = {
-        uid: "c" + Math.floor(rnd() * 1e9), name: d.name, sector: d.sector, desc: d.desc,
+        uid: "c" + Math.floor(rng.rnd() * 1e9), name: d.name, sector: d.sector, desc: d.desc,
         revenue: d.revenue, margin: d.margin * (1 - hit),
         quality: d.quality * (1 - hit / 2),
         netDebt: eb * w.lev, rate: BASE_RATE - 0.25 * f.attrs.financing,
         holdQ: 0, flag: d.flag,
-        ...makeSeats(d), plat: 0.6 + rnd() * 1.2, acc: 0.6 + rnd() * 1.2, nwcFix: 0,
-        addonSize: 0.20 + rnd() * 0.15,
+        ...makeSeats(rng, d), plat: 0.6 + rng.rnd() * 1.2, acc: 0.6 + rng.rnd() * 1.2, nwcFix: 0,
+        addonSize: 0.20 + rng.rnd() * 0.15,
         /* Wettbewerb um Zukäufe: in manchen Nischen sitzt immer ein strategischer
            Käufer mit am Tisch, in anderen nicht. Wird beim Closing gezogen und
            erst über die Add-on-Prüfung sichtbar.                              */
-        addonComp: rnd() < 0.35 ? 0.8 + rnd() * 1.4 : 0,
+        addonComp: rng.rnd() < 0.35 ? 0.8 + rng.rnd() * 1.4 : 0,
         ltip: false, searches: [], initP: null, initA: null, onboard: 0,
         st: 1, proc: null, block: 0, lockUntil: null, cv: false, breach: 0,
         // Financing verschafft echten Covenant-Spielraum, nicht nur eine bessere Marge
@@ -1731,7 +628,7 @@ export default function PeLeagues() {
         capexPct: d.capexPct, nwcPct: d.nwcPct,
         benchMargin: d.benchMargin, benchCapex: d.benchCapex, benchNwc: d.benchNwc,
         dd: w.f === 0 ? !!dd[d.id] : true,   // ohne DD bleibt die Branchenreferenz auch nach Closing verborgen
-        drift: d.drift ?? nrm(2.5), marginDrift: nrm(1.2), entryQuality: d.quality * (1 - hit / 2),
+        drift: d.drift ?? rng.nrm(2.5), marginDrift: rng.nrm(1.2), entryQuality: d.quality * (1 - hit / 2),
         entryMult: w.mult, entryEbitda: eb, entryDebt: eb * w.lev,
         // Enterprise Value − Fremdkapital + Transaktionskosten = eingesetztes Eigenkapital
         entryEV: eb * w.mult,
@@ -1773,16 +670,16 @@ export default function PeLeagues() {
            Spieler über einen echten Search bekommen kann.                      */
         const amb = k === "ops" ? 4.0 : k === "fin" ? 3.0 : 3.6;
         const seat = ["ceo", "cfo", "r3"].find((s2) => c[s2].skill < amb - 0.5);
-        if (seat && rnd() < 0.8) {
+        if (seat && rng.rnd() < 0.8) {
           const eb = ebitdaOf(c);
-          const sk = clamp(amb + nrm(0.5), 1, 4.5);
+          const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
           c.netDebt += retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
             + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
           c[seat] = { skill: sk };
           c.onboard = 1;
           return;
         }
-        if (!c.ltip && rnd() < 0.5) c.ltip = true;
+        if (!c.ltip && rng.rnd() < 0.5) c.ltip = true;
         // Dieselbe Maßnahmenmechanik wie beim Spieler, nur nach fester Präferenz
         const plan = AI_PLAN[k] || AI_PLAN.all;
         ["plat", "acc"].forEach((dim) => {
@@ -1796,7 +693,7 @@ export default function PeLeagues() {
           const id = cands.reduce((a, b) => (fitOf(b, c) * Math.pow(0.82, initRuns(c, b))
             > fitOf(a, c) * Math.pow(0.82, initRuns(c, a)) ? b : a));
           if (fitOf(id, c) * Math.pow(0.82, initRuns(c, id)) < 0.30 && id !== "ma") return;
-          const B = buildInit(c, dim, id, mk, q);
+          const B = buildInit(rng, c, dim, id, mk, q);
           if (!B || B.blocked) return;
           const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
           if (B.debt > 0 && head < 0.6) return;
@@ -1809,13 +706,13 @@ export default function PeLeagues() {
     /* 3 — Halbjahr simulieren */
     F.forEach((f) => {
       f.holdings.forEach((c) => {
-        stepCompany(c, mk, f.attrs.operations);
-        if (rnd() < 0.15) {
+        stepCompany(rng, c, mk, f.attrs.operations);
+        if (rng.rnd() < 0.15) {
           // Nur Ereignisse ziehen, die auf diese Beteiligung überhaupt anwendbar sind
-          const pool = EVENTS.filter((e) => !e.ok || e.ok(c));
+          const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
           if (pool.length) {
-            const e = pick(pool);
-            const mitig = e.m && f.attrs[e.m] >= 4 && rnd() < 0.5;
+            const e = rng.pick(pool);
+            const mitig = e.m && f.attrs[e.m] >= 4 && rng.rnd() < 0.5;
             if (!mitig) {
               e.f(c);
               const seat = e.t.startsWith("CEO") ? "ceo" : e.t.startsWith("CFO") ? "cfo" : null;
@@ -1832,7 +729,7 @@ export default function PeLeagues() {
     /* 3y — People: Search-Mandate reifen, Maßnahmen enden, Manager werden abgeworben */
     const shortlists = [];
     F.forEach((f) => {
-      f.holdings.forEach((c) => maturePeople(c, mk, q, f.me, news, shortlists));
+      f.holdings.forEach((c) => maturePeople(rng, c, mk, q, f.me, news, shortlists));
     });
     if (shortlists.length) setShortlist((p) => [...p, ...shortlists]);
 
@@ -1880,15 +777,15 @@ export default function PeLeagues() {
     });
 
     /* 4 — Markt */
-    SECNAMES.forEach((s) => { mk[s] = clamp(mk[s] * (1 + nrm(0.05)), SECTORS[s].m * 0.65, SECTORS[s].m * 1.4); });
-    if (rnd() < 0.18) {
-      const s = pick(SECNAMES);
+    SECNAMES.forEach((s) => { mk[s] = clamp(mk[s] * (1 + rng.nrm(0.05)), SECTORS[s].m * 0.65, SECTORS[s].m * 1.4); });
+    if (rng.rnd() < 0.18) {
+      const s = rng.pick(SECNAMES);
       mk[s] = clamp(mk[s] * 1.18, 0, SECTORS[s].m * 1.5);
       news.push({ q, e: "📈", tone: "pos", t: `Multiple-Expansion in <b>${s}</b>: Bewertungen ziehen deutlich an.` });
     }
     // Sektorrezession: trifft Bewertung und operatives Geschäft aller Beteiligten gleichzeitig
-    if (rnd() < 0.14) {
-      const s = pick(SECNAMES);
+    if (rng.rnd() < 0.14) {
+      const s = rng.pick(SECNAMES);
       mk[s] = clamp(mk[s] * 0.84, SECTORS[s].m * 0.55, 99);
       let hit = 0;
       F.forEach((f) => f.holdings.forEach((c) => {
@@ -1924,7 +821,7 @@ export default function PeLeagues() {
     const resolved = [];
     F[0].holdings.forEach((c) => {
       if (c.proc && q >= c.proc.resolveQ) {
-        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(c, mk, F, F[0].attrs.negotiation, q) });
+        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(rng, c, mk, F, F[0].attrs.negotiation, q) });
         c.proc = null;
       }
     });
@@ -2078,7 +975,7 @@ export default function PeLeagues() {
 
   function startInit(c, dim, id) {
     haptic(8);
-    const B = buildInit(c, dim, id, market, quarter);
+    const B = buildInit(rng, c, dim, id, market, quarter);
     if (!B) return;
     if (B.blocked) {
       setFeed((p2) => [{
@@ -2313,9 +1210,9 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
     let final = offer, extra = "";
     if (action === "reneg") {
-      const r = rnd();
+      const r = rng.rnd();
       if (r < 0.60) {
-        final = { ...offer, price: offer.price * (1.05 + rnd() * 0.03) };
+        final = { ...offer, price: offer.price * (1.05 + rng.rnd() * 0.03) };
         extra = " Nachverhandlung erfolgreich.";
       } else if (r < 0.85) {
         const second = item.offers.filter((o) => o !== offer).sort((a, b) => b.price - a.price)[0];
@@ -2331,7 +1228,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
       }
     }
 
-    if (final.risk && rnd() < final.risk) {
+    if (final.risk && rng.rnd() < final.risk) {
       patchHolding(c.uid, { block: quarter + 2 });
       setFeed((p) => [{ q: quarter, e: "⚖️", tone: "neg", t: `Die Fusionskontrolle stoppt den Verkauf von <b>${c.name}</b>. ${final.buyer} zieht zurück, ein Jahr Sperre.` }, ...p]);
       shift(); return;
@@ -2683,7 +1580,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
       </div>
 
       <Toasts items={toasts} />
-      {burst > 0 && <Confetti key={burst} seed={burst} />}
+      {burst > 0 && <Confetti key={burst} seed={burst} rng={rng} />}
       {rolling && (
         <div className="rollmask">
           <div className="rr" />
@@ -3958,18 +2855,18 @@ function practiceDeal(type) {
   };
 }
 
-function makePracticeCo(d, mult, lev, hadDD) {
+function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
   const eb = (d.revenue * d.margin) / 100;
   // Ohne Datenraum dasselbe Post-Closing-Risiko wie in der Partie
-  const hit = !hadDD && rnd() < clamp(0.5 - 0.09 * PRAC_ATTRS.analysis, 0.05, 0.5)
-    ? 0.10 + rnd() * 0.14 : 0;
+  const hit = !hadDD && rng.rnd() < clamp(0.5 - 0.09 * PRAC_ATTRS.analysis, 0.05, 0.5)
+    ? 0.10 + rng.rnd() * 0.14 : 0;
   const c = {
     uid: "prac", name: d.name, sector: d.sector, desc: d.desc,
     revenue: d.revenue, margin: d.margin * (1 - hit), quality: d.quality * (1 - hit / 2),
     netDebt: eb * lev, rate: BASE_RATE - 0.25 * PRAC_ATTRS.financing,
     holdQ: 0, flag: d.flag, dd: !!hadDD, hit: hit > 0,
     ceo: { skill: 2.4 }, cfo: { skill: 0 }, r3: { skill: 1.4 },
-    plat: 1.1 + rnd() * 0.4, acc: 1.2 + rnd() * 0.4, nwcFix: 0,
+    plat: 1.1 + rng.rnd() * 0.4, acc: 1.2 + rng.rnd() * 0.4, nwcFix: 0,
     addonSize: 0.24, addonComp: 0,
     ltip: false, searches: [], initP: null, initA: null, onboard: 0,
     st: 1, proc: null, block: 0, lockUntil: null, cv: false, breach: 0,
@@ -4057,12 +2954,14 @@ function PracticeMode({ dark, setDark, back }) {
   const [offer, setOffer] = useState(null);
   const [prog, setProg] = useState(0);
   const market = useMemo(practiceMarket, []);
-
-  useEffect(() => { if (!c) reset(); }, []);
-  useEffect(() => { window.scrollTo(0, 0); }, [q]);
+  /* Eigene Zufallsinstanz für den Übungsmodus — unabhängig von der Partie,
+     damit sich beide nicht denselben Zufallsstrom teilen. reset() legt bei
+     jedem Durchlauf wieder denselben festen Startwert fest. */
+  const rngRef = React.useRef<Rng | null>(null);
+  const rng = rngRef.current as Rng;
 
   function reset() {
-    seedTo(20260601);
+    rngRef.current = createRng(20260601);
     setPhase("deal"); setDd({}); setBidState(null); setProc(null); setOffer(null);
     setDeals([practiceDeal("prop"), practiceDeal("process")]);
     setProg(0);
@@ -4076,6 +2975,9 @@ function PracticeMode({ dark, setDark, back }) {
       t: "Der Fall: Sondermaschinenbau, 70 Mio. € Umsatz, Marge auf Benchmark, gekauft zu 8,6× mit 2,2× Leverage. <b>Performance 1,2</b> und <b>Growth 1,3</b> liegen beide unter Branchenniveau, der <b>CFO ist vakant</b>, und der CEO ist ein Gründer kurz vor dem Rückzug. Drei Baustellen, zwei Slots — du kannst nicht alles gleichzeitig.",
     }]);
   }
+
+  useEffect(() => { if (!c) reset(); }, []);
+  useEffect(() => { window.scrollTo(0, 0); }, [q]);
 
   const freeSlots = c ? PRAC_SLOTS - initsOf(c).length : 0;
 
@@ -4118,9 +3020,9 @@ function PracticeMode({ dark, setDark, back }) {
     const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
     const dur = Math.max(1, initDur(E) + (spec.dm || 0));
     const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0), 0.1, 0.97);
-    const ok = rnd() < p;
-    const sp = spec.spread ? spec.spread[0] + rnd() * (spec.spread[1] - spec.spread[0])
-      : dim === "acc" ? ACC_SPREAD[0] + rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
+    const ok = rng.rnd() < p;
+    const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
+      : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
     let pt = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
     let debt = ebitdaOf(c) * (spec.oneOff || 0), msg = "";
     if (spec.ma) {
@@ -4147,7 +3049,7 @@ function PracticeMode({ dark, setDark, back }) {
      Ohne Datenraum greift dasselbe Informationsrisiko wie dort.             */
   function closeDeal(d, mult, lev) {
     haptic(14);
-    const co = makePracticeCo(d, mult, lev, !!dd[d.id]);
+    const co = makePracticeCo(rng, d, mult, lev, !!dd[d.id]);
     setC(co); setShadow(JSON.parse(JSON.stringify(co)));
     setPhase("run");
     setFeed((p) => [{
@@ -4204,14 +3106,14 @@ function PracticeMode({ dark, setDark, back }) {
     /* Seed vor dem Periodenschritt sichern: die Kontrollrechnung muss exakt
        dieselben Umweltzüge ziehen (Wachstumsrauschen, Margenrauschen), sonst
        vergleicht man zwei verschiedene Welten statt zweier Entscheidungen.   */
-    const seedBefore = seedGet();
-    stepCompany(n, market, PRAC_ATTRS.operations);
+    const seedBefore = rng.seed;
+    stepCompany(rng, n, market, PRAC_ATTRS.operations);
     let hitEvent = null;
-    if (rnd() < 0.15) {
-      const pool = EVENTS.filter((e) => !e.ok || e.ok(n));
+    if (rng.rnd() < 0.15) {
+      const pool = EVENTS.filter((e) => !e.ok || e.ok(n, rng));
       if (pool.length) {
-        const e = pick(pool);
-        if (!(e.m && PRAC_ATTRS[e.m] >= 4 && rnd() < 0.5)) {
+        const e = rng.pick(pool);
+        if (!(e.m && PRAC_ATTRS[e.m] >= 4 && rng.rnd() < 0.5)) {
           hitEvent = e;
           e.f(n);
           const seat = e.t.startsWith("CEO") ? "ceo" : e.t.startsWith("CFO") ? "cfo" : null;
@@ -4220,25 +3122,25 @@ function PracticeMode({ dark, setDark, back }) {
         }
       }
     }
-    maturePeople(n, market, nq, true, news, lists);
+    maturePeople(rng, n, market, nq, true, news, lists);
 
     /* Kontrollrechnung mitziehen: gleiche Ereignisse, aber keine Maßnahmen,
        keine Besetzungen, kein MEP. Eigener Zufallsstrang, damit der Schatten
        den Verlauf der echten Beteiligung nicht verschiebt.                   */
     let sh = null;
     if (shadow) {
-      const keep = seedGet();
-      seedTo(seedBefore);
+      const keep = rng.seed;
+      rng.setSeed(seedBefore);
       sh = { ...shadow, ceo: { ...shadow.ceo }, cfo: { ...shadow.cfo }, r3: { ...shadow.r3 }, hist: [...shadow.hist] };
-      stepCompany(sh, market, PRAC_ATTRS.operations);
+      stepCompany(rng, sh, market, PRAC_ATTRS.operations);
       // Vorbedingung erneut prüfen: das Ereignis traf die echte Beteiligung,
       // muss aber auf die Kontrollrechnung nicht zutreffen (etwa "Team zieht ein
       // Projekt vor", während dort gar keine Maßnahme läuft).
-      if (hitEvent && (!hitEvent.ok || hitEvent.ok(sh))) hitEvent.f(sh);
-      maturePeople(sh, market, nq, false, [], []);
+      if (hitEvent && (!hitEvent.ok || hitEvent.ok(sh, rng))) hitEvent.f(sh);
+      maturePeople(rng, sh, market, nq, false, [], []);
       if (sh.netDebt < -0.5) { sh.cashOut = (sh.cashOut || 0) - sh.netDebt; sh.netDebt = 0; }
       sh.hist = [...sh.hist, { rev: sh.revenue, eb: ebitdaOf(sh), nd: sh.netDebt, mg: sh.margin, ql: sh.quality, eq: navValueOf(sh, market) }];
-      seedTo(keep);
+      rng.setSeed(keep);
     }
 
     if ((n.breach || 0) >= 2) {
@@ -4308,19 +3210,19 @@ function PracticeMode({ dark, setDark, back }) {
      die Gegenrechnung den tatsächlichen Verlauf nicht beeinflusst.          */
   function holdToEnd(n, nq) {
     if (nq >= PRAC_PERIODS) return null;
-    const keep = seedGet();
+    const keep = rng.seed;
     const z = { ...n, ceo: { ...n.ceo }, cfo: { ...n.cfo }, r3: { ...n.r3 }, hist: [...n.hist] };
     for (let t = nq; t < PRAC_PERIODS; t++) {
-      stepCompany(z, market, PRAC_ATTRS.operations);
-      if (rnd() < 0.15) {
-        const pool = EVENTS.filter((e) => !e.ok || e.ok(z));
-        if (pool.length) pick(pool).f(z);
+      stepCompany(rng, z, market, PRAC_ATTRS.operations);
+      if (rng.rnd() < 0.15) {
+        const pool = EVENTS.filter((e) => !e.ok || e.ok(z, rng));
+        if (pool.length) rng.pick(pool).f(z);
       }
-      maturePeople(z, market, t + 1, false, [], []);
+      maturePeople(rng, z, market, t + 1, false, [], []);
       if (z.netDebt < -0.5) { z.cashOut = (z.cashOut || 0) + -z.netDebt; z.netDebt = 0; }
       z.hist = [...z.hist, { rev: z.revenue, eb: ebitdaOf(z), nd: z.netDebt, mg: z.margin, ql: z.quality, eq: navValueOf(z, market) }];
     }
-    seedTo(keep);
+    rng.setSeed(keep);
     if ((z.breach || 0) >= 2) return { moic: 0, score: pracScore(0, PRAC_PERIODS) };
     const g = Math.max(0, eqvOf(z, dealMultiple(z, market, PRAC_ATTRS.negotiation)));
     const nt = g * (1 - PROC_FEE) * (z.ltip ? 1 - LTIP_SHARE : 1);
