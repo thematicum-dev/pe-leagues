@@ -5,12 +5,13 @@ import type { ArchetypeKey } from "@/lib/engine/constants";
 import { archetypeByKey } from "@/lib/engine/constants";
 import type { FundState } from "@/lib/engine/types";
 import TurnPanel from "./TurnPanel";
+import LobbyRoom from "./LobbyRoom";
 
 const STATUS_LABEL: Record<string, string> = {
   lobby: "Lobby offen",
   running: "Läuft",
   finished: "Beendet",
-  cancelled: "Geschlossen (zu wenige Spieler)",
+  cancelled: "Geschlossen",
 };
 
 export default async function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,9 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
 
   const { data: season } = await supabase
     .from("seasons")
-    .select("id, status, current_half_year, current_half_year_deadline, lobby_opened_at, final_ranking")
+    .select(
+      "id, status, current_half_year, current_half_year_deadline, lobby_opened_at, final_ranking, created_by, cancelled_reason",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -36,7 +39,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
 
   const { data: players } = await supabase
     .from("season_players")
-    .select("slot, profile_id, is_ai, ai_archetype, profiles(display_name)")
+    .select("id, slot, profile_id, is_ai, ai_archetype, profiles(display_name)")
     .eq("season_id", id)
     .order("slot", { ascending: true });
 
@@ -96,35 +99,46 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
           </Link>
         </div>
 
-        <div className="dashcard">
-          <h2>Fondsplätze</h2>
-          {(players ?? []).map((p) => {
-            const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-            const archetype = p.is_ai ? archetypeByKey(p.ai_archetype as ArchetypeKey) : null;
-            return (
-              <div className="seasonrow" key={p.slot}>
-                <span>Platz {p.slot}</span>
-                <span>
-                  {p.is_ai
-                    ? `${archetype?.name ?? p.ai_archetype} (KI, ${archetype?.style ?? ""})`
-                    : (profile?.display_name ?? "Spieler")}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {season.status === "lobby" && (
-          <p className="dashsub">
-            Die Partie startet automatisch, sobald alle 5 Plätze belegt sind oder 12 Stunden nach
-            Eröffnung — schau in der Zwischenzeit im Dashboard vorbei, dort läuft die Anzeige live.
-          </p>
+        {(season.status === "lobby" || season.status === "cancelled") && (
+          <LobbyRoom
+            seasonId={season.id}
+            currentUserId={user.id}
+            lobbyOpenedAt={season.lobby_opened_at}
+            initialStatus={season.status}
+            initialCancelledReason={season.cancelled_reason}
+            initialCreatedBy={season.created_by}
+            initialPlayers={(players ?? [])
+              .filter((p) => !p.is_ai && p.profile_id)
+              .map((p) => {
+                const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+                return {
+                  id: p.id,
+                  slot: p.slot,
+                  profileId: p.profile_id as string,
+                  displayName: profile?.display_name ?? "Spieler",
+                };
+              })}
+          />
         )}
 
-        {season.status === "cancelled" && (
-          <p className="dashsub">
-            Diese Lobby wurde geschlossen, weil kein menschlicher Spieler mehr übrig war.
-          </p>
+        {(season.status === "running" || season.status === "finished") && (
+          <div className="dashcard">
+            <h2>Fondsplätze</h2>
+            {(players ?? []).map((p) => {
+              const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+              const archetype = p.is_ai ? archetypeByKey(p.ai_archetype as ArchetypeKey) : null;
+              return (
+                <div className="seasonrow" key={p.slot}>
+                  <span>Platz {p.slot}</span>
+                  <span>
+                    {p.is_ai
+                      ? `${archetype?.name ?? p.ai_archetype} (KI, ${archetype?.style ?? ""})`
+                      : (profile?.display_name ?? "Spieler")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {season.status === "running" && (
