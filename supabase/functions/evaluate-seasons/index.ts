@@ -16,11 +16,11 @@
 // package.json, damit sich beide Laufzeiten (Next.js/Node und diese Edge
 // Function) auf dasselbe Client-Verhalten verlassen können.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.3";
-import { createRng } from "../../../lib/engine/rng";
-import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../../../lib/engine/runQuarter";
-import { firstHalfYearDeadline, nextHalfYearDeadline } from "../../../lib/engine/deadline";
-import { PERIODS } from "../../../lib/engine/engine";
-import type { RuntimeState, TurnDecisions } from "../../../lib/engine/turnTypes";
+import { createRng } from "../../../lib/engine/rng.ts";
+import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../../../lib/engine/runQuarter.ts";
+import { firstHalfYearDeadline, nextHalfYearDeadline } from "../../../lib/engine/deadline.ts";
+import { PERIODS } from "../../../lib/engine/engine.ts";
+import type { RuntimeState, TurnDecisions } from "../../../lib/engine/turnTypes.ts";
 
 const EXPECTED_SECRET = Deno.env.get("EVALUATE_SEASONS_SECRET");
 

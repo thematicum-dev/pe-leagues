@@ -4,7 +4,7 @@
    Änderung ist, dass Funktionen mit Zufallsbedarf ihre Zufallsinstanz
    (siehe rng.ts) als Parameter bekommen, statt einen globalen
    Modul-Zustand zu teilen.                                            */
-import type { Rng } from "./rng";
+import type { Rng } from "./rng.ts";
 
 export const SECTORS = {
   Industrials: { g: 3.0, m: 8.5 },

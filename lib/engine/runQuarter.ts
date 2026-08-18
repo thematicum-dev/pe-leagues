@@ -22,7 +22,7 @@
    die es in der Live-UI so nicht gab, weil dort die Reihenfolge der Klicks
    entschied), und führt danach exakt dieselbe gebündelte Auflösung wie das
    Original aus, nur über alle fünf Fondsplätze statt nur Platz 0. */
-import type { Rng } from "./rng";
+import type { Rng } from "./rng.ts";
 import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
@@ -31,7 +31,7 @@ import {
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf,
-} from "./engine";
+} from "./engine.ts";
 
 type Archetype = (typeof ARCHES)[number];
 function archetypeByKey(key: string): Archetype {
@@ -42,7 +42,7 @@ function archetypeByKey(key: string): Archetype {
 import type {
   ExitQueueItem, HireIntent, OfferDecisionIntent, RuntimeFund, RuntimeState,
   ShortlistItem, TurnDecisions,
-} from "./turnTypes";
+} from "./turnTypes.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
