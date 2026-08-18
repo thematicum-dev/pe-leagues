@@ -1,0 +1,39 @@
+name: Deploy evaluate-seasons
+
+# Lädt die Supabase Edge Function "evaluate-seasons" hoch und setzt ihr
+# Funktions-Secret. Läuft automatisch bei Änderungen an der Funktion oder an
+# lib/engine (dieselbe Logik wird dort verwendet) auf main, sowie manuell über
+# "Run workflow" im Actions-Tab.
+#
+# Voraussetzung: zwei Repository-Secrets unter Settings -> Secrets and
+# variables -> Actions:
+#   SUPABASE_ACCESS_TOKEN   Persönlicher Supabase-Zugriffstoken
+#   EVALUATE_SEASONS_SECRET Derselbe Wert, der auch im Supabase Vault unter
+#                            evaluate_seasons_secret hinterlegt ist.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/evaluate-seasons/**"
+      - "lib/engine/**"
+      - ".github/workflows/deploy-evaluate-seasons.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: peykuivucqbqvcycplyj
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Edge Function
+        run: supabase functions deploy evaluate-seasons --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Funktions-Secret setzen
+        run: supabase secrets set "EVALUATE_SEASONS_SECRET=${{ secrets.EVALUATE_SEASONS_SECRET }}" --project-ref "$SUPABASE_PROJECT_REF"
