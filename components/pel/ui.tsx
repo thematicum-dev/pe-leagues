@@ -813,7 +813,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               <button style={{ flex: 1 }} disabled={!canNow} onClick={act.bil}>Bilateral verkaufen</button>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button style={{ flex: 1 }} disabled={!canNow} onClick={act.cv}>🔄 GP-led Secondary</button>
+              <button style={{ flex: 1 }} disabled title="Vorübergehend deaktiviert">🔄 GP-led Secondary</button>
               <button style={{ flex: 1 }} disabled={!ipoOpen} onClick={act.ipo}>🔔 IPO</button>
             </div>
             <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 8, lineHeight: 1.5 }}>

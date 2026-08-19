@@ -82,7 +82,7 @@ export interface ShortlistItem {
   holdingUid: string;
   name: string;
   seat: Seat;
-  candidates: { label: string; skill: number; dev: boolean; poach: number; note: string }[];
+  candidates: { label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string }[];
 }
 
 /* Laufzeitzustand einer Partie zwischen zwei Auswertungen: alles, was die
