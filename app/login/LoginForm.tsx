@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { login } from "./actions";
+import Logo from "@/components/Logo";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -13,6 +14,8 @@ export default function LoginForm() {
   return (
     <main className="authwrap">
       <form className="authcard" action={formAction}>
+        <Logo />
+        <p className="tagline">Beweise dein Underwriting — gegen echte Gegner.</p>
         <h1>Anmelden</h1>
         <input type="hidden" name="next" value={next} />
         <label>
