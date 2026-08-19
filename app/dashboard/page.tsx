@@ -22,6 +22,8 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+
   const { data: myRow } = await supabase
     .from("season_players")
     .select("season_id, seasons!inner(id, status, lobby_opened_at)")
@@ -84,9 +86,17 @@ export default async function DashboardPage() {
             <div className="dashsub">{user.email}</div>
           </div>
           <div className="landingactions">
+            <a href="/leaderboard" className="btn-secondary">
+              Rangliste
+            </a>
             <a href="/practice" className="btn-secondary">
               Übungsmodus
             </a>
+            {isAdmin && (
+              <a href="/admin" className="btn-secondary">
+                Admin
+              </a>
+            )}
             <form action={signOut}>
               <button
                 type="submit"

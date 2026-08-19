@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import Logo from "@/components/Logo";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -15,7 +16,8 @@ export default async function Home() {
   return (
     <main className="landing">
       <div className="landingcard">
-        <span className="landingeyebrow">PE Leagues</span>
+        <Logo />
+        <p className="tagline">Zehn Jahre. Fünf Fonds. Eine Rangliste.</p>
         <h1>Führe deinen Buyout-Fonds gegen echte Mitspieler.</h1>
         <p>
           Zehn Jahre, getaktet in Halbjahren: bieten, Portfolios entwickeln, verkaufen. Melde

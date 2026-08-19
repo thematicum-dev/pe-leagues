@@ -132,6 +132,10 @@ export default function MultiplayerGame({
     return () => clearInterval(id);
   }, [submitted, refreshStatus]);
 
+  // Live-Übergang ins nächste Halbjahr (bzw. in den Endstand): zwei
+  // unabhängige Realtime-Events, plus ein Polling-Fallback darunter, weil
+  // mobile Browser Websockets im Hintergrund pausieren und dadurch einzelne
+  // Events verpassen können.
   useEffect(() => {
     const channel = supabase
       .channel(`season-${seasonId}`)
@@ -139,12 +143,33 @@ export default function MultiplayerGame({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "seasons", filter: `id=eq.${seasonId}` },
         (payload) => {
-          const row = payload.new as { current_half_year?: number } | undefined;
+          const row = payload.new as { current_half_year?: number; status?: string } | undefined;
+          // status !== "running" deckt insbesondere den Partie-Abschluss ab:
+          // dabei ändert sich current_half_year nicht mehr, nur der Status.
+          if (row?.status && row.status !== "running") { router.refresh(); return; }
           if (row?.current_half_year != null && row.current_half_year !== currentHalfYear) router.refresh();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "season_state", filter: `season_id=eq.${seasonId}` },
+        () => router.refresh(),
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  }, [supabase, seasonId, currentHalfYear, router]);
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const { data } = await supabase
+        .from("seasons")
+        .select("status, current_half_year")
+        .eq("id", seasonId)
+        .maybeSingle();
+      if (!data) return;
+      if (data.status !== "running" || data.current_half_year !== currentHalfYear) router.refresh();
+    }, 20_000);
+    return () => clearInterval(id);
   }, [supabase, seasonId, currentHalfYear, router]);
 
   if (!me) return null;
@@ -441,6 +466,11 @@ export default function MultiplayerGame({
               )}
             </div>
           </div>
+          <div style={{ margin: "14px 0" }}>
+            <button className="btn-secondary" style={{ width: "100%" }} onClick={() => router.refresh()}>
+              Weiter zum nächsten Halbjahr
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -487,6 +517,10 @@ export default function MultiplayerGame({
 
         {tab === "deals" && (
           <>
+            <div className="card">
+              <h3 className="disp">Wertung gegen die Kohorte</h3>
+              <TvpiChart hist={tvpiHist} meIdx={meIdx} />
+            </div>
             {landmark && quarter >= LM_ANNOUNCE && quarter < LM_DEAL && (
               <div className="card lm">
                 <h3 className="disp">{landmark.name}</h3>

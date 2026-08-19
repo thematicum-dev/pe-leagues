@@ -24,6 +24,31 @@ Dateinamen-Reihenfolge angewendet:
 19. `20260817091000_season_submission_status.sql` – `season_submission_status()`: aggregierter Status für den Wartezustand
 20. `20260817091100_evaluation_claim_commit.sql` – Claim/Commit-Funktionen für die Rundenauswertung (nur `service_role`)
 21. `20260817091200_cron_evaluate_seasons.sql` – pg_net + Vault-Secret + minütlicher pg_cron-Job, ruft die Edge Function `evaluate-seasons` auf
+22. `20260818100000_seasons_cancelled_reason.sql` – unterscheidet `cancelled_reason` ('empty' vs. 'creator_deleted')
+23. `20260818100100_leave_season.sql` – Lobby verlassen
+24. `20260818100200_delete_and_force_start_season.sql` – Ersteller-Rechte: Partie löschen/sofort starten
+25. `20260819100000_fix_start_season_slot_reshuffle.sql` – Fix für die Platzvergabe beim Partiestart
+26. `20260819110000_admin_access.sql` – `is_admin()`: Admin-Zugang fest auf `thematicum.dev@gmail.com` begrenzt
+27. `20260819110100_admin_read_functions.sql` – `admin_list_seasons()`/`admin_list_users()`: Admin-Übersichten inkl. E-Mail und Statistik
+28. `20260819110200_admin_reset_season.sql` – `admin_reset_season()`: Partie vollständig zurücksetzen
+29. `20260819110300_target_templates.sql` – Admin-generierbarer Zielunternehmen-Pool (Ersatz/Ergänzung für den BOOK-Katalog)
+30. `20260819110400_global_leaderboard.sql` – `global_leaderboard()`: Rangliste aller Spieler über alle abgeschlossenen Partien
+31. `20260819110500_realtime_season_state.sql` – Realtime auch für `season_state`, damit der Halbjahreswechsel ohne manuellen Reload ankommt
+
+## Admin-Bereich
+
+`/admin` (siehe `app/admin/`) ist ausschließlich für den Account mit der
+E-Mail-Adresse `thematicum.dev@gmail.com` sichtbar (`public.is_admin()`,
+Migration 26). Dort lassen sich alle Partien inkl. Fortschritt und alle
+Nutzer inkl. E-Mail und Statistik einsehen, einzelne Nutzer löschen
+(`auth.admin.deleteUser`, service_role), eine Partie vollständig
+zurücksetzen (`admin_reset_season()`) und der Zielunternehmen-Pool neu
+generieren (ruft die Anthropic-API auf, benötigt die Umgebungsvariable
+`ANTHROPIC_API_KEY`; siehe `app/admin/targets/actions.ts`).
+
+Jede `admin_*`-Funktion prüft `is_admin()` selbst noch einmal serverseitig
+-- die Prüfung in `app/admin/adminAuth.ts` ist nur für den sofortigen
+Redirect da, keine alleinige Sicherheitsschranke.
 
 ## Serverseitige Rundenauswertung
 

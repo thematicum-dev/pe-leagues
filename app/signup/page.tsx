@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { signup } from "./actions";
+import Logo from "@/components/Logo";
 
 export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signup, null);
@@ -27,6 +28,7 @@ export default function SignupPage() {
   return (
     <main className="authwrap">
       <form className="authcard" action={formAction}>
+        <Logo />
         <h1>Konto erstellen</h1>
         <label>
           E-Mail-Adresse

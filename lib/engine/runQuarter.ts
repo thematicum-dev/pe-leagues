@@ -31,6 +31,7 @@ import {
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf,
+  type Book,
 } from "./engine.ts";
 
 type Archetype = (typeof ARCHES)[number];
@@ -280,14 +281,14 @@ function finalizeExit(
    newDeal() den vollen BOOK-Katalog aus lib/engine bräuchte; die
    Auswertungsfunktion holt das beim nächsten Lauf nach (siehe
    supabase/functions/evaluate-seasons). */
-export function bootstrapInitialDeals(rng: Rng, market: Record<string, number>) {
+export function bootstrapInitialDeals(rng: Rng, market: Record<string, number>, book: Book = {}) {
   const sourcing = 2;
   const n = 0.55 * sourcing;
   const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
   const deals: Any[] = [];
-  for (let i = 0; i < 4; i++) deals.push(newDeal(rng, "process", market));
-  for (let i = 0; i < props; i++) deals.push(newDeal(rng, "prop", market, sourcing));
-  const landmark = newLandmark(rng, market);
+  for (let i = 0; i < 4; i++) deals.push(newDeal(rng, "process", market, 2, book));
+  for (let i = 0; i < props; i++) deals.push(newDeal(rng, "prop", market, sourcing, book));
+  const landmark = newLandmark(rng, market, book);
   return { deals, landmark };
 }
 
@@ -296,6 +297,10 @@ export interface RunQuarterInput {
   halfYear: number;
   decisionsBySlot: Record<number, TurnDecisions>;
   rng: Rng;
+  /* Admin-generierter Zielunternehmen-Pool (siehe lib/engine/targetBook.ts),
+     sektorweise als Ersatz für BOOK. Fehlt er oder ist ein Sektor leer, wird
+     unverändert aus dem fest codierten BOOK-Katalog gezogen. */
+  book?: Book;
 }
 
 export interface RunQuarterOutput {
@@ -307,7 +312,7 @@ export interface RunQuarterOutput {
    übergebene rng-Instanz — bei gleichem Zustand, gleichen Entscheidungen und
    gleicher rng-Position liefert dieselbe Eingabe immer dieselbe Ausgabe. */
 export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
-  const { rng, halfYear } = input;
+  const { rng, halfYear, book = {} } = input;
   const q = halfYear;
   const mk = { ...input.state.market };
   const F: RuntimeFund[] = input.state.funds.map(cloneFund);
@@ -613,8 +618,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   const n = 0.55 * sourcingLead;
   const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
   const nd: Any[] = [];
-  for (let i = 0; i < 4; i++) nd.push(newDeal(rng, "process", mk));
-  for (let i = 0; i < props; i++) nd.push(newDeal(rng, "prop", mk, sourcingLead));
+  for (let i = 0; i < 4; i++) nd.push(newDeal(rng, "process", mk, 2, book));
+  for (let i = 0; i < props; i++) nd.push(newDeal(rng, "prop", mk, sourcingLead, book));
 
   let landmark = input.state.landmark as Any;
   if (q === LM_ANNOUNCE && landmark) {
@@ -624,7 +629,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     nd.unshift({ ...landmark, askMult: clamp(mk[landmark.sector] * (0.7 + 0.006 * landmark.quality) * 1.06, 5, 19) });
   }
   if (!landmark && q < LM_ANNOUNCE) {
-    landmark = newLandmark(rng, mk);
+    landmark = newLandmark(rng, mk, book);
   }
 
   let finalFunds = F;
