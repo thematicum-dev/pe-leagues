@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { ArchetypeKey } from "@/lib/engine/constants";
-import { archetypeByKey } from "@/lib/engine/constants";
-import type { FundState } from "@/lib/engine/types";
-import TurnPanel from "./TurnPanel";
+import type { RuntimeState } from "@/lib/engine/turnTypes";
+import MultiplayerGame from "./MultiplayerGame";
 import LobbyRoom from "./LobbyRoom";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -52,20 +50,26 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     .eq("half_year", 0)
     .maybeSingle();
 
-  const funds = (initialState?.state as { funds?: FundState[] } | null)?.funds ?? null;
+  const funds = (initialState?.state as { funds?: RuntimeState["funds"] } | null)?.funds ?? null;
 
-  let currentDeals: unknown[] = [];
+  let latestState: RuntimeState | null = null;
+  let history: { halfYear: number; market: RuntimeState["market"]; funds: RuntimeState["funds"] }[] = [];
   let submissionStatus = { humanCount: 0, submittedCount: 0, missingCount: 0 };
   let alreadySubmitted = false;
 
   if (season.status === "running" && humanSlot != null) {
-    const { data: latestState } = await supabase
+    const { data: stateRows } = await supabase
       .from("season_state")
-      .select("state")
+      .select("half_year, state")
       .eq("season_id", id)
-      .eq("half_year", season.current_half_year - 1)
-      .maybeSingle();
-    currentDeals = ((latestState?.state as { deals?: unknown[] } | null)?.deals ?? []) as unknown[];
+      .lte("half_year", season.current_half_year - 1)
+      .order("half_year", { ascending: true });
+
+    history = (stateRows ?? []).map((row) => {
+      const s = row.state as RuntimeState;
+      return { halfYear: row.half_year as number, market: s.market, funds: s.funds };
+    });
+    latestState = (stateRows?.length ? (stateRows[stateRows.length - 1].state as RuntimeState) : null);
 
     const { data: statusData } = await supabase
       .rpc("season_submission_status", { p_season_id: id })
@@ -86,18 +90,19 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   return (
     <main className="dashwrap">
       <div className="dashinner">
-        <div className="dashheader">
-          <div>
-            <h1>Partie {season.id.slice(0, 8)}</h1>
-            <div className="dashsub">
-              {STATUS_LABEL[season.status] ?? season.status}
-              {season.status === "running" && ` · Halbjahr ${season.current_half_year}`}
+        {season.status !== "running" && (
+          <div className="dashheader">
+            <div>
+              <h1>Partie {season.id.slice(0, 8)}</h1>
+              <div className="dashsub">
+                {STATUS_LABEL[season.status] ?? season.status}
+              </div>
             </div>
+            <Link href="/dashboard" className="btn-secondary">
+              Zum Dashboard
+            </Link>
           </div>
-          <Link href="/dashboard" className="btn-secondary">
-            Zum Dashboard
-          </Link>
-        </div>
+        )}
 
         {(season.status === "lobby" || season.status === "cancelled") && (
           <LobbyRoom
@@ -121,53 +126,59 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
           />
         )}
 
-        {(season.status === "running" || season.status === "finished") && (
-          <div className="dashcard">
-            <h2>Fondsplätze</h2>
-            {(players ?? []).map((p) => {
-              const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-              const archetype = p.is_ai ? archetypeByKey(p.ai_archetype as ArchetypeKey) : null;
-              return (
-                <div className="seasonrow" key={p.slot}>
-                  <span>Platz {p.slot}</span>
-                  <span>
-                    {p.is_ai
-                      ? `${archetype?.name ?? p.ai_archetype} (KI, ${archetype?.style ?? ""})`
-                      : (profile?.display_name ?? "Spieler")}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {season.status === "running" && (
-          <TurnPanel
+        {season.status === "running" && humanSlot != null && latestState && (
+          <MultiplayerGame
             seasonId={season.id}
             humanSlot={humanSlot}
             currentHalfYear={season.current_half_year}
             deadline={season.current_half_year_deadline}
-            deals={currentDeals as never[]}
-            initialSubmitted={alreadySubmitted}
-            initialStatus={submissionStatus}
+            state={latestState}
+            history={history}
+            submissionStatus={submissionStatus}
+            alreadySubmitted={alreadySubmitted}
           />
         )}
 
         {season.status === "finished" && Array.isArray(season.final_ranking) && (
-          <div className="dashcard">
-            <h2>Endstand</h2>
-            {(season.final_ranking as { slot: number; name: string; score: number; tvpi: number; irr: number }[]).map(
-              (r, i) => (
-                <div className="seasonrow" key={r.slot}>
-                  <span>
-                    {i + 1}. {r.name}
-                  </span>
-                  <span className="mono">
-                    Score {r.score.toFixed(2)} · TVPI {r.tvpi.toFixed(2)}× · IRR {(r.irr * 100).toFixed(1)} %
-                  </span>
+          <div className="pel dark">
+            <style dangerouslySetInnerHTML={{ __html: FINISHED_CSS }} />
+            <div className="wrap" style={{ maxWidth: 520, margin: "0 auto" }}>
+              <div className="tomb" style={{ margin: "24px 16px" }}>
+                <div className="sub">Fondslaufzeit beendet</div>
+                <div className="amt">
+                  {(season.final_ranking as { score: number }[])[0]?.score.toFixed(2) ?? "—"}
                 </div>
-              ),
-            )}
+                <div className="sub">Höchste Wertung der Kohorte</div>
+              </div>
+              <div className="card">
+                <h3 className="disp">Endstand</h3>
+                {(season.final_ranking as { slot: number; name: string; score: number; tvpi: number; irr: number }[]).map(
+                  (r, i) => (
+                    <div className="lb" key={r.slot}>
+                      <span className="rk">{["🥇", "🥈", "🥉"][i] || i + 1}</span>
+                      <span className="nm">{r.name}</span>
+                      <span className="mo" style={{ color: r.score >= 1 ? "var(--teal)" : "var(--ox)" }}>
+                        {r.score.toFixed(2)}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+              <div className="card">
+                <div className="pad" style={{ paddingTop: 16 }}>
+                  {(season.final_ranking as { slot: number; name: string; score: number; tvpi: number; irr: number }[]).map((r) => (
+                    <p key={r.slot} className="hint" style={{ marginBottom: 6 }}>
+                      <b>{r.name}</b> — TVPI {r.tvpi.toFixed(2)}× · IRR {(r.irr * 100).toFixed(1).replace(".", ",")} %
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <div style={{ margin: "18px 16px 40px" }}>
+                <Link href="/dashboard" className="btn-primary" style={{ display: "block", textAlign: "center" }}>
+                  Zum Dashboard
+                </Link>
+              </div>
+            </div>
           </div>
         )}
 
@@ -188,3 +199,24 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     </main>
   );
 }
+
+// Minimaler Ausschnitt aus dem .pel-Stylesheet, nur für die statischen Klassen
+// (tomb/card/lb), die der Endstand-Bildschirm braucht — der volle Satz lebt
+// in components/pel/ui.tsx und wird dort geladen, sobald die Partie läuft.
+const FINISHED_CSS = `
+.pel{--paper:#0C1214;--card:#161F22;--ink:#EDF1EE;--ink2:#8E9C9B;--rule:#243033;--ox:#E3897F;--teal:#5FC4B1;--gold:#DCB264;--panel:#080D0F;--onpanel:#EDF1EE;--glow:rgba(0,0,0,.4);font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--paper);min-height:100%;}
+.pel *{box-sizing:border-box;}
+.pel .disp{font-weight:600;letter-spacing:-.025em;}
+.pel .card{background:var(--card);border:1px solid var(--rule);margin:14px 16px;border-radius:10px;}
+.pel .card h3{margin:0;padding:18px 16px 10px;font-size:17px;}
+.pel .pad{padding:0 16px 16px;}
+.pel .hint{font-size:13px;line-height:1.55;color:var(--ink2);}
+.pel .tomb{background:var(--panel);color:var(--onpanel);padding:20px 16px;text-align:center;border:1px solid var(--panel);position:relative;}
+.pel .tomb .amt{font-size:40px;font-weight:600;letter-spacing:-.035em;margin:8px 0 5px;}
+.pel .tomb .sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);}
+.pel .lb{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule);}
+.pel .lb .rk{font-size:16px;width:20px;}
+.pel .lb .nm{flex:1;font-size:13px;}
+.pel .lb .mo{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;}
+.pel .btn-primary{display:inline-block;text-decoration:none;}
+`;
