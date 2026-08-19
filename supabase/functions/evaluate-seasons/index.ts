@@ -19,8 +19,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.1
 import { createRng } from "../../../lib/engine/rng.ts";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../../../lib/engine/runQuarter.ts";
 import { firstHalfYearDeadline, nextHalfYearDeadline } from "../../../lib/engine/deadline.ts";
-import { PERIODS, type Book } from "../../../lib/engine/engine.ts";
-import { rowsToBook, type TargetTemplateRow } from "../../../lib/engine/targetBook.ts";
+import { PERIODS } from "../../../lib/engine/engine.ts";
 import type { RuntimeState, TurnDecisions } from "../../../lib/engine/turnTypes.ts";
 
 const EXPECTED_SECRET = Deno.env.get("EVALUATE_SEASONS_SECRET");
@@ -31,20 +30,7 @@ function serviceClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function loadTargetBook(db: SupabaseClient): Promise<Book> {
-  // Admin-generierter Zielunternehmen-Pool (siehe supabase/migrations/
-  // 20260819110300_target_templates.sql). Ein leerer Sektor (oder ein
-  // Ladefehler) fällt in newDeal()/newLandmark() automatisch auf den fest
-  // codierten BOOK-Katalog zurück -- ein Fehler hier darf die Auswertung
-  // deshalb nie blockieren.
-  const { data, error } = await db.from("target_templates").select(
-    "sector, name_parts, description, capex_pct, nwc_pct, margin_min, margin_max, growth_min, growth_max, revenue_min, revenue_max, leverage_min, leverage_max, quality_min, quality_max, flags",
-  );
-  if (error || !data) return {};
-  return rowsToBook(data as TargetTemplateRow[]);
-}
-
-async function evaluateOneSeason(db: SupabaseClient, seasonId: string, book: Book) {
+async function evaluateOneSeason(db: SupabaseClient, seasonId: string) {
   const { data: token, error: claimErr } = await db.rpc("claim_season_for_evaluation", { p_season_id: seasonId });
   if (claimErr) throw claimErr;
   if (!token) return; // nicht (mehr) fällig oder gerade anderweitig geclaimt
@@ -70,7 +56,7 @@ async function evaluateOneSeason(db: SupabaseClient, seasonId: string, book: Boo
     if (stateErr || !stateRow) throw stateErr ?? new Error("initial_state_missing");
 
     const market = (stateRow.state as RuntimeState).market;
-    const { deals, landmark } = bootstrapInitialDeals(rng, market, book);
+    const { deals, landmark } = bootstrapInitialDeals(rng, market);
     const deadline = firstHalfYearDeadline(new Date(season.started_at ?? Date.now()));
 
     const { error: commitErr } = await db.rpc("commit_season_bootstrap", {
@@ -119,7 +105,7 @@ async function evaluateOneSeason(db: SupabaseClient, seasonId: string, book: Boo
   });
 
   const state = prevStateRow.state as RuntimeState;
-  const out = runQuarter({ state, halfYear, decisionsBySlot, rng, book });
+  const out = runQuarter({ state, halfYear, decisionsBySlot, rng });
 
   const finished = halfYear >= PERIODS;
   const nextDeadline = finished ? null : nextHalfYearDeadline(new Date());
@@ -149,13 +135,11 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  const book = await loadTargetBook(db);
-
   const results: { seasonId: string; ok: boolean; error?: string }[] = [];
   for (const row of due ?? []) {
     const seasonId = (row as { season_id: string }).season_id;
     try {
-      await evaluateOneSeason(db, seasonId, book);
+      await evaluateOneSeason(db, seasonId);
       results.push({ seasonId, ok: true });
     } catch (err) {
       // Eine fehlerhafte Partie darf die übrigen fälligen Auswertungen

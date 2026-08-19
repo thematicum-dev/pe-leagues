@@ -117,18 +117,6 @@ export const BOOK = {
   ],
 };
 
-/* Optionaler, admin-generierter Ersatz für einzelne Sektoren des BOOK-
-   Katalogs (siehe lib/engine/targetBook.ts). Ein leerer/fehlender Eintrag
-   für einen Sektor fällt automatisch auf BOOK[sector] zurück -- newDeal()/
-   newLandmark() verhalten sich ohne dieses Argument exakt wie zuvor. */
-export type BookEntry = (typeof BOOK)[keyof typeof BOOK][number];
-export type Book = Partial<Record<string, BookEntry[]>>;
-
-function poolFor(sector: string, book: Book): BookEntry[] {
-  const custom = book[sector];
-  return custom && custom.length ? custom : BOOK[sector];
-}
-
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const eur = (v) => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString("de-DE") + " Mio. €";
 export const x = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 }) + "×";
@@ -137,9 +125,9 @@ export const gebote = (n) => (n === 1 ? "1 Gebot" : n + " Gebote");
 export const pct = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 }) + " %";
 export const pctS = (v) => (Math.abs(v) < 0.05 ? "" : v > 0 ? "+" : "−") + pct(Math.abs(v));
 
-export function newDeal(rng: Rng, type: string, market: Record<string, number>, sourcing = 2, book: Book = {}) {
+export function newDeal(rng: Rng, type: string, market: Record<string, number>, sourcing = 2) {
   const sector = rng.pick(SECNAMES);
-  const a = rng.pick(poolFor(sector, book));
+  const a = rng.pick(BOOK[sector]);
   const quality = clamp(rng.band(a.q) + rng.nrm(4), 10, 97);
   const revenue = rng.band(a.rb) * SIZE_SCALE;
   const margin = clamp(rng.band(a.m) + rng.nrm(1), 4, 40);
@@ -740,11 +728,10 @@ export function makeOffers(rng: Rng, c, market, funds, neg, q) {
 export const LM_ANNOUNCE = 8;      // Ankündigung des Trophy Assets
 export const LM_DEAL = 10;         // Halbjahr, in dem es in den Dealflow kommt
 
-export function newLandmark(rng: Rng, market: Record<string, number>, book: Book = {}) {
+export function newLandmark(rng: Rng, market: Record<string, number>) {
   const sector = rng.pick(SECNAMES);
-  const pool = poolFor(sector, book);
-  const cands = pool.filter((a) => a.q[1] >= 70);
-  const a = cands.length ? rng.pick(cands) : rng.pick(pool);
+  const cands = BOOK[sector].filter((a) => a.q[1] >= 70);
+  const a = cands.length ? rng.pick(cands) : rng.pick(BOOK[sector]);
   const revenue = 180 + rng.rnd() * 110;
   const margin = clamp(rng.band(a.m) + 3, 10, 38);
   const quality = clamp(rng.band(a.q) + 14, 55, 97);
