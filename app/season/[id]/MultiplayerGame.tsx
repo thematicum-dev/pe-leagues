@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
@@ -88,6 +89,8 @@ export default function MultiplayerGame({
   const [status, setStatus] = useState(submissionStatus);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [notReadyYet, setNotReadyYet] = useState(false);
 
   // Angebote und Due Diligence — wie im Original lokal gesammelt, bis
   // "Halbjahr abschließen" sie auf einmal abschickt.
@@ -171,6 +174,26 @@ export default function MultiplayerGame({
     }, 20_000);
     return () => clearInterval(id);
   }, [supabase, seasonId, currentHalfYear, router]);
+
+  // Manueller Prüf-Button (siehe unten, in der Kopfleiste und im Wartebild-
+  // schirm): fragt den aktuellen Stand direkt ab, statt blind zu refreshen —
+  // damit sieht der Klick immer eine Reaktion, auch wenn das nächste
+  // Halbjahr serverseitig einfach noch nicht fertig ausgewertet ist.
+  async function handleManualAdvance() {
+    setChecking(true);
+    setNotReadyYet(false);
+    const { data } = await supabase
+      .from("seasons")
+      .select("status, current_half_year")
+      .eq("id", seasonId)
+      .maybeSingle();
+    if (data && (data.status !== "running" || data.current_half_year !== currentHalfYear)) {
+      router.refresh();
+    } else {
+      setNotReadyYet(true);
+    }
+    setChecking(false);
+  }
 
   if (!me) return null;
 
@@ -467,9 +490,20 @@ export default function MultiplayerGame({
             </div>
           </div>
           <div style={{ margin: "14px 0" }}>
-            <button className="btn-secondary" style={{ width: "100%" }} onClick={() => router.refresh()}>
-              Weiter zum nächsten Halbjahr
+            <button className="btn-secondary" style={{ width: "100%" }} onClick={handleManualAdvance} disabled={checking}>
+              {checking ? "Prüfe …" : "Weiter zum nächsten Halbjahr"}
             </button>
+            {notReadyYet && (
+              <p className="hint" style={{ marginTop: 8 }}>
+                Noch nicht so weit — das Halbjahr läuft weiter, bis alle abgegeben haben oder die Frist erreicht ist.
+                Kein Fehler, einfach kurz später nochmal versuchen.
+              </p>
+            )}
+          </div>
+          <div style={{ margin: "0 0 24px" }}>
+            <Link href="/dashboard" className="btn-secondary" style={{ display: "block", width: "100%", textAlign: "center", boxSizing: "border-box" }}>
+              Zum Dashboard
+            </Link>
           </div>
         </div>
       </div>
@@ -493,6 +527,9 @@ export default function MultiplayerGame({
             <div className="stat">Halbjahr</div>
             <div className="statv mono">{quarter}<span style={{ opacity: .5 }}>/{PERIODS}</span></div>
           </div>
+          <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
+            ←
+          </Link>
           <button className="theme" onClick={() => { haptic(6); setDark(!dark); }} aria-label="Darstellung wechseln">
             {dark ? "☀" : "☾"}
           </button>
@@ -508,6 +545,21 @@ export default function MultiplayerGame({
           {(me.accrued || 0) > 0.5 && <span className="mono ox">{eur(me.accrued)} aufgelaufene Gebühren</span>}
         </div>
         <div className="prog"><i style={{ width: `${(quarter / PERIODS) * 100}%` }} /></div>
+        <div className="barrow" style={{ marginTop: 6, fontSize: 10.5 }}>
+          <button
+            className="mono"
+            style={{ background: "none", border: "none", padding: 0, color: "var(--ink2)", textDecoration: "underline", cursor: "pointer" }}
+            onClick={handleManualAdvance}
+            disabled={checking}
+          >
+            {checking ? "Prüfe …" : "Stand prüfen / nächstes Halbjahr"}
+          </button>
+        </div>
+        {notReadyYet && (
+          <div className="barrow" style={{ marginTop: 2, fontSize: 10.5, opacity: .6 }}>
+            <span>Noch kein neues Halbjahr — läuft weiter, bis alle abgegeben haben oder die Frist erreicht ist.</span>
+          </div>
+        )}
       </div>
 
       <Toasts items={[]} />

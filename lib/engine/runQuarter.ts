@@ -490,7 +490,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const key = String(owner.slot);
     shortlistBySlot[key] = [...(shortlistBySlot[key] || []), {
       holdingUid: sl.uid, name: sl.name, seat: sl.seat as Any,
-      candidates: sl.cands.map((cd: Any) => ({ label: cd.label, skill: cd.skill, dev: cd.dev, poach: cd.poach, note: cd.note })),
+      candidates: sl.cands.map((cd: Any) => ({
+        label: cd.label, shown: cd.shown, span: cd.span, skill: cd.skill, dev: cd.dev, poach: cd.poach, note: cd.note,
+      })),
     }];
   });
 
