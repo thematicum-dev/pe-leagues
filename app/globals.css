@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 html,
 body {
   height: 100%;
@@ -7,13 +9,20 @@ body {
   margin: 0;
 }
 
+/* Dieselbe Farb- und Schriftsprache wie das Spiel selbst
+   (components/pel/ui.tsx, dunkles Thema) — Login, Dashboard und Lobby sind
+   im Original-Einzelspieler nicht vorgesehen, sollen aber sichtbar zum
+   selben Produkt gehören statt wie ein separates Formular zu wirken. */
 :root {
-  --paper: #f4f6f2;
-  --card: #ffffff;
-  --ink: #12201f;
-  --ink2: #6b7b79;
-  --rule: #dde3dd;
-  --accent: #a5432f;
+  --paper: #0c1214;
+  --card: #161f22;
+  --ink: #edf1ee;
+  --ink2: #8e9c9b;
+  --rule: #243033;
+  --accent: #e3897f;
+  --teal: #5fc4b1;
+  --gold: #dcb264;
+  --r: 10px;
 }
 
 /* ---------- Landing / Auth / Dashboard ---------- */
@@ -29,7 +38,13 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: "Inter", system-ui, sans-serif;
+  letter-spacing: -0.005em;
   box-sizing: border-box;
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashwrap {
@@ -43,25 +58,29 @@ body {
   max-width: 420px;
   background: var(--card);
   border: 1px solid var(--rule);
-  border-radius: 12px;
+  border-radius: var(--r);
   padding: 28px 24px;
   box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .landingeyebrow {
   display: block;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 12px;
-  color: var(--ink2);
+  letter-spacing: 0.14em;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gold);
   margin-bottom: 10px;
 }
 
 .landing h1,
 .authcard h1 {
   margin: 0 0 12px;
-  font-size: 24px;
-  line-height: 1.25;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
 .landing p,
@@ -69,7 +88,7 @@ body {
 .authhint {
   color: var(--ink2);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0 0 18px;
 }
 
@@ -84,26 +103,41 @@ body {
 .btn-secondary,
 .authcard button {
   font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
   padding: 11px 18px;
   border-radius: 8px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--rule);
   cursor: pointer;
   text-decoration: none;
   display: inline-block;
   text-align: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .btn-primary,
 .authcard button {
   background: var(--ink);
-  color: var(--card);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.btn-primary:hover:not(:disabled),
+.authcard button:hover:not(:disabled) {
+  background: var(--teal);
+  border-color: var(--teal);
 }
 
 .btn-secondary {
   background: var(--card);
   color: var(--ink);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 
 .authcard button {
@@ -112,7 +146,7 @@ body {
 }
 
 .authcard button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
 }
 
@@ -142,7 +176,7 @@ body {
   border-radius: 8px;
   border: 1px solid var(--rule);
   color: var(--ink);
-  background: var(--card);
+  background: var(--paper);
 }
 
 .autherror {
@@ -167,8 +201,9 @@ body {
 /* ---------- Dashboard ---------- */
 
 .dashinner {
-  max-width: 720px;
+  max-width: 520px;
   margin: 0 auto;
+  width: 100%;
 }
 
 .dashheader {
@@ -176,38 +211,45 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
 .dashheader h1 {
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   margin: 0;
 }
 
 .dashsub {
   color: var(--ink2);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .dashcard {
   background: var(--card);
   border: 1px solid var(--rule);
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: var(--r);
+  padding: 4px 20px 20px;
   margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .dashcard h2 {
-  font-size: 15px;
-  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding: 18px 0 12px;
 }
 
 .seasonrow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--rule);
   font-size: 14px;
   gap: 12px;
@@ -219,13 +261,21 @@ body {
 }
 
 .seasonstatus {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink2);
-  border: 1px solid var(--rule);
+  letter-spacing: 0.09em;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 13%, transparent);
   border-radius: 999px;
-  padding: 2px 9px;
+  padding: 4px 10px;
+}
+
+.dashcard .btn-primary,
+.dashcard .btn-secondary {
+  width: 100%;
+  margin-top: 10px;
+  box-sizing: border-box;
 }
 
 .dashform {
@@ -260,4 +310,6 @@ body {
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
+  background: var(--paper);
+  color: var(--ink);
 }
