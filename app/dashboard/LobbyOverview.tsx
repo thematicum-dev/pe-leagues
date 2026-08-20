@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -72,11 +72,18 @@ export default function LobbyOverview({
 
   // Sobald sich der eigene Partie-Status auf "running" ändert (5 Spieler
   // erreicht oder 12-Stunden-Frist abgelaufen), direkt zur Partie
-  // weiterleiten.
+  // weiterleiten -- aber nur bei diesem Übergang selbst (lobby -> running),
+  // während man auf dem Dashboard sitzt. Ohne den Vergleich mit dem vorigen
+  // Status würde das auch dann feuern, wenn man das Dashboard einfach nur
+  // besucht, während die eigene Partie schon länger läuft (z. B. über den
+  // "Zum Dashboard"-Button aus dem Spiel) -- und einen Sekunden später
+  // ungefragt zurück ins Spiel schicken.
+  const prevStatusRef = useRef(initialMySeason?.status ?? null);
   useEffect(() => {
-    if (mySeason?.status === "running") {
+    if (prevStatusRef.current === "lobby" && mySeason?.status === "running") {
       router.push(`/season/${mySeason.id}`);
     }
+    prevStatusRef.current = mySeason?.status ?? null;
   }, [mySeason, router]);
 
   useEffect(() => {
