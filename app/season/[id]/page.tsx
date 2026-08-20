@@ -128,6 +128,15 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
 
         {season.status === "running" && humanSlot != null && latestState && (
           <MultiplayerGame
+            // Erzwingt einen kompletten Neu-Mount, sobald der Server ein
+            // neues Halbjahr liefert: MultiplayerGame hält lokalen State
+            // (u. a. "submitted", vorgemerkte Gebote/Maßnahmen), der sich
+            // sonst über router.refresh() hinweg hält, weil React ohne
+            // wechselnden key dieselbe Komponenteninstanz weiterverwendet.
+            // Ohne diesen Reset blieb die Ansicht nach einem abgeschlossenen
+            // Halbjahr auf dem Wartebildschirm hängen, bis man manuell zum
+            // Dashboard und zurück navigiert hat.
+            key={season.current_half_year}
             seasonId={season.id}
             humanSlot={humanSlot}
             currentHalfYear={season.current_half_year}
