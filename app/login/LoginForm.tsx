@@ -15,7 +15,7 @@ export default function LoginForm() {
     <main className="authwrap">
       <form className="authcard" action={formAction}>
         <Logo />
-        <p className="tagline">Beweise dein Underwriting — gegen echte Gegner.</p>
+        <p className="tagline">Beweise deine PE Investment Skills - gegen echte Gegner</p>
         <h1>Anmelden</h1>
         <input type="hidden" name="next" value={next} />
         <label>
