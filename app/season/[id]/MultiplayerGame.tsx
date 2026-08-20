@@ -162,18 +162,39 @@ export default function MultiplayerGame({
     return () => { supabase.removeChannel(channel); };
   }, [supabase, seasonId, currentHalfYear, router]);
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      const { data } = await supabase
-        .from("seasons")
-        .select("status, current_half_year")
-        .eq("id", seasonId)
-        .maybeSingle();
-      if (!data) return;
-      if (data.status !== "running" || data.current_half_year !== currentHalfYear) router.refresh();
-    }, 20_000);
-    return () => clearInterval(id);
+  const checkAndMaybeRefresh = useCallback(async () => {
+    const { data } = await supabase
+      .from("seasons")
+      .select("status, current_half_year")
+      .eq("id", seasonId)
+      .maybeSingle();
+    if (!data) return;
+    if (data.status !== "running" || data.current_half_year !== currentHalfYear) router.refresh();
   }, [supabase, seasonId, currentHalfYear, router]);
+
+  useEffect(() => {
+    const id = setInterval(checkAndMaybeRefresh, 20_000);
+    return () => clearInterval(id);
+  }, [checkAndMaybeRefresh]);
+
+  // Mobile Browser frieren Timer und die Realtime-Websocket-Verbindung ein,
+  // sobald der Bildschirm gesperrt oder die App gewechselt wird -- weder das
+  // 20s-Polling oben noch die Realtime-Subscription laufen dann weiter.
+  // Ergebnis ohne diesen Check: die Ansicht bleibt beim zuletzt gesehenen
+  // Halbjahr hängen, selbst wenn der Server (bestätigt per Cron-Log) längst
+  // mehrere Halbjahre weitergerückt ist. Beim Zurückkehren zur Seite (Tab
+  // wieder sichtbar bzw. Fenster fokussiert) wird deshalb sofort nachgeholt.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") checkAndMaybeRefresh();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", checkAndMaybeRefresh);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", checkAndMaybeRefresh);
+    };
+  }, [checkAndMaybeRefresh]);
 
   // Manueller Prüf-Button (siehe unten, in der Kopfleiste und im Wartebild-
   // schirm): fragt den aktuellen Stand direkt ab, statt blind zu refreshen —
