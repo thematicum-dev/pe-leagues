@@ -31,7 +31,7 @@ import {
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, Coach, CoachCtx, Kpi,
   DealCard, Holding, Pips, Stages, Track, TvpiChart, SectorSplit, Shelf, Def, MarketChart,
-  UseProceeds, InitPicker, Shortlist, Offers, Sheet,
+  UseProceeds, InitPicker, Shortlist, Offers, Sheet, FundProfileEditor,
 } from "@/components/pel/ui";
 
 export default function PeLeagues() {
@@ -66,7 +66,6 @@ export default function PeLeagues() {
   if (!rngRef.current) rngRef.current = createRng(20260803);
   const rng = rngRef.current;
 
-  const used = Object.values(attrs).reduce((a, b) => a + b, 0);
   const me = funds[0];
 
   useEffect(() => { window.scrollTo(0, 0); }, [tab, quarter]);
@@ -1093,39 +1092,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
               und wie lange du dafür brauchst.
             </p>
           </div>
-          <div className="card">
-            <h3 className="disp">Fondsprofil</h3>
-            <div className="pad">
-              <p style={{ fontSize: 13, color: "var(--ink2)", margin: "0 0 14px" }}>
-                Verteile 12 Punkte. Diese Entscheidung gilt für die gesamte Fondslaufzeit.
-              </p>
-              {[["sourcing", "Origination", "Proprietärer Dealflow je Halbjahr"],
-                ["analysis", "Due Diligence", "Schutz vor Post-Closing-Überraschungen"],
-                ["negotiation", "Execution", "Bessere Konditionen bei Kauf und Verkauf"],
-                ["operations", "Value Creation", "Wirkung und Tempo der Portfolioarbeit"],
-                ["financing", "Financing", "Leverage-Kapazität und Kreditmarge"]].map(([k, n, d]) => (
-                <div key={k}>
-                  <div className="att">
-                    <div className="an">{n}</div>
-                    <div className="dots">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <button key={i} aria-label={`${n} auf ${i}`}
-                          className={"dot" + (attrs[k] >= i ? " f" : "")}
-                          onClick={() => setAttrs((a) => { const v = a[k] === i ? i - 1 : i; const nu = used - a[k] + v; return nu <= 12 ? { ...a, [k]: v } : a; })} />
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: -6, marginBottom: 10 }}>{d}</div>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-                <span className="mono" style={{ fontSize: 13, color: used === 12 ? "var(--teal)" : "var(--ox)" }}>
-                  {used} / 12 Punkte
-                </span>
-                <button className="solid" disabled={used !== 12} onClick={start}>Fonds auflegen</button>
-              </div>
-            </div>
-          </div>
+          <FundProfileEditor attrs={attrs} setAttrs={setAttrs} onSubmit={start} submitLabel="Fonds auflegen" />
         </div>
       </div>
     );

@@ -55,8 +55,8 @@ async function evaluateOneSeason(db: SupabaseClient, seasonId: string) {
       .single();
     if (stateErr || !stateRow) throw stateErr ?? new Error("initial_state_missing");
 
-    const market = (stateRow.state as RuntimeState).market;
-    const { deals, landmark } = bootstrapInitialDeals(rng, market);
+    const initialState = stateRow.state as RuntimeState;
+    const { deals, landmark } = bootstrapInitialDeals(rng, initialState.market, initialState.funds);
     const deadline = firstHalfYearDeadline(new Date(season.started_at ?? Date.now()));
 
     const { error: commitErr } = await db.rpc("commit_season_bootstrap", {

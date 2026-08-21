@@ -100,7 +100,7 @@ function jsonRoundTrip<T>(value: T): T {
 function playDirect() {
   const rng = createRng(SEASON_SEED);
   let state = baseState();
-  const { deals, landmark } = bootstrapInitialDeals(rng, state.market);
+  const { deals, landmark } = bootstrapInitialDeals(rng, state.market, state.funds);
   state = { ...state, deals, landmark };
 
   for (let hy = 1; hy <= PERIODS; hy++) {
@@ -125,7 +125,7 @@ function playServerPath() {
   {
     const rng = createRng(seed);
     const state: RuntimeState = JSON.parse(serializedState);
-    const { deals, landmark } = bootstrapInitialDeals(rng, state.market);
+    const { deals, landmark } = bootstrapInitialDeals(rng, state.market, state.funds);
     const bootstrapped: RuntimeState = { ...state, deals, landmark };
     serializedState = JSON.stringify(bootstrapped);
     seed = rng.seed;

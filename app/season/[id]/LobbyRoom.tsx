@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_HUMAN_ATTRS, type Attrs } from "@/lib/engine/constants";
+import { CSS, FundProfileEditor } from "@/components/pel/ui";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -14,6 +16,8 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   not_creator: "Das darfst nur der Ersteller dieser Partie.",
   season_not_deletable: "Die Partie läuft schon und kann nicht mehr entfernt werden.",
   season_not_startable: "Die Partie läuft bereits.",
+  season_not_in_lobby: "Die Partie läuft schon — das Fondsprofil lässt sich jetzt nicht mehr ändern.",
+  invalid_fund_attrs: "Die Punkteverteilung ist ungültig.",
 };
 
 function friendlyError(message: string): string {
@@ -59,6 +63,7 @@ export interface LobbyRoomProps {
   initialCancelledReason: string | null;
   initialCreatedBy: string;
   initialPlayers: LobbyPlayer[];
+  initialFundAttrs: Attrs | null;
 }
 
 export default function LobbyRoom({
@@ -69,6 +74,7 @@ export default function LobbyRoom({
   initialCancelledReason,
   initialCreatedBy,
   initialPlayers,
+  initialFundAttrs,
 }: LobbyRoomProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -78,11 +84,32 @@ export default function LobbyRoom({
   const [players, setPlayers] = useState<LobbyPlayer[]>(initialPlayers);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attrs, setAttrsRaw] = useState<Attrs>(initialFundAttrs ?? { ...DEFAULT_HUMAN_ATTRS });
+  const [profileSaved, setProfileSaved] = useState(initialFundAttrs != null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const isMember = players.some((p) => p.profileId === currentUserId);
   const isCreator = createdBy === currentUserId;
   const humanCount = players.length;
   const aiCount = Math.max(0, 5 - humanCount);
+
+  const setAttrs = useCallback((updater: (a: Attrs) => Attrs) => {
+    setAttrsRaw(updater);
+    setProfileSaved(false);
+  }, []);
+
+  const handleSaveProfile = useCallback(async () => {
+    setProfileError(null);
+    setSavingProfile(true);
+    const { error: rpcError } = await supabase.rpc("set_fund_profile", { p_season_id: seasonId, p_attrs: attrs });
+    setSavingProfile(false);
+    if (rpcError) {
+      setProfileError(friendlyError(rpcError.message));
+      return;
+    }
+    setProfileSaved(true);
+  }, [supabase, seasonId, attrs]);
 
   useEffect(() => {
     if (status === "running") {
@@ -220,6 +247,23 @@ export default function LobbyRoom({
         <button className="btn-secondary" onClick={handleLeave} disabled={pending}>
           {pending ? "Einen Moment …" : "Lobby verlassen"}
         </button>
+      )}
+      {isMember && (
+        <div className="pel dark" style={{ margin: "18px 0 4px" }}>
+          <style>{CSS}</style>
+          <p className="dashsub" style={{ margin: "0 0 10px", color: "var(--ink2)" }}>
+            Fondsprofil vor dem Start — 12 Punkte, verbindlich für die gesamte Fondslaufzeit, genau wie im
+            Übungsmodus. Ohne eigene Wahl startest du mit der Standardverteilung.
+          </p>
+          {profileError && <p className="autherror">{profileError}</p>}
+          <FundProfileEditor
+            attrs={attrs}
+            setAttrs={setAttrs}
+            onSubmit={handleSaveProfile}
+            submitDisabled={savingProfile || profileSaved}
+            submitLabel={savingProfile ? "Speichert …" : profileSaved ? "Gespeichert ✓" : "Fondsprofil speichern"}
+          />
+        </div>
       )}
       {isCreator && (
         <>

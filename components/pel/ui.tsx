@@ -1105,6 +1105,56 @@ export function Def({ t, children }) {
   );
 }
 
+/* Fondsprofil: 12 Punkte auf fünf Attribute verteilen, vor dem ersten
+   Halbjahr, für die gesamte Laufzeit fest. Eine einzige Definition für
+   Einzelspieler-Übungsmodus (components/PeLeagues.tsx) und Mehrspieler-Lobby
+   (app/season/[id]/LobbyRoom.tsx), damit beide exakt dasselbe Verhalten
+   zeigen — Feld für Feld, Punkt für Punkt.                                */
+export const FUND_PROFILE_POINTS = 12;
+export const ATTR_FIELDS = [
+  ["sourcing", "Origination", "Proprietärer Dealflow je Halbjahr"],
+  ["analysis", "Due Diligence", "Schutz vor Post-Closing-Überraschungen"],
+  ["negotiation", "Execution", "Bessere Konditionen bei Kauf und Verkauf"],
+  ["operations", "Value Creation", "Wirkung und Tempo der Portfolioarbeit"],
+  ["financing", "Financing", "Leverage-Kapazität und Kreditmarge"],
+];
+
+export function FundProfileEditor({ attrs, setAttrs, points = FUND_PROFILE_POINTS, onSubmit, submitLabel, submitDisabled = false, footer = null }) {
+  const used = Object.values(attrs).reduce((a, b) => a + b, 0);
+  return (
+    <div className="card">
+      <h3 className="disp">Fondsprofil</h3>
+      <div className="pad">
+        <p style={{ fontSize: 13, color: "var(--ink2)", margin: "0 0 14px" }}>
+          Verteile {points} Punkte. Diese Entscheidung gilt für die gesamte Fondslaufzeit.
+        </p>
+        {ATTR_FIELDS.map(([k, n, d]) => (
+          <div key={k}>
+            <div className="att">
+              <div className="an">{n}</div>
+              <div className="dots">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <button key={i} aria-label={`${n} auf ${i}`}
+                    className={"dot" + (attrs[k] >= i ? " f" : "")}
+                    onClick={() => setAttrs((a) => { const v = a[k] === i ? i - 1 : i; const nu = used - a[k] + v; return nu <= points ? { ...a, [k]: v } : a; })} />
+                ))}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: -6, marginBottom: 10 }}>{d}</div>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+          <span className="mono" style={{ fontSize: 13, color: used === points ? "var(--teal)" : "var(--ox)" }}>
+            {used} / {points} Punkte
+          </span>
+          <button className="solid" disabled={used !== points || submitDisabled} onClick={onSubmit}>{submitLabel}</button>
+        </div>
+        {footer}
+      </div>
+    </div>
+  );
+}
+
 export function MarketChart({ hist }) {
   if (!hist || hist.length < 2) {
     return <div className="quiet">Die Zeitreihe entsteht ab dem zweiten Halbjahr.</div>;
