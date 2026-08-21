@@ -272,16 +272,33 @@ function finalizeExit(
     `Exit ${c.name} an ${buyer}: ${net.toFixed(1)} Mio. € netto${extra}.`, f.slot);
 }
 
+/* Gemeinsamer Dealflow-Treiber: der Durchschnitt der Origination-Werte aller
+   MENSCHLICHEN Fonds. Der Übungsmodus kannte nur einen Menschen, dessen
+   Sourcing die Menge an proprietären Deals fürs ganze Feld bestimmte. Hier
+   gibt es bis zu fünf, in zufälliger Reihenfolge über die Plätze verteilt
+   (start_season() mischt auch die menschlichen Plätze) — ein fester
+   Fondsplatz hätte je nach Zufallszuteilung mal einen Menschen, mal eine KI
+   getroffen, und der Origination-Wert im Fondsprofil wäre für die meisten
+   Partien wirkungslos gewesen. Der Durchschnitt reduziert sich bei genau
+   einem Menschen exakt auf dessen Wert (Übungsmodus-Verhalten bleibt
+   unverändert) und bleibt bei mehreren Menschen ein Wert, auf den jeder von
+   ihnen tatsächlich Einfluss hat. */
+function humanSourcingLead(funds: RuntimeFund[]): number {
+  const humans = funds.filter((f) => !f.isAi);
+  if (!humans.length) return 2; // kann bei einer korrekt gestarteten Partie nicht vorkommen
+  return humans.reduce((sum, f) => sum + f.attrs.sourcing, 0) / humans.length;
+}
+
 /* Dealflow und Landmark für Halbjahr 1, unmittelbar nach Partiestart —
-   entspricht start() in components/PeLeagues.tsx
-   (makeDeals(attrs.sourcing, market) mit der Standard-Sourcing-Fähigkeit
-   eines menschlichen Fonds vor seiner eigenen Attributwahl, plus
-   newLandmark()). start_season() (SQL) kann das nicht selbst erzeugen, weil
-   newDeal() den vollen BOOK-Katalog aus lib/engine bräuchte; die
-   Auswertungsfunktion holt das beim nächsten Lauf nach (siehe
-   supabase/functions/evaluate-seasons). */
-export function bootstrapInitialDeals(rng: Rng, market: Record<string, number>) {
-  const sourcing = 2;
+   entspricht start() in components/PeLeagues.tsx (makeDeals(attrs.sourcing,
+   market), plus newLandmark()). Die Fondsprofile aller menschlichen Spieler
+   stehen zu diesem Zeitpunkt bereits fest (Auswahl in der Lobby, vor
+   start_season()), fließen also genauso ein wie jeder spätere Dealflow.
+   start_season() (SQL) kann das nicht selbst erzeugen, weil newDeal() den
+   vollen BOOK-Katalog aus lib/engine bräuchte; die Auswertungsfunktion holt
+   das beim nächsten Lauf nach (siehe supabase/functions/evaluate-seasons). */
+export function bootstrapInitialDeals(rng: Rng, market: Record<string, number>, funds: RuntimeFund[]) {
+  const sourcing = humanSourcingLead(funds);
   const n = 0.55 * sourcing;
   const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
   const deals: Any[] = [];
@@ -608,10 +625,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     });
   });
 
-  /* Neuer Dealflow für das nächste Halbjahr. Getrieben vom Sourcing des
-     Fondsplatzes 0 — exakt dieselbe Regel wie im Original (dort gab es nur
-     einen Menschen, immer an Platz 0). */
-  const sourcingLead = F[0].attrs.sourcing;
+  /* Neuer Dealflow für das nächste Halbjahr. Getrieben vom Durchschnitt der
+     Origination-Werte aller menschlichen Fonds (siehe humanSourcingLead) —
+     bei genau einem Menschen exakt dieselbe Regel wie im Original. */
+  const sourcingLead = humanSourcingLead(F);
   const n = 0.55 * sourcingLead;
   const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
   const nd: Any[] = [];
