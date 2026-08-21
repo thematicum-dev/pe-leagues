@@ -24,10 +24,10 @@
    Original aus, nur über alle fünf Fondsplätze statt nur Platz 0. */
 import type { Rng } from "./rng.ts";
 import {
-  SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
+  SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, LTIP_SHARE,
-  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit,
+  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf,
@@ -184,16 +184,25 @@ function applyImmediateDecisions(
     pushFeed(news, quarter, "🔍", "neu", `${c.name}: Search-Mandat für einen neuen ${nm} erteilt.`, f.slot);
   });
 
-  // 5 — Maßnahmen starten
+  // 5 — Maßnahmen starten (Operating Capacity: höchstens maxInitSlots
+  // gleichzeitig laufende Maßnahmen fürs ganze Portfolio, siehe INIT_SLOTS +
+  // Value-Creation-Bonus. Im Übungsmodus/Client nur eine deaktivierte
+  // Schaltfläche — hier serverseitig erzwungen, weil eingereichte
+  // Entscheidungen sonst beliebig viele Maßnahmen gleichzeitig anstoßen
+  // könnten, unabhängig vom gewählten Fondsprofil.
+  const maxInitSlots = INIT_SLOTS + Math.floor(f.attrs.operations / 2);
+  let busyInitSlots = (f.holdings as Any[]).reduce((n, h) => n + initsOf(h).length, 0);
   (decisions.initiatives || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c) return;
     if (intent.dim === "plat" && c.initP) return;
     if (intent.dim === "acc" && c.initA) return;
+    if (busyInitSlots >= maxInitSlots) return;
     const B = buildInit(rng, c, intent.dim, intent.id, market, quarter);
     if (!B || B.blocked) return;
     c.netDebt += B.debt;
     c[B.slot] = B.init;
+    busyInitSlots++;
     pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu", `${c.name}: ${B.spec.n} gestartet.`, f.slot);
   });
 
