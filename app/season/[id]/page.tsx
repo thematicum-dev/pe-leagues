@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { RuntimeState } from "@/lib/engine/turnTypes";
+import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
 import LobbyRoom from "./LobbyRoom";
 
@@ -37,11 +38,12 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
 
   const { data: players } = await supabase
     .from("season_players")
-    .select("id, slot, profile_id, is_ai, ai_archetype, profiles(display_name)")
+    .select("id, slot, profile_id, is_ai, ai_archetype, fund_attrs, profiles(display_name)")
     .eq("season_id", id)
     .order("slot", { ascending: true });
 
   const humanSlot = (players ?? []).find((p) => p.profile_id === user.id)?.slot ?? null;
+  const ownFundAttrs = ((players ?? []).find((p) => p.profile_id === user.id)?.fund_attrs ?? null) as Attrs | null;
 
   const { data: initialState } = await supabase
     .from("season_state")
@@ -112,6 +114,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
             initialStatus={season.status}
             initialCancelledReason={season.cancelled_reason}
             initialCreatedBy={season.created_by}
+            initialFundAttrs={ownFundAttrs}
             initialPlayers={(players ?? [])
               .filter((p) => !p.is_ai && p.profile_id)
               .map((p) => {
