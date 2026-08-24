@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_HUMAN_ATTRS, type Attrs } from "@/lib/engine/constants";
-import { CSS, FundProfileEditor } from "@/components/pel/ui";
+import { ATTR_FIELDS, FUND_PROFILE_POINTS } from "@/components/pel/ui";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -93,6 +93,8 @@ export default function LobbyRoom({
   const isCreator = createdBy === currentUserId;
   const humanCount = players.length;
   const aiCount = Math.max(0, 5 - humanCount);
+
+  const usedPoints = Object.values(attrs).reduce((a, b) => a + b, 0);
 
   const setAttrs = useCallback((updater: (a: Attrs) => Attrs) => {
     setAttrsRaw(updater);
@@ -249,20 +251,53 @@ export default function LobbyRoom({
         </button>
       )}
       {isMember && (
-        <div className="pel dark" style={{ margin: "18px 0 4px" }}>
-          <style>{CSS}</style>
-          <p className="dashsub" style={{ margin: "0 0 10px", color: "var(--ink2)" }}>
-            Fondsprofil vor dem Start — 12 Punkte, verbindlich für die gesamte Fondslaufzeit, genau wie im
-            Übungsmodus. Ohne eigene Wahl startest du mit der Standardverteilung.
+        <div className="fundprofile">
+          <h3>Fondsprofil</h3>
+          <p className="dashsub">
+            Verteile {FUND_PROFILE_POINTS} Punkte auf die Fähigkeiten deines Fonds. Die Entscheidung gilt
+            für die gesamte Fondslaufzeit und lässt sich nach dem Start nicht mehr ändern.
           </p>
+          {ATTR_FIELDS.map(([k, n, d]) => (
+            <div className="fprow" key={k}>
+              <div className="fplabel">
+                <span className="fpname">{n}</span>
+                <span className="fpdesc">{d}</span>
+              </div>
+              <div className="fpdots" role="group" aria-label={n}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`${n} auf ${i}`}
+                    aria-pressed={attrs[k as keyof Attrs] >= i}
+                    className={"fpdot" + (attrs[k as keyof Attrs] >= i ? " on" : "")}
+                    onClick={() => setAttrs((a) => {
+                      const key = k as keyof Attrs;
+                      const v = a[key] === i ? i - 1 : i;
+                      const nu = usedPoints - a[key] + v;
+                      return nu <= FUND_PROFILE_POINTS ? { ...a, [key]: v } : a;
+                    })}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="fpfoot">
+            <span className={"fppoints" + (usedPoints === FUND_PROFILE_POINTS ? " ok" : "")}>
+              {usedPoints} / {FUND_PROFILE_POINTS} Punkte
+            </span>
+            <button
+              className="btn-primary"
+              disabled={usedPoints !== FUND_PROFILE_POINTS || savingProfile || profileSaved}
+              onClick={handleSaveProfile}
+            >
+              {savingProfile ? "Speichert …" : profileSaved ? "Gespeichert ✓" : "Fondsprofil speichern"}
+            </button>
+          </div>
           {profileError && <p className="autherror">{profileError}</p>}
-          <FundProfileEditor
-            attrs={attrs}
-            setAttrs={setAttrs}
-            onSubmit={handleSaveProfile}
-            submitDisabled={savingProfile || profileSaved}
-            submitLabel={savingProfile ? "Speichert …" : profileSaved ? "Gespeichert ✓" : "Fondsprofil speichern"}
-          />
+          {!profileSaved && (
+            <p className="dashsub fpnote">Ohne eigene Wahl startest du mit der Standardverteilung.</p>
+          )}
         </div>
       )}
       {isCreator && (

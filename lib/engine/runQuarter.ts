@@ -26,11 +26,11 @@ import type { Rng } from "./rng.ts";
 import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
-  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, LTIP_SHARE,
+  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, LTIP_SHARE, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf,
+  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
 } from "./engine.ts";
 
 type Archetype = (typeof ARCHES)[number];
@@ -173,6 +173,21 @@ function applyImmediateDecisions(
     pushFeed(news, quarter, "📜", "neu", `${c.name}: Managementbeteiligung (MEP) aufgesetzt.`, f.slot);
   });
 
+  /* 3b — Benchmarkstudien: liefert die Branchenreferenz (benchMargin,
+     Marktwachstum) für eine Beteiligung nachträglich, die ohne Due Diligence
+     gekauft wurde. Kostet die Hälfte einer vollen DD und wird sofort fällig —
+     exakt runStudy() aus components/PeLeagues.tsx (Übungsmodus). Ohne diese
+     Möglichkeit blieben im Mehrspielermodus Marge und Wachstum einer
+     off-market gekauften Beteiligung dauerhaft uneinordenbar. */
+  (decisions.studies || []).forEach((uid: string) => {
+    const c = holdingByUid(uid);
+    if (!c || c.dd) return;
+    spendFund(f, DD_COST / 2, quarter, true);
+    c.dd = true;
+    pushFeed(news, quarter, "📊", "neu",
+      `${c.name}: Benchmarkstudie beauftragt — Branchenmarge ${c.benchMargin.toFixed(1)} %, Marktwachstum ${SECTORS[c.sector as keyof typeof SECTORS].g.toFixed(1)} %.`, f.slot);
+  });
+
   // 4 — Search-Mandate vergeben
   (decisions.searches || []).forEach((s) => {
     const c = holdingByUid(s.holdingUid);
@@ -274,7 +289,11 @@ function finalizeExit(
   const room = recycleRoom(f, net, quarter);
   const keep = room > 0.5 ? clamp(keepPct ?? 0, 0, 1) : 0;
   f.holdings = (f.holdings as Any[]).filter((h) => h.uid !== c.uid);
-  f.realized = [...(f.realized as Any[]), { name: c.name, moic: dealMoic(c, net) }];
+  /* Value Bridge des Deals mitschreiben: nur so lässt sich am Ende der
+     Fondslaufzeit zeigen, woher die Rendite kam (EBITDA, Multiple,
+     Entschuldung). Die Beteiligung selbst ist danach aus dem Portfolio
+     verschwunden, ihre hist-Reihe also nicht mehr abrufbar. */
+  f.realized = [...(f.realized as Any[]), { name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, gross, net) }];
   applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter, keep);
   const mo = dealMoic(c, net);
   pushFeed(news, quarter, mo >= 2 ? "🚀" : mo >= 1 ? "💰" : "💀", mo >= 1 ? "pos" : "neg",
@@ -434,7 +453,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       costTotal: eb * w.mult - eb * w.lev + eb * w.mult * ENTRY_FEE,
       cashOut: 0, recapOut: 0, costLeft: eb * w.mult - eb * w.lev + eb * w.mult * ENTRY_FEE,
       entryQ: q,
-      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev }],
+      // mult/out je Periode mitschreiben: nur damit lässt sich die
+      // Wertveränderung eines Halbjahres später in ihre Treiber zerlegen
+      // (EBITDA, Multiple, Entschuldung) -- siehe HalfYearDelta in pel/ui.
+      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
     };
     c.baseLoad = seatLoad(c);
     spendFund(f, c.entryEquity, q, undefined);
@@ -582,7 +604,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
       const eb = ebitdaOf(c);
-      c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality, eq: navValueOf(c, mk) + (c.cashOut || 0) }];
+      c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0 }];
     });
   });
 
@@ -699,7 +722,7 @@ function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, n
       const gross = Math.max(0, eqvOf(c, markMultiple(c, mk) - LIQ_DISC));
       const net = gross * (1 - BIL_FEE);
       applyProceeds(g, net, c.entryEquity, q);
-      g.realized = [...(g.realized as Any[]), { name: c.name + " (Tail-End)", moic: dealMoic(c, net) }];
+      g.realized = [...(g.realized as Any[]), { name: c.name + " (Tail-End)", moic: dealMoic(c, net), bridge: makeBridge(c, gross, net) }];
       if (!g.isAi) {
         const mo = net / c.entryEquity;
         pushFeed(news, q, mo >= 1 ? "⏳" : "💀", mo >= 1 ? "neu" : "neg",

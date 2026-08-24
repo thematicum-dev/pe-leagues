@@ -352,3 +352,125 @@ body {
   background: var(--paper);
   color: var(--ink);
 }
+
+/* Fondsprofil in der Lobby. Vorher war hier das komplette Spiel-Stylesheet
+   (components/pel/ui.tsx) in die Dashboard-Karte hineingeladen — das ergab
+   eine Karte in der Karte mit eigenem Hintergrund, fremden Innenabständen und
+   einer Punktezeile, die neben dem Button umbrach. Diese Regeln bauen
+   dieselbe Eingabe stattdessen in der Formensprache des Dashboards. */
+.fundprofile {
+  border-top: 1px solid var(--rule);
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
+.fundprofile h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding: 14px 0 8px;
+}
+
+.fundprofile > .dashsub {
+  margin: 0 0 14px;
+}
+
+.fprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.fplabel {
+  min-width: 0;
+}
+
+.fpname {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+
+.fpdesc {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink2);
+  margin-top: 2px;
+}
+
+.fpdots {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.fpdot {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.fpdot.on {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.fpdot:active {
+  transform: scale(0.92);
+}
+
+.fpfoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+.fppoints {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ox);
+  white-space: nowrap;
+}
+
+.fppoints.ok {
+  color: var(--teal);
+}
+
+/* Der Button steht in dieser Zeile neben der Punktezahl und darf deshalb
+   nicht die volle Breite der Dashboard-Karte beanspruchen. */
+.fundprofile .fpfoot .btn-primary {
+  width: auto;
+  margin-top: 0;
+  flex: none;
+}
+
+.fpnote {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+/* Auf sehr schmalen Displays bricht die Fußzeile um; dann nimmt der Button
+   die volle Breite, statt neben der Punktezahl eingequetscht zu werden. */
+@media (max-width: 400px) {
+  .fundprofile .fpfoot .btn-primary {
+    width: 100%;
+  }
+}

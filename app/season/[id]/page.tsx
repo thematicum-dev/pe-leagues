@@ -5,6 +5,7 @@ import type { RuntimeState } from "@/lib/engine/turnTypes";
 import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
 import LobbyRoom from "./LobbyRoom";
+import { SeasonDrivers } from "@/components/pel/ui";
 
 const STATUS_LABEL: Record<string, string> = {
   lobby: "Lobby offen",
@@ -87,6 +88,23 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
       };
       alreadySubmitted = statusRow.i_have_submitted;
     }
+  }
+
+  /* Endstand: die realisierten Deals des eigenen Fonds mit ihren Value
+     Bridges, damit der Abschlussbildschirm zeigen kann, woher die Rendite kam
+     (EBITDA, Multiple, Entschuldung). */
+  let myRealized: { name: string; moic: number; bridge?: Record<string, number> }[] = [];
+  if (season.status === "finished" && humanSlot != null) {
+    const { data: finalRow } = await supabase
+      .from("season_state")
+      .select("state")
+      .eq("season_id", id)
+      .order("half_year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const fin = finalRow?.state as RuntimeState | undefined;
+    const mine = fin?.funds?.find((f) => f.slot === humanSlot);
+    myRealized = (mine?.realized ?? []) as typeof myRealized;
   }
 
   return (
@@ -185,6 +203,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
                   ))}
                 </div>
               </div>
+              <SeasonDrivers realized={myRealized} title="Woher deine Rendite kam" />
               <div style={{ margin: "18px 16px 40px" }}>
                 <Link href="/dashboard" className="btn-primary" style={{ display: "block", textAlign: "center" }}>
                   Zum Dashboard
@@ -231,4 +250,33 @@ const FINISHED_CSS = `
 .pel .lb .nm{flex:1;font-size:13px;}
 .pel .lb .mo{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;}
 .pel .btn-primary{display:inline-block;text-decoration:none;}
+.pel .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+.pel .eyebrow{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600;}
+/* Treiberbalken und Erklär-Punkte für die Value Bridge auf dem Endstand —
+   Ausschnitt aus dem vollen Stylesheet in components/pel/ui.tsx. */
+.pel .drv{display:flex;flex-direction:column;gap:7px;}
+.pel .drvrow{display:flex;align-items:center;gap:8px;}
+.pel .drvlab{font-size:11.5px;color:var(--ink2);width:88px;flex:none;}
+.pel .drvtrack{position:relative;flex:1;height:12px;min-width:0;background:#1C282B;}
+.pel .drvzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--rule);}
+.pel .drvbar{position:absolute;top:1px;bottom:1px;min-width:1px;}
+.pel .drvbar.pos{background:var(--teal);}
+.pel .drvbar.neg{background:var(--ox);}
+.pel .drvval{font-size:11.5px;width:78px;flex:none;text-align:right;}
+.pel .infb{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
+  border-radius:50%;border:1px solid var(--rule);background:transparent;color:var(--ink2);
+  font-size:9.5px;font-weight:700;font-family:inherit;line-height:1;padding:0;margin-left:5px;
+  vertical-align:middle;cursor:pointer;flex:none;}
+.pel .infb.on{background:var(--gold);border-color:var(--gold);color:var(--panel);}
+.pel .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;
+  align-items:flex-end;justify-content:center;}
+.pel .sheet{background:var(--paper);width:100%;max-width:520px;max-height:92vh;overflow:auto;
+  border-radius:16px 16px 0 0;}
+.pel .infgrip{width:34px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;}
+.pel .infsheet{padding:20px 18px 26px;}
+.pel .infsheet .it{font-size:15px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;}
+.pel .infsheet .ib{font-size:13.5px;line-height:1.65;color:var(--ink2);}
+.pel .infsheet .ib b{color:var(--ink);font-weight:600;}
+.pel .infsheet .ic{width:100%;margin-top:18px;font-family:inherit;font-size:13px;cursor:pointer;
+  padding:11px 18px;border:1px solid var(--rule);background:var(--card);color:var(--ink);border-radius:8px;}
 `;
