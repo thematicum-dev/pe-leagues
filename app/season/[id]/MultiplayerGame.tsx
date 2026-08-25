@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, Shortlist, Offers, Sheet,
+  Info, SeasonDrivers,
 } from "@/components/pel/ui";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent, HireIntent,
@@ -99,6 +100,7 @@ export default function MultiplayerGame({
   const [searches, setSearches] = useState<SearchIntent[]>([]);
   const [initiatives, setInitiatives] = useState<InitiativeIntent[]>([]);
   const [ltipStaged, setLtipStaged] = useState<string[]>([]);
+  const [studyStaged, setStudyStaged] = useState<string[]>([]);
   const [exitStarts, setExitStarts] = useState<ExitStartIntent[]>([]);
   const [hireDecisions, setHireDecisions] = useState<HireIntent[]>([]);
   const [offerDecisions, setOfferDecisions] = useState<OfferDecisionIntent[]>([]);
@@ -117,6 +119,17 @@ export default function MultiplayerGame({
   const shortlistItem = shortlistAll[shortlistCursor];
   const exitQueueItem = exitQueueAll[exitQueueCursor];
 
+  /* Stößt die serverseitige Auswertung an, statt nur auf den minütlichen
+     pg_cron-Job zu warten. request_season_evaluation() prüft selbst, ob die
+     Partie überhaupt fällig ist (alle abgegeben oder Frist erreicht) und tut
+     sonst nichts — der Aufruf kann also gefahrlos wiederholt werden.
+     Liefert true, wenn eine Auswertung tatsächlich angestoßen wurde. */
+  const requestEvaluation = useCallback(async () => {
+    const { data, error: rpcError } = await supabase.rpc("request_season_evaluation", { p_season_id: seasonId });
+    if (rpcError) return false;
+    return data === true;
+  }, [supabase, seasonId]);
+
   const refreshStatus = useCallback(async () => {
     const { data } = await supabase
       .rpc("season_submission_status", { p_season_id: seasonId })
@@ -129,11 +142,22 @@ export default function MultiplayerGame({
     if (row.current_half_year !== currentHalfYear) router.refresh();
   }, [supabase, seasonId, currentHalfYear, router]);
 
+  /* Nach der eigenen Abgabe eng takten: solange die Auswertung aussteht, wird
+     sie alle 5 Sekunden erneut angestoßen (falls die Edge Function den ersten
+     Anstoß verschluckt hat) und der Stand geprüft. Das ist die Phase, in der
+     der Spieler auf den Bildschirm schaut — hier kostet jede Sekunde
+     Wartezeit spürbar. Sobald das Halbjahr wechselt, mountet die Komponente
+     über den key in page.tsx ohnehin neu und der Intervall verschwindet. */
   useEffect(() => {
     if (!submitted) return;
-    const id = setInterval(refreshStatus, 15_000);
-    return () => clearInterval(id);
-  }, [submitted, refreshStatus]);
+    let stopped = false;
+    const id = setInterval(async () => {
+      if (stopped) return;
+      await requestEvaluation();
+      await refreshStatus();
+    }, 5_000);
+    return () => { stopped = true; clearInterval(id); };
+  }, [submitted, refreshStatus, requestEvaluation]);
 
   // Live-Übergang ins nächste Halbjahr (bzw. in den Endstand): zwei
   // unabhängige Realtime-Events, plus ein Polling-Fallback darunter, weil
@@ -146,11 +170,17 @@ export default function MultiplayerGame({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "seasons", filter: `id=eq.${seasonId}` },
         (payload) => {
-          const row = payload.new as { current_half_year?: number; status?: string } | undefined;
+          const row = payload.new as {
+            current_half_year?: number; status?: string; current_half_year_deadline?: string | null;
+          } | undefined;
           // status !== "running" deckt insbesondere den Partie-Abschluss ab:
           // dabei ändert sich current_half_year nicht mehr, nur der Status.
           if (row?.status && row.status !== "running") { router.refresh(); return; }
-          if (row?.current_half_year != null && row.current_half_year !== currentHalfYear) router.refresh();
+          if (row?.current_half_year != null && row.current_half_year !== currentHalfYear) { router.refresh(); return; }
+          // Bootstrap des ersten Halbjahres: nur die Frist wechselt von null
+          // auf einen Wert, das Halbjahr bleibt bei 1 (siehe checkAndMaybeRefresh).
+          if (row && "current_half_year_deadline" in row
+            && (row.current_half_year_deadline ?? null) !== (deadline ?? null)) router.refresh();
         },
       )
       .on(
@@ -160,22 +190,52 @@ export default function MultiplayerGame({
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [supabase, seasonId, currentHalfYear, router]);
+  }, [supabase, seasonId, currentHalfYear, deadline, router]);
 
+  /* Auch die Frist wird verglichen, nicht nur das Halbjahr: Der Bootstrap des
+     ersten Halbjahres (commit_season_bootstrap) ergänzt Dealflow und Frist,
+     lässt current_half_year aber bei 1 stehen. Ein Vergleich allein über
+     status/current_half_year hätte diesen Übergang deshalb nie bemerkt — die
+     Ansicht wäre ohne Deals hängen geblieben, bis der Spieler selbst neu
+     geladen hätte. */
   const checkAndMaybeRefresh = useCallback(async () => {
     const { data } = await supabase
       .from("seasons")
-      .select("status, current_half_year")
+      .select("status, current_half_year, current_half_year_deadline")
       .eq("id", seasonId)
       .maybeSingle();
     if (!data) return;
-    if (data.status !== "running" || data.current_half_year !== currentHalfYear) router.refresh();
-  }, [supabase, seasonId, currentHalfYear, router]);
+    if (
+      data.status !== "running"
+      || data.current_half_year !== currentHalfYear
+      || (data.current_half_year_deadline ?? null) !== (deadline ?? null)
+    ) router.refresh();
+  }, [supabase, seasonId, currentHalfYear, deadline, router]);
 
   useEffect(() => {
     const id = setInterval(checkAndMaybeRefresh, 20_000);
     return () => clearInterval(id);
   }, [checkAndMaybeRefresh]);
+
+  /* Bootstrap des ersten Halbjahres: start_season() legt den Ausgangszustand
+     ohne Dealflow an (newDeal() braucht den BOOK-Katalog aus lib/engine und
+     läuft deshalb nicht in SQL). Bis die Edge Function das nachgeholt hat,
+     zeigt der Dealflow-Tab schlicht nichts an — vorher bis zu eine Minute
+     lang, weil nur der Cron-Job den Bootstrap ausgelöst hat. Jetzt stößt die
+     Ansicht ihn beim ersten Rendern selbst an und prüft im Sekundentakt nach. */
+  const bootstrapPending = (state.deals as Any[]).length === 0 && currentHalfYear === 1;
+  useEffect(() => {
+    if (!bootstrapPending) return;
+    let stopped = false;
+    async function kick() {
+      if (stopped) return;
+      await requestEvaluation();
+      await checkAndMaybeRefresh();
+    }
+    kick();
+    const id = setInterval(kick, 4_000);
+    return () => { stopped = true; clearInterval(id); };
+  }, [bootstrapPending, requestEvaluation, checkAndMaybeRefresh]);
 
   // Mobile Browser frieren Timer und die Realtime-Websocket-Verbindung ein,
   // sobald der Bildschirm gesperrt oder die App gewechselt wird -- weder das
@@ -196,13 +256,39 @@ export default function MultiplayerGame({
     };
   }, [checkAndMaybeRefresh]);
 
-  // Manueller Prüf-Button (siehe unten, in der Kopfleiste und im Wartebild-
-  // schirm): fragt den aktuellen Stand direkt ab, statt blind zu refreshen —
-  // damit sieht der Klick immer eine Reaktion, auch wenn das nächste
-  // Halbjahr serverseitig einfach noch nicht fertig ausgewertet ist.
+  /* Manueller Button (Kopfleiste und Wartebildschirm). Vorher hat er den
+     Stand nur abgefragt und konnte deshalb nichts beschleunigen — die
+     Auswertung hing weiter am minütlichen Cron-Job. Jetzt stößt er sie
+     zuerst selbst an (soweit fällig), wartet kurz auf die Edge Function und
+     prüft dann. Fällig ist die Partie nur, wenn ohnehin alle abgegeben haben
+     oder die Frist erreicht ist; vorzeitig erzwingen lässt sich nichts. */
   async function handleManualAdvance() {
     setChecking(true);
     setNotReadyYet(false);
+
+    const triggered = await requestEvaluation();
+    if (triggered) {
+      // Der Edge-Function-Aufruf läuft asynchron über pg_net; zweimal kurz
+      // nachfassen deckt den üblichen Fall (inkl. Kaltstart) ab.
+      for (let i = 0; i < 2; i++) {
+        await new Promise((r) => setTimeout(r, 1_500));
+        const { data } = await supabase
+          .from("seasons")
+          .select("status, current_half_year")
+          .eq("id", seasonId)
+          .maybeSingle();
+        if (data && (data.status !== "running" || data.current_half_year !== currentHalfYear)) {
+          router.refresh();
+          setChecking(false);
+          return;
+        }
+      }
+      // Angestoßen, aber noch nicht fertig — kein "noch nicht so weit"-Hinweis,
+      // der wäre hier irreführend. Der 5-Sekunden-Takt oben zieht nach.
+      setChecking(false);
+      return;
+    }
+
     const { data } = await supabase
       .from("seasons")
       .select("status, current_half_year")
@@ -257,6 +343,10 @@ export default function MultiplayerGame({
       p.initA = { doneQ: quarter + Math.max(1, initDur(E)) };
     }
     if (ltipStaged.includes(c.uid)) p.ltip = true;
+    // Vorgemerkte Benchmarkstudie sofort sichtbar machen: die Karte zeigt
+    // Branchenreferenz und Marktwachstum ab dem Klick, nicht erst nach der
+    // Auswertung — genauso wie im Übungsmodus, wo runStudy() direkt wirkt.
+    if (studyStaged.includes(c.uid)) p.dd = true;
     const exit = stagedExitByHolding[c.uid];
     if (exit && !p.proc) {
       p.proc = { resolveQ: quarter + (exit.action === "process" ? PROC_Q : 1) };
@@ -465,6 +555,7 @@ export default function MultiplayerGame({
     if (dueDiligence.length) payload.dueDiligence = dueDiligence;
     if (initiatives.length) payload.initiatives = initiatives;
     if (ltipStaged.length) payload.ltip = ltipStaged;
+    if (studyStaged.length) payload.studies = studyStaged;
     if (searches.length) payload.searches = searches;
     if (hireDecisions.length) payload.hires = hireDecisions;
     if (exitStarts.length) payload.exitStarts = exitStarts;
@@ -485,6 +576,10 @@ export default function MultiplayerGame({
     }
     setSubmitted(true);
     refreshStatus();
+    // Sofort anstoßen statt bis zum nächsten Cron-Tick zu warten. Im
+    // Einzelspielerfall (vier KI-Fonds) ist die Partie damit unmittelbar
+    // nach der eigenen Abgabe fällig und wird in Sekunden ausgewertet.
+    requestEvaluation();
   }
 
   if (submitted) {
@@ -546,7 +641,11 @@ export default function MultiplayerGame({
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="stat">Halbjahr</div>
-            <div className="statv mono">{quarter}<span style={{ opacity: .5 }}>/{PERIODS}</span></div>
+            {/* Das Halbjahr, über das gerade entschieden wird (1-basiert) — nicht
+                die Zahl der bereits ausgewerteten. Vorher stand hier im ersten
+                Halbjahr "0/20", während der Abgabebildschirm "Halbjahr 1
+                abgegeben" meldete. */}
+            <div className="statv mono">{currentHalfYear}<span style={{ opacity: .5 }}>/{PERIODS}</span></div>
           </div>
           <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
             ←
@@ -590,9 +689,34 @@ export default function MultiplayerGame({
 
         {tab === "deals" && (
           <>
+            {/* Die Sektormultiples gehören dorthin, wo eingekauft wird: sie sind
+                die Referenz für jede Preiserwartung auf den Karten darunter.
+                Die Wertung gegen die Kohorte steht dafür im Peer-Group-Tab. */}
             <div className="card">
-              <h3 className="disp">Wertung gegen die Kohorte</h3>
-              <TvpiChart hist={tvpiHist} meIdx={meIdx} />
+              <h3 className="disp">
+                EV/EBITDA je Sektor
+                <Info t="Sektormultiple">
+                  Das durchschnittliche Bewertungsvielfache des EBITDA in diesem Sektor — die Referenz für
+                  jede Preiserwartung im Dealflow. Es bewegt sich jedes Halbjahr mit dem Markt und wirkt in
+                  beide Richtungen: teuer einkaufen kostet, teuer verkaufen bringt. Der Pfeil zeigt gegen
+                  das Niveau bei Fondsauflage.
+                </Info>
+              </h3>
+              <MarketChart hist={marketHist} />
+              <table className="ledger"><tbody>
+                {SECNAMES.map((s: string) => {
+                  const d = (state.market[s] / SECTORS[s].m - 1) * 100;
+                  return (
+                    <tr key={s}>
+                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
+                      <td>{x(state.market[s])}
+                        <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
+                          {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %
+                        </span></td>
+                    </tr>
+                  );
+                })}
+              </tbody></table>
             </div>
             {landmark && quarter >= LM_ANNOUNCE && quarter < LM_DEAL && (
               <div className="card lm">
@@ -606,6 +730,14 @@ export default function MultiplayerGame({
                     <tr><td className="lab">Kennzahlen</td><td>Erst mit dem Datenraum</td></tr>
                     <tr><td className="lab">Am Markt in</td><td>{hj(LM_DEAL - quarter)}</td></tr>
                   </tbody></table>
+                </div>
+              </div>
+            )}
+            {bootstrapPending && (
+              <div className="card">
+                <div className="pad" style={{ paddingTop: 16, fontSize: 13, color: "var(--ink2)", lineHeight: 1.55 }}>
+                  Der erste Dealflow wird gerade zusammengestellt — einen Moment.
+                  Die Ansicht aktualisiert sich von selbst, sobald die Prozesse offen sind.
                 </div>
               </div>
             )}
@@ -633,13 +765,10 @@ export default function MultiplayerGame({
         {tab === "port" && (
           <>
             <div className="card">
-              <h3 className="disp">Wertung gegen die Kohorte</h3>
-              <TvpiChart hist={tvpiHist} meIdx={meIdx} />
-            </div>
-            <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
               <SectorSplit holdings={me.holdings} market={state.market} cash={me.cash} />
             </div>
+            <SeasonDrivers realized={me.realized} />
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
                 Noch keine Beteiligungen. Im Dealflow findest du strukturierte Prozesse und proprietäre Kontakte.
@@ -660,7 +789,7 @@ export default function MultiplayerGame({
                       search: (seat: Seat) => setSearches((arr) => [...arr, { holdingUid: c.uid, seat }]),
                       init: (dim: "plat" | "acc") => setInitPick({ uid: c.uid, dim }),
                       ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
-                      study: null,
+                      study: () => setStudyStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
                     }} />
                   {stagedExit && stagedExit.action !== "process" && (
                     <p className="hint" style={{ margin: "-8px 16px 14px" }}>
@@ -687,6 +816,15 @@ export default function MultiplayerGame({
 
         {tab === "rank" && (
           <>
+            {/* Die Wertung gegen die Kohorte steht jetzt hier statt im
+                Dealflow-Tab: sie gehört zur Rangliste, nicht zum Einkauf. */}
+            <div className="card">
+              <h3 className="disp">
+                Wertung gegen die Kohorte
+                <Info k="score" />
+              </h3>
+              <TvpiChart hist={tvpiHist} meIdx={meIdx} />
+            </div>
             <div className="card">
               <h3 className="disp">Peer Group</h3>
               {rank.map((f, i) => (
@@ -733,24 +871,6 @@ export default function MultiplayerGame({
                   )}
                 </div>
               ))}
-            </div>
-            <div className="card">
-              <h3 className="disp">EV/EBITDA je Sektor</h3>
-              <MarketChart hist={marketHist} />
-              <table className="ledger"><tbody>
-                {SECNAMES.map((s: string) => {
-                  const d = (state.market[s] / SECTORS[s].m - 1) * 100;
-                  return (
-                    <tr key={s}>
-                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
-                      <td>{x(state.market[s])}
-                        <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                          {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %
-                        </span></td>
-                    </tr>
-                  );
-                })}
-              </tbody></table>
             </div>
           </>
         )}

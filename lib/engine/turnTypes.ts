@@ -58,6 +58,10 @@ export interface OfferDecisionIntent {
 export interface TurnDecisions {
   bids?: Bid[];
   dueDiligence?: string[];
+  /* Benchmarkstudien: uid je Beteiligung, für die nachträglich die
+     Branchenreferenz beauftragt wird (runStudy im Übungsmodus). Nur sinnvoll
+     für Beteiligungen, die ohne Due Diligence gekauft wurden. */
+  studies?: string[];
   initiatives?: InitiativeIntent[];
   ltip?: string[];
   searches?: SearchIntent[];

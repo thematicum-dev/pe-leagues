@@ -232,7 +232,7 @@ export default function PeLeagues() {
         costTotal: eb * w.mult - eb * w.lev + eb * w.mult * ENTRY_FEE,
         cashOut: 0, recapOut: 0, costLeft: eb * w.mult - eb * w.lev + eb * w.mult * ENTRY_FEE,
         entryQ: q,
-        hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev }],
+        hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
       };
       c.baseLoad = seatLoad(c);
       spendFund(f, c.entryEquity, q);
@@ -407,7 +407,8 @@ export default function PeLeagues() {
     F.forEach((f) => {
       f.holdings.forEach((c) => {
         const eb = ebitdaOf(c);
-        c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality, eq: navValueOf(c, mk) + (c.cashOut || 0) }];
+        c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
+          eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0 }];
       });
     });
 
@@ -1443,7 +1444,7 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
     entryMult: mult, entryEbitda: eb, entryDebt: eb * lev,
     entryEV: eb * mult, entryFees: eb * mult * ENTRY_FEE,
     cashOut: 0, recapOut: 0, done: [],
-    hist: [{ rev: d.revenue, eb, nd: eb * lev, mg: d.margin, ql: d.quality, eq: eb * mult - eb * lev }],
+    hist: [{ rev: d.revenue, eb, nd: eb * lev, mg: d.margin, ql: d.quality, eq: eb * mult - eb * lev, mult, st: 1, out: 0 }],
   };
   c.entryEquity = eb * mult - eb * lev + eb * mult * ENTRY_FEE;
   c.costTotal = c.entryEquity; c.costLeft = c.entryEquity;

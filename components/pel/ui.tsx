@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useContext } from "react";
+import React, { useState, useMemo, useEffect, useContext, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
 import { createRng } from "@/lib/engine";
@@ -67,6 +68,36 @@ export const CSS = `
 .pel .deltas > div{flex:1;padding:12px 10px;text-align:center;}
 .pel .deltas > div + div{border-left:1px solid var(--rule);}
 .pel .deltas .dv{font-size:15px;font-weight:500;margin-top:3px;}
+/* Erklär-Punkt neben spielspezifischen Kennzahlen. Tippen klappt den Text
+   darunter auf — kein Hover, weil das auf dem Telefon nicht existiert. */
+.pel .infb{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
+  border-radius:50%;border:1px solid var(--rule);background:transparent;color:var(--ink2);
+  font-size:9.5px;font-weight:700;font-family:inherit;line-height:1;padding:0;margin-left:5px;
+  vertical-align:middle;cursor:pointer;flex:none;}
+.pel .infb:hover:not(:disabled){background:var(--ink2);color:var(--card);border-color:var(--ink2);}
+.pel .infb.on{background:var(--gold);border-color:var(--gold);color:var(--panel);}
+/* Die Erklärung erscheint als Bottom Sheet, nicht als Block unter dem Button.
+   Grund: die Buttons sitzen teils in sehr schmalen Spalten (KPI-Raster,
+   Tabellenzellen) — dort wurde der Text auf wenige Zeichen Breite gequetscht
+   und war praktisch unlesbar. Das Sheet ist von der Position des Buttons
+   unabhängig und auf dem Telefon ohnehin die vertrautere Geste. */
+.pel .infsheet{padding:20px 18px 26px;}
+.pel .infsheet .it{font-size:15px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;}
+.pel .infsheet .ib{font-size:13.5px;line-height:1.65;color:var(--ink2);}
+.pel .infsheet .ib b{color:var(--ink);font-weight:600;}
+.pel .infsheet .ic{width:100%;margin-top:18px;}
+.pel .infgrip{width:34px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;}
+/* Treiberbalken: positiv nach rechts, negativ nach links, gemeinsame Skala. */
+.pel .drv{display:flex;flex-direction:column;gap:7px;}
+.pel .drvrow{display:flex;align-items:center;gap:8px;}
+.pel .drvlab{font-size:11.5px;color:var(--ink2);width:88px;flex:none;}
+.pel .drvtrack{position:relative;flex:1;height:12px;min-width:0;background:var(--shade);}
+.pel .drvzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--rule);}
+.pel .drvbar{position:absolute;top:1px;bottom:1px;min-width:1px;}
+.pel .drvbar.pos{background:var(--teal);}
+.pel .drvbar.neg{background:var(--ox);}
+.pel .drvval{font-size:11.5px;width:78px;flex:none;text-align:right;}
+.pel .drvhint{font-size:10.5px;color:var(--ink2);}
 .pel .hdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px;}
 .pel .shelfmeta{font-size:11.5px;line-height:1.4;color:var(--ink2);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .stat{font-size:9px;letter-spacing:.13em;text-transform:uppercase;opacity:.55;white-space:nowrap;}
@@ -551,7 +582,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             ? <span style={{ color: gapG >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                 {" "}{gapG >= 0 ? "+" : "−"}{Math.abs(gapG).toFixed(1).replace(".", ",")} pp</span>
             : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>}</td></tr>
-        <tr><td className="lab">Erwartete Performance vs. Markt</td><td>
+        <tr><td className="lab">Wachstum ggü. Sektor erwartet</td><td>
           {dd
             ? <span style={{ color: dEst >= 0 ? "var(--teal)" : "var(--ox)" }}>
                 {dEst >= 0 ? "+" : "−"}{Math.abs(dEst).toFixed(1).replace(".", ",")}
@@ -560,10 +591,11 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
                 </span>
               </span>
             : <span style={{ color: "var(--ink2)" }}>— <span style={{ fontSize: 11 }}>nur mit Datenraum</span></span>}
+          <Info k="drift" />
         </td></tr>
         <tr><td className="lab">Preiserwartung</td><td>{x(d.askMult)}</td></tr>
         <tr><td className="lab">EV/EBITDA Sektor</td><td>{x(market[d.sector])}</td></tr>
-        <tr><td className="lab">Assetqualität</td><td>{hidden ? "—" : Math.round(d.quality)}</td></tr>
+        <tr><td className="lab">Assetqualität</td><td>{hidden ? "—" : Math.round(d.quality)}<Info k="quality" /></td></tr>
       </tbody></table>
       <div className="pad" style={{ paddingTop: 12 }}>
         {dd ? (
@@ -577,9 +609,9 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             </button>
             <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 6 }}>
               {hidden ? "Ohne DD kein Datenraum — du kaufst auf Umsatz und Bauchgefühl."
-                : flagHidden ? "Flagge ungeprüft, Branchenreferenz und erwartete Performance vs. Markt fehlen."
+                : flagHidden ? "Flagge ungeprüft, Branchenreferenz und erwartetes Wachstum ggü. dem Sektor fehlen."
                 : ddFull ? `Bei Analysefähigkeit ${me.attrs.analysis} laufen höchstens ${ddCap} Datenräume gleichzeitig. Ein Prozess müsste abgebrochen werden.`
-                : `Branchenreferenz, Schätzung der erwarteten Performance gegenüber dem Markt (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig sofort — auch wenn du den Deal nicht bekommst.`}
+                : `Branchenreferenz, Schätzung des Wachstums gegenüber dem Sektor (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig sofort — auch wenn du den Deal nicht bekommst.`}
             </p>
           </div>
         )}
@@ -707,13 +739,13 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             <div className="mono kv">{cf ? eur(cf.eb - cf.capex) : "—"}</div>
           </div>
           <div>
-            <div className="eyebrow">Cash Conversion</div>
+            <div className="eyebrow">Cash Conversion<Info k="conv" /></div>
             <div className="mono kv" style={{ color: conv == null ? "var(--ink)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
               {conv == null ? "—" : pct(conv)}
             </div>
           </div>
           <div>
-            <div className="eyebrow">Leverage</div>
+            <div className="eyebrow">Leverage<Info k="cov" /></div>
             <div className="mono kv" style={{ color: lev > (c.covLimit ?? 6.5) ? "var(--ox)" : "var(--ink)" }}>
               {x(lev)}
               <span style={{ display: "block", fontSize: 10, color: "var(--ink2)", fontWeight: 400, marginTop: 2 }}>
@@ -726,7 +758,8 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       <table className="ledger"><tbody>
         <tr><td className="lab">Assetqualität</td><td>{Math.round(c.quality)}
           {c.entryQuality != null && <span style={{ color: c.quality >= c.entryQuality ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-            {" "}{c.quality >= c.entryQuality ? "+" : "−"}{Math.abs(Math.round(c.quality - c.entryQuality))}</span>}</td></tr>
+            {" "}{c.quality >= c.entryQuality ? "+" : "−"}{Math.abs(Math.round(c.quality - c.entryQuality))}</span>}
+          <Info k="quality" /></td></tr>
         <tr><td className="lab">Enterprise Value</td>
           <td>{eur(evOf(c, markMultiple(c, market)))} <span style={{ fontSize: 11, color: "var(--ink2)" }}>bei {x(markMultiple(c, market))}</span></td></tr>
         <tr><td className="lab">Total Value</td>
@@ -735,6 +768,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)}</span>}</td></tr>
       </tbody></table>
       <Stages c={c} compact={quarter} />
+      <HalfYearDelta c={c} />
       <Track c={c} />
       <div className="pad" style={{ paddingTop: 12 }}>
         <div className="seats">
@@ -876,6 +910,168 @@ export function Stages({ c, compact }) {
       {OS > 0 && <div style={{ fontSize: 11, color: "var(--ox)", paddingBottom: 4 }}>
         ⚠️ Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
       </div>}
+    </div>
+  );
+}
+
+/* Wertveränderung eines einzelnen Halbjahres, zerlegt in ihre drei Treiber —
+   dieselbe Zerlegung wie die Value Bridge beim Exit (makeBridge), nur zwischen
+   zwei aufeinanderfolgenden Periodenständen statt zwischen Einstieg und Exit:
+
+     EBITDA      (EBITDA_neu − EBITDA_alt) × Multiple_alt × Anteil
+     Multiple    EBITDA_neu × (Multiple_neu − Multiple_alt) × Anteil
+     Entschuldung (Schulden_alt − Schulden_neu) × Anteil
+
+   Die drei Summanden ergeben zusammen exakt die Veränderung des
+   Eigenkapitalwerts. Beteiligungen aus älteren Partien haben noch kein
+   mult/st im Periodenstand — dort wird das Multiple aus dem gespeicherten
+   Eigenkapitalwert zurückgerechnet, damit auch laufende Partien die Aufteilung
+   sehen. */
+export function bridgeStep(prev, now) {
+  if (!prev || !now) return null;
+  const stP = prev.st ?? 1, stN = now.st ?? 1;
+  const outP = prev.out ?? 0, outN = now.out ?? 0;
+  // Nur der NAV-Teil zählt für die Zerlegung; bereits ausgeschüttete
+  // Rekapitalisierungen stehen als eigene Position daneben.
+  const navP = prev.eq - outP, navN = now.eq - outN;
+  const mP = prev.mult ?? (prev.eb > 0 ? (navP / (stP || 1) + prev.nd) / prev.eb : null);
+  const mN = now.mult ?? (now.eb > 0 ? (navN / (stN || 1) + now.nd) / now.eb : null);
+  if (mP == null || mN == null) return null;
+  const ebitda = (now.eb - prev.eb) * mP * stN;
+  const mult = now.eb * (mN - mP) * stN;
+  const delev = (prev.nd - now.nd) * stN;
+  const total = navN - navP;
+  return { ebitda, mult, delev, dist: outN - outP, rest: total - ebitda - mult - delev, total };
+}
+
+/* Balkenzeile für die drei Treiber. Positiv nach rechts, negativ nach links,
+   gemeinsame Skala — so ist auf einen Blick zu sehen, welcher Treiber das
+   Halbjahr gemacht hat und welcher dagegen lief. */
+export function DriverBars({ rows }) {
+  const scale = Math.max(...rows.map(([, v]) => Math.abs(v)), 0.01);
+  return (
+    <div className="drv">
+      {rows.map(([label, v, hint]) => (
+        <div className="drvrow" key={label}>
+          <span className="drvlab">{label}</span>
+          <span className="drvtrack">
+            <i className="drvzero" />
+            <i
+              className={"drvbar" + (v >= 0 ? " pos" : " neg")}
+              style={v >= 0
+                ? { left: "50%", width: `${(Math.abs(v) / scale) * 50}%` }
+                : { right: "50%", width: `${(Math.abs(v) / scale) * 50}%` }}
+            />
+          </span>
+          <span className="mono drvval" style={{ color: v >= 0 ? "var(--teal)" : "var(--ox)" }}>
+            {v >= 0 ? "+" : "−"}{eur(Math.abs(v))}
+          </span>
+          {hint && <span className="drvhint">{hint}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Was das letzte Halbjahr an dieser Beteiligung bewegt hat. Steht im
+   Portfolio-Tab über dem Verlauf: der Verlauf zeigt die ganze Halteperiode,
+   dieser Block beantwortet "was ist gerade passiert". */
+export function HalfYearDelta({ c }) {
+  const h = c.hist || [];
+  if (h.length < 2) {
+    return (
+      <div className="pad" style={{ paddingTop: 4, paddingBottom: 12, fontSize: 12, color: "var(--ink2)" }}>
+        Die Halbjahresveränderung erscheint nach dem ersten vollen Halbjahr im Portfolio.
+      </div>
+    );
+  }
+  const prev = h[h.length - 2], now = h[h.length - 1];
+  const b = bridgeStep(prev, now);
+  if (!b) return null;
+  const dRev = prev.rev > 0 ? (now.rev / prev.rev - 1) * 100 : 0;
+  const dMg = now.mg - prev.mg;
+
+  return (
+    <div className="pad" style={{ paddingTop: 12, paddingBottom: 14 }}>
+      <div className="eyebrow" style={{ marginBottom: 4 }}>
+        Letztes Halbjahr
+        <Info t="Halbjahresveränderung">
+          Die Veränderung des Eigenkapitalwerts seit dem letzten Halbjahr, zerlegt in ihre drei Treiber.
+          <b> EBITDA</b> ist operative Arbeit — mehr Umsatz oder bessere Marge, bewertet zum alten Multiple.
+          <b> Multiple</b> ist der Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
+          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung, die eins zu eins ins Eigenkapital
+          wandert. Die drei Beträge ergeben zusammen die Gesamtveränderung.
+        </Info>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: b.total >= 0 ? "var(--teal)" : "var(--ox)" }}>
+          {b.total >= 0 ? "+" : "−"}{eur(Math.abs(b.total))}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+          Eigenkapitalwert · Umsatz {dRev >= 0 ? "+" : "−"}{Math.abs(dRev).toFixed(1).replace(".", ",")} %
+          {" "}· Marge {dMg >= 0 ? "+" : "−"}{Math.abs(dMg).toFixed(1).replace(".", ",")} pp
+        </span>
+      </div>
+      <DriverBars rows={[
+        ["EBITDA", b.ebitda, null],
+        ["Multiple", b.mult, null],
+        ["Entschuldung", b.delev, null],
+        ...(Math.abs(b.dist) > 0.05 ? [["Ausschüttung", b.dist, null]] : []),
+      ]} />
+    </div>
+  );
+}
+
+/* Woher die Rendite des ganzen Fonds kam. Summiert die Value Bridges aller
+   realisierten Deals (bei Exit in realized[].bridge mitgeschrieben) und zeigt
+   dieselben drei Treiber wie die Halbjahresansicht, nur über die gesamte
+   Fondslaufzeit. Deals aus Partien, die vor dieser Änderung gestartet sind,
+   haben keine Bridge gespeichert und werden übersprungen — die Zahl der
+   berücksichtigten Deals steht deshalb dabei. */
+export function SeasonDrivers({ realized, title = "Woher die Rendite kam" }) {
+  const withBridge = (realized || []).filter((r) => r && r.bridge);
+  if (!withBridge.length) return null;
+  const sum = withBridge.reduce((a, r) => ({
+    entry: a.entry + (r.bridge.entry || 0),
+    ebitda: a.ebitda + (r.bridge.ebitda || 0),
+    mult: a.mult + (r.bridge.mult || 0),
+    delev: a.delev + (r.bridge.delev || 0),
+    dist: a.dist + (r.bridge.dist || 0),
+    cost: a.cost + (r.bridge.cost || 0),
+    exit: a.exit + (r.bridge.exit || 0),
+  }), { entry: 0, ebitda: 0, mult: 0, delev: 0, dist: 0, cost: 0, exit: 0 });
+  const gain = sum.exit - sum.entry;
+
+  return (
+    <div className="card">
+      <h3 className="disp">
+        {title}
+        <Info t="Value Bridge des Fonds">
+          Der Weg vom eingesetzten Eigenkapital zum Rückfluss, aufgeteilt nach Ursache.
+          <b> EBITDA</b> ist das, was die Unternehmen operativ mehr verdienen als beim Einstieg — deine
+          Portfolioarbeit. <b>Multiple</b> ist Bewertungsveränderung am Markt: gekauft zu 8×, verkauft zu 10×
+          bringt Geld, ohne dass sich im Unternehmen etwas geändert hätte. <b>Entschuldung</b> ist getilgte
+          Nettoverschuldung. Ein Fonds, dessen Rendite fast nur aus dem Multiple kommt, hatte Glück mit dem
+          Markt; einer, der aus EBITDA kommt, hat gearbeitet.
+        </Info>
+      </h3>
+      <div className="pad" style={{ paddingTop: 6 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+          <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: gain >= 0 ? "var(--teal)" : "var(--ox)" }}>
+            {gain >= 0 ? "+" : "−"}{eur(Math.abs(gain))}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+            über {eur(sum.entry)} eingesetztes Eigenkapital · {withBridge.length} realisierte Beteiligungen
+          </span>
+        </div>
+        <DriverBars rows={[
+          ["EBITDA", sum.ebitda, null],
+          ["Multiple", sum.mult, null],
+          ["Entschuldung", sum.delev, null],
+          ...(Math.abs(sum.dist) > 0.05 ? [["Rekapitalisierung", sum.dist, null]] : []),
+          ...(Math.abs(sum.cost) > 0.05 ? [["Kosten & Sonstiges", sum.cost, null]] : []),
+        ]} />
+      </div>
     </div>
   );
 }
@@ -1102,6 +1298,128 @@ export function Def({ t, children }) {
       <div className="dt">{t}</div>
       <div className="dd">{children}</div>
     </div>
+  );
+}
+
+/* Glossar der spielspezifischen Kennzahlen. Nur Begriffe, die entweder gar
+   nicht aus der PE-Praxis stammen (Assetqualität, Eignung) oder dort anders
+   heißen bzw. anders gerechnet werden als hier. Gängige Begriffe wie EBITDA,
+   TVPI oder Leverage stehen bewusst nicht darin — die erklärt niemand, der
+   das Spiel spielt, gern erklärt bekommen. */
+export const GLOSSARY = {
+  drift: {
+    t: "Erwartete Performance vs. Markt",
+    d: <>Wächst dieses Unternehmen dauerhaft <b>schneller oder langsamer als sein Sektor</b> — gewinnt es
+      also Marktanteile oder verliert es welche? Angegeben in Prozentpunkten Umsatzwachstum pro Jahr
+      gegenüber dem Sektorschnitt. <b>+2,0</b> heißt: rund zwei Punkte mehr Wachstum als der Markt, Jahr für
+      Jahr. Die Zahl ist eine <b>Schätzung aus dem Datenraum</b>, keine Tatsache; das <b>±-Band</b> dahinter
+      ist die Unschärfe. Eine höhere Due-Diligence-Fähigkeit verkleinert das Band, schließt es aber nie.</>,
+  },
+  quality: {
+    t: "Assetqualität",
+    d: <>Ein Sammelwert von 0 bis 100 für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
+      Marge zu stehen: <b>Kundenbindung, Marktposition, Preissetzungsmacht, Abhängigkeiten</b>. Er wirkt
+      direkt auf das Bewertungsmultiple — je höher, desto mehr zahlt ein Käufer je Euro EBITDA. Value
+      Creation kann ihn heben, ein Abschwung oder überzogener Leverage drückt ihn.</>,
+  },
+  conv: {
+    t: "Cash Conversion",
+    d: <>Wie viel vom EBITDA tatsächlich als Cash übrig bleibt: <b>(EBITDA − Capex − Veränderung Working
+      Capital) ÷ EBITDA</b>. Bewusst <b>vor Zinsen und Steuern</b>, damit die Zahl das Unternehmen misst und
+      nicht die Finanzierung — so bleibt sie über alle Ziele im Dealflow vergleichbar. Unter 35 % wird es
+      eng: dann finanziert das Wachstum sich nicht selbst.</>,
+  },
+  cov: {
+    t: "Covenant",
+    d: <>Die <b>Leverage-Obergrenze aus dem Kreditvertrag</b>. Steigt die Nettoverschuldung über dieses
+      Vielfache des EBITDA, ist der Covenant gerissen. <b>Zwei Halbjahre in Folge darüber und die
+      Kreditgeber übernehmen</b> — das Eigenkapital ist dann vollständig verloren. Die Financing-Fähigkeit
+      des Fonds verschafft zusätzlichen Spielraum.</>,
+  },
+  score: {
+    t: "Wertung",
+    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVPI, zur Hälfte IRR</b>, jeweils gegen
+      eine Branchenbenchmark normiert. <b>1,00 bedeutet exakt Benchmark-Niveau.</b> Sie beantwortet beide
+      Fragen zugleich — wie viel du verdienst und wie lange du dafür brauchst. Ein hoher Multiple nach zehn
+      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.</>,
+  },
+  fit: {
+    t: "Eignung",
+    d: <>Wie gut eine Maßnahme <b>zum konkreten Defizit dieses Unternehmens</b> passt. Ein Cost-out-Programm
+      zahlt sich dort aus, wo Marge gegenüber der Branche fehlt, und läuft leer, wo sie schon darüber liegt.
+      Über <b>1,0</b> ist die Maßnahme klar angezeigt, unter <b>0,4</b> lohnt sie kaum. Jede Wiederholung
+      derselben Maßnahme senkt die Eignung weiter.</>,
+  },
+  endpressure: {
+    t: "Exitfenster",
+    d: <>Ab etwa Jahr 8 wissen Käufer, dass dein Fonds auf ein Laufzeitende zuläuft — und <b>preisen genau
+      das ein</b>. Der erzielbare Multiple sinkt mit jedem weiteren Halbjahr, unabhängig davon, wie gut das
+      Unternehmen läuft. Ein Verkaufsprozess braucht selbst zwei Halbjahre; wer zu spät startet, verkauft
+      zwangsläufig in den Abschlag hinein.</>,
+  },
+  dryPowder: {
+    t: "Dry Powder",
+    d: <>Das Kapital, das du <b>heute noch investieren kannst</b>: offenes Commitment plus einbehaltene
+      Erlöse, <b>abzüglich der Gebührenreserve</b>. Die Management Fee liegt innerhalb des Commitments —
+      über die Laufzeit rund 70 Mio. €, die von Anfang an reserviert sind. Deshalb sind von 500 Mio. €
+      Commitment ohne Recycling nur rund 430 Mio. € tatsächlich investierbar.</>,
+  },
+};
+
+/* Erklär-Button neben einer Kennzahl. Tippen klappt die Erklärung auf; sie
+   erscheint als eigener Block unter der Zeile, damit auf schmalen Displays
+   nichts umbricht oder überlagert wird. */
+export function Info({ k, t, children }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef(null);
+  const [host, setHost] = useState(null);
+  const entry = k ? GLOSSARY[k] : null;
+  const title = t ?? entry?.t;
+  const body = children ?? entry?.d;
+
+  /* Das Sheet wird per Portal in die .pel-Wurzel gehängt, nicht dort, wo der
+     Button steht. Grund: .card trägt durch die rise-Animation (fill-mode
+     both) dauerhaft einen transform-Wert, und ein transformierter Vorfahr
+     macht position:fixed relativ zu sich selbst statt zum Viewport — das
+     Sheet wäre sonst in der Karte eingesperrt statt über der ganzen Seite.
+     Die .pel-Wurzel behält dabei Theme-Klasse und CSS-Variablen. */
+  useEffect(() => {
+    if (!open) return;
+    const root = btnRef.current?.closest?.(".pel");
+    setHost(root ?? document.body);
+  }, [open]);
+
+  // Zurück-Taste und Escape schließen das Sheet, statt die Seite zu verlassen.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!body) return null;
+
+  const sheet = (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={title}
+      onClick={() => setOpen(false)}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="infgrip" />
+        <div className="infsheet">
+          <h4 className="it disp">{title}</h4>
+          <div className="ib">{body}</div>
+          <button className="ic" onClick={() => { haptic(5); setOpen(false); }}>Verstanden</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <button ref={btnRef} className={"infb" + (open ? " on" : "")} aria-expanded={open}
+        aria-label={`${title} erklären`}
+        onClick={(e) => { e.stopPropagation(); haptic(5); setOpen(true); }}>i</button>
+      {open && host && createPortal(sheet, host)}
+    </>
   );
 }
 
