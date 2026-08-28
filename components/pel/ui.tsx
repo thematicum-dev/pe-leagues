@@ -17,7 +17,8 @@ import {
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
-  initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf, isAngle,
+  impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
+  isAngle, LBO_YEARS,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
   retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
@@ -159,6 +160,13 @@ export const CSS = `
 .pel .ledger tr:last-child td{border-bottom:0;}
 .pel .ledger td:last-child{text-align:right;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;}
 .pel .ledger td.lab{color:var(--ink2);white-space:nowrap;width:1%;padding-right:10px;}
+/* Lange Bezeichnungen (".. vs. Sektor Benchmark") dürfen umbrechen, statt die
+   Wertspalte aus der Karte zu drücken. */
+.pel .ledger td.lab.wrap{white-space:normal;width:auto;min-width:0;}
+/* Gruppentrenner innerhalb einer Kennzahlentabelle: Geschäft / Ertrag /
+   Bewertung stehen als Blöcke, ohne dass es Zwischenüberschriften braucht. */
+.pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
+.pel .ledger tr.sep + tr td{padding-top:11px;}
 .pel .lb .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 .pel .tag{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
@@ -553,6 +561,13 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
   const gapM = d.margin - d.benchMargin;
   const gapG = d.growth - SECTORS[d.sector].g;
   const cap = d.levCap + 0.3 * me.attrs.financing;
+  /* Implied MoM: der Base Case des Underwritings zum aktuellen Reglerstand.
+     Ohne Datenraum gibt es keine Schätzung des Wachstums gegenüber dem Sektor
+     — dann wird mit Sektorwachstum gerechnet. Ist das EBITDA selbst verdeckt
+     (proprietärer Deal, zu geringe Analysefähigkeit), bleibt auch der MoM
+     verdeckt: sonst ließe sich aus ihm zurückrechnen, was die Karte gerade
+     bewusst nicht zeigt. */
+  const mom = hidden ? null : impliedMoM(d, mult, lev, me.attrs.financing, { drift: dd ? dEst : 0 });
 
   return (
     <div className={"card st" + (lm ? " lm" : "")} style={{ "--sec": SECCOLOR[d.sector] }}>
@@ -568,21 +583,19 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         {d.flag && flagHidden && <span className="tag">⚑ ?</span>}
         <p className="biz">{d.desc}</p>
       </div>
+      {/* Reihenfolge folgt dem Lesefluss einer Investmentvorlage: erst das
+          Geschäft (Umsatz und Wachstum), dann der Ertrag und seine Qualität,
+          dann die Bewertung. Die Rechnung — Enterprise Value, Equity Ticket
+          und Implied MoM — steht unter den Reglern, weil sie sich mit Gebot
+          und Leverage bewegt. */}
       <table className="ledger"><tbody>
-        <tr><td className="lab">Umsatz</td><td>{eur(d.revenue)}</td></tr>
-        <tr><td className="lab">EBITDA-Marge</td><td>{hidden ? "—" : pct(d.margin)}
-          {!hidden && (bench
-            ? <span style={{ color: gapM >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                {" "}{gapM >= 0 ? "+" : "−"}{Math.abs(gapM).toFixed(1).replace(".", ",")} pp</span>
-            : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>)}</td></tr>
-        <tr><td className="lab">EBITDA</td><td>{hidden ? "—" : eur(eb)}</td></tr>
-        <tr><td className="lab">EBITDA − Capex</td><td>{hidden ? "—" : eur(eb - capexA)}</td></tr>
-        <tr><td className="lab">Umsatzwachstum bisher</td><td>{pct(d.growth)}
+        <tr><td className="lab">Umsatz LTM</td><td>{eur(d.revenue)}</td></tr>
+        <tr><td className="lab">Umsatzwachstum L3Y</td><td>{pct(d.growth)}
           {bench
             ? <span style={{ color: gapG >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                 {" "}{gapG >= 0 ? "+" : "−"}{Math.abs(gapG).toFixed(1).replace(".", ",")} pp</span>
             : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>}</td></tr>
-        <tr><td className="lab">Wachstum ggü. Sektor erwartet</td><td>
+        <tr><td className="lab wrap">Erwartetes Wachstum vs. Sektor Benchmark</td><td>
           {dd
             ? <span style={{ color: dEst >= 0 ? "var(--teal)" : "var(--ox)" }}>
                 {dEst >= 0 ? "+" : "−"}{Math.abs(dEst).toFixed(1).replace(".", ",")}
@@ -593,9 +606,21 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             : <span style={{ color: "var(--ink2)" }}>— <span style={{ fontSize: 11 }}>nur mit Datenraum</span></span>}
           <Info k="drift" />
         </td></tr>
-        <tr><td className="lab">Preiserwartung</td><td>{x(d.askMult)}</td></tr>
-        <tr><td className="lab">EV/EBITDA Sektor</td><td>{x(market[d.sector])}</td></tr>
+
+        <tr className="sep"><td className="lab">EBITDA LTM</td><td>{hidden ? "—" : eur(eb)}</td></tr>
+        <tr><td className="lab wrap">EBITDA-Marge vs. Sektor Benchmark</td><td>{hidden ? "—" : pct(d.margin)}
+          {!hidden && (bench
+            ? <span style={{ color: gapM >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
+                {" "}{gapM >= 0 ? "+" : "−"}{Math.abs(gapM).toFixed(1).replace(".", ",")} pp</span>
+            : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>)}</td></tr>
+        <tr><td className="lab">EBITDA − Capex</td><td>{hidden ? "—" : eur(eb - capexA)}</td></tr>
+        <tr><td className="lab">Cash Conversion</td>
+          <td style={{ color: hidden ? "var(--ink2)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
+            {hidden ? "—" : pct(conv)}<Info k="conv" /></td></tr>
         <tr><td className="lab">Assetqualität</td><td>{hidden ? "—" : Math.round(d.quality)}<Info k="quality" /></td></tr>
+
+        <tr className="sep"><td className="lab">EV/EBITDA Sektor</td><td>{x(market[d.sector])}</td></tr>
+        <tr><td className="lab">Bewertungserwartung</td><td>{x(d.askMult)}</td></tr>
       </tbody></table>
       <div className="pad" style={{ paddingTop: 12 }}>
         {dd ? (
@@ -615,7 +640,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             </p>
           </div>
         )}
-        <div className="slrow"><span>Indikatives Angebot</span>
+        <div className="slrow"><span>Gebot</span>
           <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
         <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => setMult(+e.target.value)} />
         <p className={"hint" + (mult < reserve ? " ox" : "")} style={{ margin: "2px 0 0" }}>
@@ -625,17 +650,27 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
               ? `Off-Market. Der Gesellschafter verkauft nicht unter rund ${x(reserve)}, andere Fonds sitzen selten mit am Tisch.`
               : `Auktion. Reservationspreis rund ${x(reserve)}, die Kohorte bietet mit.`}
         </p>
-        <div className="slrow" style={{ marginTop: 8 }}><span>Leverage bei Closing</span>
+        <div className="slrow" style={{ marginTop: 8 }}><span>Leverage</span>
           <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
         <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => setLev(+e.target.value)} />
         <table className="ledger" style={{ marginTop: 10 }}><tbody>
           <tr><td className="lab">Enterprise Value</td><td>{hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)}</td></tr>
           <tr><td className="lab">Equity Ticket</td><td style={{ color: afford ? "var(--ink)" : "var(--ox)" }}>{eur(eq)}</td></tr>
-          <tr><td className="lab">Cash Conversion</td>
-            <td style={{ color: hidden ? "var(--ink2)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
-              {hidden ? "—" : pct(conv)}
-              <span style={{ fontSize: 11, color: "var(--ink2)" }}> vor Zins und Steuern</span></td></tr>
+          {/* Bewegt sich mit beiden Reglern: ein höheres Gebot drückt den
+              Multiple, mehr Fremdkapital hebelt ihn — bis der Zins ihn
+              wieder auffrisst. */}
+          <tr><td className="lab">Implied MoM {LBO_YEARS}Y</td>
+            <td style={{ color: mom == null ? "var(--ink2)" : mom >= 2 ? "var(--teal)" : mom >= 1.5 ? "var(--ink)" : "var(--ox)", fontWeight: 600 }}>
+              {mom == null ? "—" : `${mom.toFixed(2)}×`}
+              <Info k="impliedMoM" />
+            </td></tr>
         </tbody></table>
+        {mom != null && (
+          <p className="hint" style={{ marginTop: 6 }}>
+            Base Case ohne Value Creation, Exit zum Einstiegsmultiple nach {LBO_YEARS} Jahren.
+            Was darüber hinausgeht, musst du selbst erarbeiten.
+          </p>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           {bid ? (
             <button className="ox" style={{ flex: 1 }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
@@ -1357,6 +1392,18 @@ export const GLOSSARY = {
       Unternehmen läuft. Ein Verkaufsprozess braucht selbst zwei Halbjahre; wer zu spät startet, verkauft
       zwangsläufig in den Abschlag hinein.</>,
   },
+  impliedMoM: {
+    t: "Implied MoM 5Y",
+    d: <>Das Geldvielfache, das dieses Ziel <b>bei deinem aktuellen Gebot und Leverage</b> über fünf Jahre
+      abwürfe, wenn du es einfach laufen lässt — der <b>Base Case des Underwritings</b>. Gerechnet wird mit
+      derselben Mechanik wie im Spiel: Sektorwachstum plus erwarteter Vorsprung, Margenkonvergenz auf die
+      Branche, Capex, Working Capital, Zins, Steuern und Schuldentilgung.
+      <br /><br />
+      Bewusst konservativ: <b>kein Value-Creation-Programm</b> und <b>Exit zum Einstiegsmultiple</b> —
+      Multiple Expansion ist Marktglück, kein Plan. Der Wert bewegt sich mit beiden Reglern: mehr zahlen
+      drückt ihn, mehr Fremdkapital hebelt ihn, bis der höhere Zins den Hebel wieder auffrisst.
+      Was am Ende über diesem Wert steht, hast du durch Portfolioarbeit verdient.</>,
+  },
   dryPowder: {
     t: "Dry Powder",
     d: <>Das Kapital, das du <b>heute noch investieren kannst</b>: offenes Commitment plus einbehaltene
@@ -1366,10 +1413,10 @@ export const GLOSSARY = {
   },
 };
 
-/* Erklär-Button neben einer Kennzahl. Tippen klappt die Erklärung auf; sie
-   erscheint als eigener Block unter der Zeile, damit auf schmalen Displays
-   nichts umbricht oder überlagert wird. */
-export function Info({ k, t, children }) {
+/* Erklär-Button neben einer Kennzahl. Tippen öffnet die Erklärung als Bottom
+   Sheet — siehe die Begründung für Portal und Sheet im Funktionsrumpf. Entweder
+   k (Schlüssel aus GLOSSARY) oder t plus children angeben. */
+export function Info({ k = null, t = null, children = null }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
   const [host, setHost] = useState(null);

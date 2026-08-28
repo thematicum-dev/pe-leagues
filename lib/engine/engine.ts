@@ -1129,3 +1129,93 @@ export function makeBridge(c, gross, net) {
 }
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
 export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
+
+/* ---------- Implied Money Multiple (Base Case) ----------
+   Was das Zielunternehmen bei diesem Gebot und diesem Leverage über eine
+   normale Halteperiode einbrächte, wenn man es einfach laufen lässt: kein
+   Value-Creation-Programm, kein Multiple-Arbitrage, keine Zufallsereignisse.
+   Genau das, was in der Praxis vor einem Gebot gerechnet wird — der Base Case
+   des Underwritings, gegen den jede These sich beweisen muss.
+
+   Die Projektion ist keine zweite Spielmechanik, sondern stepCompany() ohne
+   Rauschen und ohne Maßnahmen: dieselben Formeln für Wachstum, Margenkonvergenz,
+   Capex, Working Capital, Zins, Steuern und Schuldentilgung. Wer den Base Case
+   schlägt, hat das über Portfolioarbeit verdient; wer ihn verfehlt, hat zu teuer
+   gekauft oder zu viel Fremdkapital aufgenommen.
+
+   Bewusste Annahmen, alle konservativ und im Hinweistext offengelegt:
+   - Exit zum Einstiegsmultiple. Multiple Expansion ist Marktglück, kein Plan.
+   - Reifegrade auf Branchenniveau (PLAT_BENCH/ACC_BENCH), keine Initiativen.
+   - Drift nur, soweit der Datenraum ihn hergibt; ohne Due Diligence null.
+   - Exitkosten wie bei einer Auktion (PROC_FEE).                              */
+export const LBO_YEARS = 5;
+
+export function lboProjection(
+  d, mult: number, lev: number, financing: number,
+  opts: { years?: number; drift?: number } = {},
+) {
+  const years = opts.years ?? LBO_YEARS;
+  const drift = opts.drift ?? 0;          // pp p.a. gegenüber dem Sektor, 0 = wie der Markt
+  const steps = Math.round(years * 2);    // Halbjahresschritte wie im Spiel
+
+  const eb0 = (d.revenue * d.margin) / 100;
+  if (!(eb0 > 0)) return null;
+  const ev0 = eb0 * mult;
+  const debt0 = eb0 * lev;
+  // Identisch zum Equity Ticket der Karte und zu entryEquity beim Closing
+  const equity0 = ev0 - debt0 + ev0 * ENTRY_FEE;
+  if (!(equity0 > 0)) return null;
+
+  // Zinssatz des Unternehmens bei Closing, wie in runQuarter gesetzt
+  const baseRate = BASE_RATE - 0.25 * financing;
+  const benchCapex = d.benchCapex ?? d.capexPct ?? 4;
+  const benchNwc = d.benchNwc ?? d.nwcPct ?? 15;
+  /* Reifegrade auf Branchenniveau: accEff = ACC_BENCH, plat = PLAT_BENCH.
+     Damit fallen die Reifegrad-Terme aus stepCompany() auf ihre Basiswerte. */
+  const cxPct = Math.max(0.5, benchCapex + ACC_BENCH * 0.6);
+  const nwcPct = Math.max(-10, benchNwc + ACC_BENCH * 2);
+  const gAnn = SECTORS[d.sector].g + drift;
+
+  let revenue = d.revenue;
+  let margin = d.margin;
+  let netDebt = debt0;
+  const rev0 = d.revenue;
+
+  for (let i = 0; i < steps; i++) {
+    const revPrev = revenue;
+    revenue = Math.max(4, revenue * (1 + gAnn / 200));
+
+    /* Margenkonvergenz auf das erreichbare Niveau. Ohne Maßnahmen ist das die
+       Branchenmarge plus Operating Leverage aus dem eigenen Wachstum — genau
+       targetMargin() mit plat = PLAT_BENCH und ohne initA/marginDrift. */
+    const opLev = clamp((revenue / Math.max(1, rev0) - 1) * 1.5, 0, 1.5);
+    const target = (d.benchMargin ?? margin) + opLev;
+    const pull = margin < target ? 0.30 : 0.40;
+    margin = clamp(margin + (target - margin) * pull, 3, 45);
+
+    const eb = (revenue * margin) / 100;
+    const ebH = eb / 2;
+    const capex = (revenue * cxPct) / 200;
+    const nwc = (nwcPct / 100) * (revenue - revPrev);
+    const rate = baseRate + Math.max(0, netDebt / Math.max(0.5, eb) - LEV_FREE) * LEV_STEP;
+    const interest = (netDebt >= 0 ? netDebt * rate : netDebt * baseRate * 0.4) / 200;
+    const tax = 0.3 * Math.max(0, ebH - interest - capex);
+    netDebt -= ebH - interest - capex - nwc - tax;
+  }
+
+  const ebExit = (revenue * margin) / 100;
+  const evExit = ebExit * mult;                    // Exit zum Einstiegsmultiple
+  const equityExit = Math.max(0, evExit - netDebt) * (1 - PROC_FEE);
+  return {
+    mom: equityExit / equity0,
+    equity0, equityExit, ebExit, netDebtExit: netDebt, revenueExit: revenue, marginExit: margin,
+    // Zerlegung wie die Value Bridge: woher der Zuwachs im Base Case käme
+    fromEbitda: (ebExit - eb0) * mult,
+    fromDelev: debt0 - netDebt,
+  };
+}
+
+export const impliedMoM = (d, mult, lev, financing, opts) => {
+  const p = lboProjection(d, mult, lev, financing, opts);
+  return p ? p.mom : null;
+};
