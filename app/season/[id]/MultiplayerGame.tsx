@@ -15,7 +15,7 @@
    Original (Gebote, Due Diligence, Search/Hire, Maßnahmen, MEP, Exits,
    Verkaufsangebote) ist abgebildet. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -25,9 +25,12 @@ import {
   Info, SeasonDrivers,
 } from "@/components/pel/ui";
 import type {
-  RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent, HireIntent,
-  ExitStartIntent, OfferDecisionIntent, Seat, HireChoice,
+  RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
+  ExitStartIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
+import {
+  EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
+} from "./turnDraft";
 import {
   BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
   IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, MAX_PROC, MAX_SLOTS, PERIODS, PROC_FEE, PROC_Q,
@@ -55,6 +58,7 @@ export interface MultiplayerGameProps {
   submissionStatus: { humanCount: number; submittedCount: number; missingCount: number };
   alreadySubmitted: boolean;
 }
+
 
 function formatRemaining(ms: number): string {
   if (ms <= 0) return "Frist läuft ab …";
@@ -93,23 +97,36 @@ export default function MultiplayerGame({
   const [checking, setChecking] = useState(false);
   const [notReadyYet, setNotReadyYet] = useState(false);
 
-  // Angebote und Due Diligence — wie im Original lokal gesammelt, bis
-  // "Halbjahr abschließen" sie auf einmal abschickt.
-  const [bids, setBids] = useState<Record<string, { mult: number; lev: number }>>({});
-  const [ddStaged, setDdStaged] = useState<Record<string, true>>({});
-  const [searches, setSearches] = useState<SearchIntent[]>([]);
-  const [initiatives, setInitiatives] = useState<InitiativeIntent[]>([]);
-  const [ltipStaged, setLtipStaged] = useState<string[]>([]);
-  const [studyStaged, setStudyStaged] = useState<string[]>([]);
-  const [exitStarts, setExitStarts] = useState<ExitStartIntent[]>([]);
-  const [hireDecisions, setHireDecisions] = useState<HireIntent[]>([]);
-  const [offerDecisions, setOfferDecisions] = useState<OfferDecisionIntent[]>([]);
+  /* Alles, was im Lauf eines Halbjahres vorgemerkt wird, liegt in EINEM
+     Zustandsobjekt statt in elf einzelnen. Das ist der Entwurf des Halbjahres:
+     Er wird als Ganzes gesichert und als Ganzes wiederhergestellt (siehe
+     unten), und die Wiederherstellung ist damit ein einziges setState statt
+     einer Kaskade. Die Einzelsetter darunter halten alle Aufrufstellen
+     unverändert — sie akzeptieren wie zuvor Wert oder Updater-Funktion. */
+  const [draft, setDraft] = useState<TurnDraft>(EMPTY_DRAFT);
+  const {
+    bids, ddStaged, searches, initiatives, ltipStaged, studyStaged,
+    exitStarts, hireDecisions, offerDecisions, shortlistCursor, exitQueueCursor,
+  } = draft;
+  const field = useCallback(<K extends keyof TurnDraft>(k: K) =>
+    (v: TurnDraft[K] | ((prev: TurnDraft[K]) => TurnDraft[K])) =>
+      setDraft((p) => ({ ...p, [k]: typeof v === "function" ? (v as (x: TurnDraft[K]) => TurnDraft[K])(p[k]) : v })),
+  []);
+  const setBids = useMemo(() => field("bids"), [field]);
+  const setDdStaged = useMemo(() => field("ddStaged"), [field]);
+  const setSearches = useMemo(() => field("searches"), [field]);
+  const setInitiatives = useMemo(() => field("initiatives"), [field]);
+  const setLtipStaged = useMemo(() => field("ltipStaged"), [field]);
+  const setStudyStaged = useMemo(() => field("studyStaged"), [field]);
+  const setExitStarts = useMemo(() => field("exitStarts"), [field]);
+  const setHireDecisions = useMemo(() => field("hireDecisions"), [field]);
+  const setOfferDecisions = useMemo(() => field("offerDecisions"), [field]);
+  const setShortlistCursor = useMemo(() => field("shortlistCursor"), [field]);
+  const setExitQueueCursor = useMemo(() => field("exitQueueCursor"), [field]);
 
   const [sheet, setSheet] = useState<Any>(null);
   const [useProceedsItem, setUseProceedsItem] = useState<Any>(null);
   const [initPick, setInitPick] = useState<{ uid: string; dim: "plat" | "acc" } | null>(null);
-  const [shortlistCursor, setShortlistCursor] = useState(0);
-  const [exitQueueCursor, setExitQueueCursor] = useState(0);
 
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
@@ -301,6 +318,77 @@ export default function MultiplayerGame({
     }
     setChecking(false);
   }
+
+  /* ---------- Entwurf des laufenden Halbjahres sichern ----------
+     Siehe ./turnDraft.ts für das Warum und die reinen Funktionen. Hier steht
+     nur die Anbindung an localStorage und den Komponentenzustand. */
+  const draftKey = draftKeyFor(seasonId, currentHalfYear);
+  /* Ref statt State: das Flag steuert nur, ob schon gesichert werden darf, und
+     soll selbst kein Rendern auslösen. */
+  const draftLoaded = useRef(false);
+
+  /* WICHTIG: Der Sichern-Effekt steht bewusst VOR dem Wiederherstellen-Effekt.
+     Effekte laufen in der Reihenfolge ihrer Deklaration. Stünde er dahinter,
+     liefe er beim Mounten unmittelbar nach dem Wiederherstellen — mit bereits
+     gesetztem draftLoaded, aber noch mit dem leeren draft aus dem ersten
+     Render (das setState greift erst im nächsten). Er würde den gerade
+     gelesenen Entwurf also sofort wieder löschen und erst eine Renderrunde
+     später zurückschreiben. In dieser Lücke wäre er bei einem Absturz oder
+     schnellen Verlassen der Seite weg. In dieser Reihenfolge überspringt er
+     den ersten Durchlauf sauber (draftLoaded ist noch false) und schreibt
+     erst, wenn der Entwurf tatsächlich im Zustand steht. */
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    try {
+      // Nach der Abgabe ist der Entwurf erledigt und darf nicht wieder
+      // auftauchen, wenn der Spieler die Partie erneut öffnet.
+      if (submitted || isDraftEmpty(draft)) window.localStorage.removeItem(draftKey);
+      else window.localStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch { /* Speicher nicht verfügbar — der Zug funktioniert trotzdem */ }
+  }, [draftKey, submitted, draft]);
+
+  useEffect(() => {
+    let restored: TurnDraft | null = null;
+    try {
+      restored = restoreDraft(window.localStorage.getItem(draftKey), {
+        dealIds: new Set((state.deals as Any[]).map((x2) => x2.id)),
+        holdingUids: new Set(((me?.holdings ?? []) as Any[]).map((h) => h.uid)),
+        shortlistKeys: new Set(shortlistAll.map((s) => `${s.holdingUid}:${s.seat}`)),
+        offerUids: new Set(exitQueueAll.map((o) => o.holdingUid)),
+        shortlistCount: shortlistAll.length,
+        exitQueueCount: exitQueueAll.length,
+      });
+    } catch {
+      // localStorage nicht lesbar (privater Modus, blockierte Site-Daten):
+      // dann eben ohne Entwurf. Kein Grund, die Partie zu blockieren.
+      restored = null;
+    }
+    draftLoaded.current = true;
+    /* set-state-in-effect ist hier bewusst in Kauf genommen: Ein gespeicherter
+       Entwurf lässt sich erst nach dem Mounten lesen, weil localStorage im
+       Server-Rendering nicht existiert. Ein Lazy-Initializer in useState wäre
+       die Alternative — er würde auf dem Server EMPTY_DRAFT und im Browser den
+       Entwurf liefern und damit eine Hydration-Abweichung erzeugen, also einen
+       echten Fehler statt einer zusätzlichen Renderrunde. Es bleibt bei genau
+       einem setState, einmal je Halbjahr. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (restored) setDraft(restored);
+    // Bewusst nur am Schlüssel hängend: einmal je Halbjahr wiederherstellen,
+    // nicht bei jeder Zustandsänderung erneut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    // Entwürfe vergangener Halbjahre dieser Partie aufräumen, damit der
+    // Speicher über zwanzig Halbjahre nicht vollläuft.
+    try {
+      const prefix = draftKeyPrefixFor(seasonId);
+      for (let i = window.localStorage.length - 1; i >= 0; i--) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith(prefix) && k !== draftKey) window.localStorage.removeItem(k);
+      }
+    } catch { /* siehe oben */ }
+  }, [seasonId, draftKey]);
 
   if (!me) return null;
 
