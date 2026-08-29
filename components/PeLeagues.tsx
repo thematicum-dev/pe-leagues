@@ -19,7 +19,8 @@ import {
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonRisk, anyInit, applyProceeds,
-  buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
+  bookOff, buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, chargeOff, clamp,
+  ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf, isAngle,
@@ -267,8 +268,9 @@ export default function PeLeagues() {
         if (seat && rng.rnd() < 0.8) {
           const eb = ebitdaOf(c);
           const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
-          c.netDebt += retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+          const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
             + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
+          c.netDebt += cost; bookOff(c, "mgmt", cost);
           c[seat] = { skill: sk };
           c.onboard = 1;
           return;
@@ -291,7 +293,7 @@ export default function PeLeagues() {
           if (!B || B.blocked) return;
           const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
           if (B.debt > 0 && head < 0.6) return;
-          c.netDebt += B.debt;
+          c.netDebt += B.debt; bookOff(c, "restr", B.debt);
           c[slot] = B.init;
         });
       });
@@ -353,6 +355,7 @@ export default function PeLeagues() {
       f.holdings.forEach((c) => {
         if (c.netDebt < -0.5) {
           const sweep = -c.netDebt * (c.st ?? 1);
+          bookOff(c, "dist", -c.netDebt);
           c.netDebt = 0;
           c.cashOut = (c.cashOut || 0) + sweep;
           c.recapOut = (c.recapOut || 0) + sweep;
@@ -407,8 +410,11 @@ export default function PeLeagues() {
     F.forEach((f) => {
       f.holdings.forEach((c) => {
         const eb = ebitdaOf(c);
+        // Detailmitschrift nur für den eigenen Fonds — siehe runQuarter, Schritt 4b
         c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
-          eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0 }];
+          eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0,
+          ...(f.me ? { fin: periodFin(c) } : {}) }];
+        resetPeriod(c);
       });
     });
 
@@ -519,14 +525,14 @@ export default function PeLeagues() {
 
   function chargeCompany(uid, mult) {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== uid ? h : { ...h, netDebt: h.netDebt + ebitdaOf(h) * mult }),
+      ...f, holdings: f.holdings.map((h) => h.uid !== uid ? h : chargeOff(h, "mgmt", ebitdaOf(h) * mult)),
     }));
   }
 
   function startSearch(c, seat) {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...h, netDebt: h.netDebt + retainerOf(seat, ebitdaOf(h)),
+        ...chargeOff(h, "mgmt", retainerOf(seat, ebitdaOf(h))),
         searches: [...(h.searches || []), { seat, readyQ: quarter + 1 }],
       }),
     }));
@@ -542,10 +548,10 @@ export default function PeLeagues() {
     const had = c[item.seat].skill > 0;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...h, [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach },
+        ...chargeOff(h, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(h))
+          + (had ? severanceOf(item.seat, h[item.seat].skill, ebitdaOf(h)) : 0)),
+        [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach },
         searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: 1,
-        netDebt: h.netDebt + signBonusOf(item.seat, cand.skill, ebitdaOf(h))
-          + (had ? severanceOf(item.seat, h[item.seat].skill, ebitdaOf(h)) : 0),
       }),
     }));
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
@@ -561,7 +567,7 @@ export default function PeLeagues() {
     if (!c) return;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...h, netDebt: h.netDebt + retainerOf(item.seat, ebitdaOf(h)) * 0.5,
+        ...chargeOff(h, "mgmt", retainerOf(item.seat, ebitdaOf(h)) * 0.5),
         searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: quarter + 1 } : se),
       }),
     }));
@@ -586,7 +592,7 @@ export default function PeLeagues() {
 
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...h, netDebt: h.netDebt + debt, [B.slot]: B.init,
+        ...chargeOff(h, "restr", debt), [B.slot]: B.init,
       }),
     }));
     setFeed((p2) => [{ q: quarter, e: spec.ma ? "🏢" : "🛠️", tone: "neu",
@@ -718,7 +724,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     let feeRate = 0, costBasis = c.entryEquity, note = "";
 
     const recap = c.recapOut || 0;
-    const rows = [["EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
+    const rows = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
     if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
@@ -1553,7 +1559,7 @@ function PracticeMode({ dark, setDark, back }) {
   function startSearch(seat) {
     haptic(8);
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    patch({ netDebt: c.netDebt + retainerOf(seat, ebitdaOf(c)),
+    patch({ ...chargeOff(c, "mgmt", retainerOf(seat, ebitdaOf(c))),
       searches: [...(c.searches || []), { seat, readyQ: q + 1 }] });
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
@@ -1563,17 +1569,17 @@ function PracticeMode({ dark, setDark, back }) {
     const had = c[item.seat].skill > 0;
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     patch({
+      ...chargeOff(c, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(c))
+        + (had ? severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)) : 0)),
       [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach }, onboard: 1,
       searches: (c.searches || []).filter((se) => se.seat !== item.seat),
-      netDebt: c.netDebt + signBonusOf(item.seat, cand.skill, ebitdaOf(c))
-        + (had ? severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)) : 0),
     });
     setSl((p) => p.slice(1));
     setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
   }
 
   function reject(item) {
-    patch({ netDebt: c.netDebt + retainerOf(item.seat, ebitdaOf(c)) * 0.5,
+    patch({ ...chargeOff(c, "mgmt", retainerOf(item.seat, ebitdaOf(c)) * 0.5),
       searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: q + 1 } : se) });
     setSl((p) => p.slice(1));
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
@@ -1592,12 +1598,16 @@ function PracticeMode({ dark, setDark, back }) {
       : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
     let pt = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
     let debt = ebitdaOf(c) * (spec.oneOff || 0), msg = "";
+    // Der Zukaufspreis wird getrennt geführt: in der Berichtsansicht ist er eine
+    // Akquisition, während die Programmkosten Einmalaufwand sind.
+    let addonPrice = 0;
     if (spec.ma) {
       const chk = addonCheck(c, market);
       if (!chk.ok) {
         setFeed((f2) => [{ q, e: "🏦", tone: "neg", t: `<b>${c.name}</b>: Der Zukauf scheitert an der Finanzierung. Pro forma ${x(chk.lev)} Leverage gegen einen Covenant von ${x(chk.limit)} — die Banken steigen aus.` }, ...f2]);
         return;
       }
+      addonPrice = chk.price;
       debt += chk.price;
       pt = { ...pt, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price, gain: 1.0, ok };
       msg = ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`;
@@ -1605,7 +1615,8 @@ function PracticeMode({ dark, setDark, back }) {
       pt = { ...pt, gain: initGain(E) * sp * (spec.gm || 1) * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
       msg = ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
     }
-    patch({ netDebt: c.netDebt + debt, [dim === "plat" ? "initP" : "initA"]: { dim, id, name: spec.n, doneQ: q + dur, ...pt } });
+    patch({ ...chargeOff(chargeOff(c, "restr", debt - addonPrice), "addon", addonPrice),
+      [dim === "plat" ? "initP" : "initA"]: { dim, id, name: spec.n, doneQ: q + dur, ...pt } });
     setFeed((f2) => [{ q, e: spec.ma ? "🏢" : "🛠️", tone: "neu", t: `<b>${c.name}</b>: ${spec.n} gestartet.${msg}` }, ...f2]);
   }
 
@@ -1634,7 +1645,7 @@ function PracticeMode({ dark, setDark, back }) {
 
   function runStudy() {
     const cost = DD_COST / 2;
-    patch({ dd: true, netDebt: c.netDebt + cost });
+    patch({ ...chargeOff(c, "mgmt", cost), dd: true });
     setFeed((p) => [{ q, e: "📊", tone: "neu",
       t: `<b>${c.name}</b>: Benchmarkstudie beauftragt (${eur(cost)}) — Branchenmarge ${pct(c.benchMargin)}, Marktwachstum ${pct(SECTORS[c.sector].g)}, typischer Capex ${pct(c.benchCapex)} vom Umsatz. Erst damit lässt sich beurteilen, wo dieses Unternehmen wirklich steht.` }, ...p]);
   }
@@ -1705,8 +1716,12 @@ function PracticeMode({ dark, setDark, back }) {
       // Projekt vor", während dort gar keine Maßnahme läuft).
       if (hitEvent && (!hitEvent.ok || hitEvent.ok(sh, rng))) hitEvent.f(sh);
       maturePeople(rng, sh, market, nq, false, [], []);
-      if (sh.netDebt < -0.5) { sh.cashOut = (sh.cashOut || 0) - sh.netDebt; sh.netDebt = 0; }
-      sh.hist = [...sh.hist, { rev: sh.revenue, eb: ebitdaOf(sh), nd: sh.netDebt, mg: sh.margin, ql: sh.quality, eq: navValueOf(sh, market) }];
+      if (sh.netDebt < -0.5) {
+        sh.cashOut = (sh.cashOut || 0) - sh.netDebt; bookOff(sh, "dist", -sh.netDebt); sh.netDebt = 0;
+      }
+      sh.hist = [...sh.hist, { rev: sh.revenue, eb: ebitdaOf(sh), nd: sh.netDebt, mg: sh.margin, ql: sh.quality,
+        eq: navValueOf(sh, market), st: 1, out: sh.cashOut || 0, fin: periodFin(sh) }];
+      resetPeriod(sh);
       rng.setSeed(keep);
     }
 
@@ -1718,10 +1733,13 @@ function PracticeMode({ dark, setDark, back }) {
     }
     if (n.netDebt < -0.5) {
       const sweep = -n.netDebt;
+      bookOff(n, "dist", sweep);
       n.netDebt = 0; n.cashOut = (n.cashOut || 0) + sweep; n.recapOut = (n.recapOut || 0) + sweep;
       news.push({ q: nq, e: "💵", tone: "pos", t: `<b>${n.name}</b> kehrt ${eur(sweep)} Überschussliquidität aus — Nettoverschuldung bei null.` });
     }
-    n.hist = [...n.hist, { rev: n.revenue, eb: ebitdaOf(n), nd: n.netDebt, mg: n.margin, ql: n.quality, eq: navValueOf(n, market) + (n.cashOut || 0) }];
+    n.hist = [...n.hist, { rev: n.revenue, eb: ebitdaOf(n), nd: n.netDebt, mg: n.margin, ql: n.quality,
+      eq: navValueOf(n, market) + (n.cashOut || 0), st: 1, out: n.cashOut || 0, fin: periodFin(n) }];
+    resetPeriod(n);
 
     // Coach
     const ctx = { c: n, q: nq, before, news };
@@ -1786,8 +1804,10 @@ function PracticeMode({ dark, setDark, back }) {
         if (pool.length) rng.pick(pool).f(z);
       }
       maturePeople(rng, z, market, t + 1, false, [], []);
-      if (z.netDebt < -0.5) { z.cashOut = (z.cashOut || 0) + -z.netDebt; z.netDebt = 0; }
-      z.hist = [...z.hist, { rev: z.revenue, eb: ebitdaOf(z), nd: z.netDebt, mg: z.margin, ql: z.quality, eq: navValueOf(z, market) }];
+      if (z.netDebt < -0.5) { z.cashOut = (z.cashOut || 0) + -z.netDebt; bookOff(z, "dist", -z.netDebt); z.netDebt = 0; }
+      z.hist = [...z.hist, { rev: z.revenue, eb: ebitdaOf(z), nd: z.netDebt, mg: z.margin, ql: z.quality,
+        eq: navValueOf(z, market), st: 1, out: z.cashOut || 0, fin: periodFin(z) }];
+      resetPeriod(z);
     }
     rng.setSeed(keep);
     if ((z.breach || 0) >= 2) return { moic: 0, score: pracScore(0, PRAC_PERIODS) };

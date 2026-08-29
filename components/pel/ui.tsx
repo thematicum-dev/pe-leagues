@@ -18,7 +18,8 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf,
+  PPE_YEARS, TAX_RATE, DEAL_YEARS,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
   retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
@@ -168,6 +169,39 @@ export const CSS = `
 .pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
 .pel .ledger tr.sep + tr td{padding-top:11px;}
 .pel .lb .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ---------- Berichtsansicht: GuV, Bilanz, Kapitalflussrechnung ----------
+   Ein Abschluss ist breiter als ein Telefon. Statt die Spalten zu stauchen,
+   scrollt die Tabelle waagerecht und die Bezeichnungsspalte bleibt stehen —
+   dieselbe Geste wie in jedem Tabellenblatt, aus dem diese Zahlen kämen. */
+.pel .finwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--rule);}
+.pel table.fin{border-collapse:collapse;width:100%;}
+.pel table.fin th,.pel table.fin td{font-size:12px;line-height:1.35;padding:7px 12px;white-space:nowrap;
+  border-bottom:1px solid var(--rule);text-align:right;
+  font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+.pel table.fin th{font-family:'Inter',system-ui,sans-serif;font-weight:600;font-size:11.5px;
+  color:var(--ink);vertical-align:bottom;padding-top:12px;}
+.pel table.fin th small{display:block;font-weight:500;font-size:9px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink2);margin-top:3px;}
+.pel table.fin th.rl,.pel table.fin td.rl{text-align:left;position:sticky;left:0;z-index:1;
+  background:var(--card);font-family:'Inter',system-ui,sans-serif;color:var(--ink2);
+  min-width:158px;max-width:158px;padding-right:8px;white-space:normal;
+  box-shadow:1px 0 0 var(--rule);}
+.pel table.fin tr.sum td{font-weight:600;color:var(--ink);border-top:1px solid var(--rule);}
+.pel table.fin tr.sum td.rl{color:var(--ink);}
+.pel table.fin tr.memo td{font-size:10.5px;color:var(--ink2);padding-top:0;padding-bottom:8px;border-bottom:0;}
+.pel table.fin tr.memo + tr td{border-top:1px solid var(--rule);}
+.pel table.fin tr.head td{padding-top:16px;border-bottom:0;}
+.pel table.fin tr.head td.rl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink2);font-weight:600;}
+.pel table.fin col.est,.pel table.fin td.est{color:var(--ink2);}
+/* Umschalter zwischen den drei Rechenwerken */
+.pel .finseg{display:flex;gap:6px;padding:12px 16px 2px;}
+.pel .finseg button{flex:1;padding:9px 4px;font-size:11.5px;font-weight:600;}
+.pel .finseg button.on{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+.pel .finnote{font-size:11px;line-height:1.6;color:var(--ink2);margin:0;padding:12px 16px 0;}
+.pel .finnote + .finnote{padding-top:7px;}
+.pel .finnote b{color:var(--ink);font-weight:600;}
 
 .pel .tag{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
   padding:4px 9px;border-radius:99px;background:var(--shade);border:0;color:var(--ink2);margin:0 6px 6px 0;}
@@ -568,6 +602,11 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
      verdeckt: sonst ließe sich aus ihm zurückrechnen, was die Karte gerade
      bewusst nicht zeigt. */
   const mom = hidden ? null : impliedMoM(d, mult, lev, me.attrs.financing, { drift: dd ? dEst : 0 });
+  /* Der Abschluss zum Zielunternehmen: drei Geschäftsjahre, zurückgerechnet
+     über das ausgewiesene Wachstum, cash-free/debt-free. Ohne Datenraum bleibt
+     alles unter der Umsatzzeile verdeckt — der Bericht darf nicht mehr zeigen
+     als die Karte darüber.                                                   */
+  const statements = useMemo(() => dealStatements(d), [d]);
 
   return (
     <div className={"card st" + (lm ? " lm" : "")} style={{ "--sec": SECCOLOR[d.sector] }}>
@@ -607,13 +646,13 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           <Info k="drift" />
         </td></tr>
 
-        <tr className="sep"><td className="lab">EBITDA LTM</td><td>{hidden ? "—" : eur(eb)}</td></tr>
-        <tr><td className="lab wrap">EBITDA-Marge vs. Sektor Benchmark</td><td>{hidden ? "—" : pct(d.margin)}
+        <tr className="sep"><td className="lab">Adj. EBITDA LTM</td><td>{hidden ? "—" : eur(eb)}<Info k="adjEbitda" /></td></tr>
+        <tr><td className="lab wrap">Adj. EBITDA-Marge vs. Sektor Benchmark</td><td>{hidden ? "—" : pct(d.margin)}
           {!hidden && (bench
             ? <span style={{ color: gapM >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                 {" "}{gapM >= 0 ? "+" : "−"}{Math.abs(gapM).toFixed(1).replace(".", ",")} pp</span>
             : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>)}</td></tr>
-        <tr><td className="lab">EBITDA − Capex</td><td>{hidden ? "—" : eur(eb - capexA)}</td></tr>
+        <tr><td className="lab">Adj. EBITDA − Capex</td><td>{hidden ? "—" : eur(eb - capexA)}</td></tr>
         <tr><td className="lab">Cash Conversion</td>
           <td style={{ color: hidden ? "var(--ink2)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
             {hidden ? "—" : pct(conv)}<Info k="conv" /></td></tr>
@@ -623,6 +662,12 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         <tr><td className="lab">Bewertungserwartung</td><td>{x(d.askMult)}</td></tr>
       </tbody></table>
       <div className="pad" style={{ paddingTop: 12 }}>
+        <StatementsButton statements={statements} hidden={hidden}
+          label={`📑 Financial Statements · ${DEAL_YEARS} Jahre`} />
+        <p className="hint" style={{ margin: "6px 0 12px" }}>
+          {hidden ? "Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt."
+            : "GuV, Bilanz und Kapitalflussrechnung des Ziels, aggregiert wie im Investmentmodell."}
+        </p>
         {dd ? (
           <p className="hint teal">🔍 Due Diligence abgeschlossen</p>
         ) : (
@@ -697,6 +742,13 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
      Zins draußen und die Kennzahl ist mit jedem Ziel im Dealflow vergleichbar. */
   const conv = cf && cf.eb > 0 ? ((cf.eb - cf.capex - cf.nwc) / cf.eb) * 100 : null;
   const eb = ebitdaOf(c);
+  /* Volle Historie seit dem Vollzug, inklusive Transaktionseffekte: die
+     Eröffnungsbilanz steht zum Kaufpreis, die Akquisitionsfinanzierung
+     darunter. Die Reihe wächst mit jedem Halbjahr, deshalb hängt das Memo an
+     der hist-Länge und am heutigen Stand der Nettoverschuldung.             */
+  const statements = useMemo(() => holdingStatements(c), [c]);
+  // Spalten abzüglich der Eröffnungsspalte: so viele Geschäftsjahre stehen im Bericht
+  const finYears = statements ? statements.periods.length - 1 : 0;
   const val = navValueOf(c, market);
   const real = fairOf(c, market, neg);
   const m = val / c.entryEquity;
@@ -752,7 +804,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         </div>
         <div className="krow">
           <div>
-            <div className="eyebrow">EBITDA</div>
+            <div className="eyebrow">Adj. EBITDA<Info k="adjEbitda" /></div>
             <div className="mono kv">{eur(eb)}</div>
           </div>
           <div>
@@ -770,7 +822,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             vom EBITDA übrig bleibt. Der Zins steht daneben beim Leverage.      */}
         <div className="krow">
           <div>
-            <div className="eyebrow">EBITDA − Capex</div>
+            <div className="eyebrow">Adj. EBITDA − Capex</div>
             <div className="mono kv">{cf ? eur(cf.eb - cf.capex) : "—"}</div>
           </div>
           <div>
@@ -805,6 +857,16 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       <Stages c={c} compact={quarter} />
       <HalfYearDelta c={c} />
       <Track c={c} />
+      <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
+        <StatementsButton statements={statements}
+          label={`📑 Financial Statements${finYears
+            ? ` · ${finYears} ${finYears === 1 ? "Jahr" : "Jahre"} Halteperiode`
+            : " · Eröffnungsbilanz"}`} />
+        <p className="hint" style={{ marginTop: 6 }}>
+          GuV, Bilanz und Kapitalflussrechnung seit dem Vollzug — mit Kaufpreisallokation,
+          Akquisitionsfinanzierung und der Überleitung von bereinigtem auf berichtetes EBITDA.
+        </p>
+      </div>
       <div className="pad" style={{ paddingTop: 12 }}>
         <div className="seats">
           {[["ceo", "CEO"], ["cfo", "CFO"], ["r3", ROLE3[c.sector].n]].map(([k, nm]) => {
@@ -900,6 +962,329 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------- Financial Statements ----------
+   GuV, Bilanz und Kapitalflussrechnung zu einem Zielunternehmen oder einer
+   Beteiligung. Die Zahlen kommen vollständig aus lib/engine/financials.ts und
+   damit aus der Mitschrift der Engine — diese Datei formatiert nur.
+
+   Drei Rechenwerke, ein Umschalter, waagerecht scrollende Spalten. Bewusst
+   aggregiert: der Detailgrad eines Investorenmodells, nicht der eines
+   Jahresabschlusses. Wer wissen will, was eine Zeile bedeutet, findet die
+   Herleitung in den Fußnoten unter der Tabelle.                             */
+
+/* Beträge in Mio. €, ohne Einheit — die steht in der Kopfzeile. Ein Strich
+   statt einer Null: eine Zeile, in der nichts passiert ist, soll nicht so
+   aussehen, als wäre dort gerechnet worden.                                 */
+export function fnum(v, dg = 1) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const f = Math.pow(10, dg);
+  const r = Math.round(v * f) / f;
+  if (Math.abs(r) < 0.5 / f) return "–";
+  const t = Math.abs(r).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg });
+  return (r < 0 ? "−" : "") + t;
+}
+const fpct = (v, dg = 1) => (v == null || !Number.isFinite(v) ? "—"
+  : (v < 0 ? "−" : "") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + " %");
+const fx = (v) => (v == null || !Number.isFinite(v) ? "—"
+  : v.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "×");
+
+/* Zeilendefinitionen je Rechenwerk. `v` liefert den Betrag in
+   Darstellungsrichtung: Aufwand negativ, damit sich jede Zwischensumme durch
+   Addition der Zeilen darüber ergibt und niemand raten muss, welches
+   Vorzeichen gemeint ist.                                                   */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+interface FinRow {
+  k: string; l: string;
+  head?: boolean;   // Abschnittsüberschrift über die ganze Breite
+  memo?: boolean;   // Nachrichtlich: Quote oder Kennzahl, keine Rechengröße
+  sum?: boolean;    // Zwischensumme
+  v?: (p: any, i: number, P: any[]) => number | null;
+  s?: (p: any, i: number, P: any[]) => string;
+}
+
+function plRows(st): FinRow[] {
+  const rows: FinRow[] = [
+    { k: "rev", l: "Umsatz", v: (p) => p.revenue },
+    { k: "growth", memo: true, l: "Wachstum ggü. Vorperiode",
+      s: (p, i, P) => { const g = growthOf(p, P[i - 1] || null, "revenue"); return g == null ? "—" : fpct(g); } },
+    { k: "adj", l: "Adjusted EBITDA", v: (p) => p.adjEbitda, sum: true },
+    { k: "adjm", memo: true, l: "Adj. EBITDA-Marge", s: (p) => fpct(p.revenue > 0 ? (p.adjEbitda / p.revenue) * 100 : null) },
+    { k: "off", l: "Einmalaufwendungen", v: (p) => -p.oneOff },
+    { k: "rep", l: "Reported EBITDA", v: (p) => p.repEbitda, sum: true },
+    { k: "repm", memo: true, l: "Rep. EBITDA-Marge", s: (p) => fpct(p.revenue > 0 ? (p.repEbitda / p.revenue) * 100 : null) },
+    { k: "da", l: "Abschreibungen", v: (p) => -p.da },
+    { k: "ebit", l: "EBIT", v: (p) => p.ebit, sum: true },
+  ];
+  if (st.levered) rows.push({ k: "int", l: "Zinsergebnis", v: (p) => (p.opening ? null : -p.interest) });
+  rows.push(
+    { k: "ebt", l: "Ergebnis vor Steuern", v: (p) => p.ebt, sum: true },
+    { k: "tax", l: "Ertragsteuern", v: (p) => -p.tax },
+    { k: "ni", l: "Jahresergebnis", v: (p) => p.netIncome, sum: true },
+  );
+  return rows;
+}
+
+function bsRows(st): FinRow[] {
+  const rows: FinRow[] = [
+    { k: "h1", head: true, l: "Aktiva" },
+    { k: "ppe", l: "Sachanlagen & immaterielle VG", v: (p) => p.ppe },
+  ];
+  if (st.kind === "holding") rows.push({ k: "gw", l: "Kaufpreisallokation & Goodwill", v: (p) => p.goodwill });
+  rows.push(
+    { k: "nwc", l: "Net Working Capital", v: (p) => p.nwc },
+    { k: "ta", l: "Bilanzsumme", v: (p) => p.assets, sum: true },
+    { k: "nwcp", memo: true, l: "NWC in % vom Jahresumsatz",
+      s: (p) => fpct(ratiosOf(p, st.levered).nwcPct) },
+    { k: "h2", head: true, l: "Passiva" },
+  );
+  if (st.levered) {
+    rows.push(
+      { k: "nd", l: "Nettoverschuldung", v: (p) => p.netDebt },
+      { k: "lev", memo: true, l: "Leverage (Nettoverschuldung / Adj. EBITDA)",
+        s: (p) => fx(ratiosOf(p, st.levered).leverage) },
+    );
+  } else {
+    rows.push({ k: "nd", l: "Nettoverschuldung (cash-free/debt-free)", v: (p) => p.netDebt });
+  }
+  rows.push(
+    { k: "eq", l: "Eigenkapital", v: (p) => p.equity },
+    { k: "tp", l: "Bilanzsumme", v: (p) => p.netDebt + p.equity, sum: true },
+  );
+  return rows;
+}
+
+function cfRows(st): FinRow[] {
+  const anyAcq = st.periods.some((p) => Math.abs(p.acquisitions) > 0.05);
+  const anyDist = st.periods.some((p) => Math.abs(p.distributions) > 0.05);
+  const rows: FinRow[] = [
+    { k: "adj", l: "Adjusted EBITDA", v: (p) => (p.opening ? null : p.adjEbitda) },
+    { k: "off", l: "Einmalaufwendungen", v: (p) => (p.opening ? null : -p.oneOff) },
+    { k: "rep", l: "Reported EBITDA", v: (p) => (p.opening ? null : p.repEbitda), sum: true },
+    { k: "nwc", l: "Veränderung Net Working Capital", v: (p) => (p.opening ? null : -p.dNwc) },
+    { k: "tax", l: "Ertragsteuern", v: (p) => (p.opening ? null : -p.tax) },
+    { k: "cfo", l: "Operativer Cashflow", v: (p) => (p.opening ? null : p.cfo), sum: true },
+    { k: "cap", l: "Investitionen (Capex)", v: (p) => (p.opening ? null : -p.capex) },
+  ];
+  if (anyAcq) rows.push({ k: "acq", l: "Akquisitionen (Add-ons)", v: (p) => (p.opening ? null : -p.acquisitions) });
+  rows.push({ k: "fcfp", l: "Free Cashflow vor Finanzierung", v: (p) => (p.opening ? null : p.fcfPreFin), sum: true });
+  if (st.levered) {
+    rows.push(
+      { k: "int", l: "Zinsen", v: (p) => (p.opening ? null : -p.interest) },
+      { k: "fcf", l: "Free Cashflow", v: (p) => (p.opening ? null : p.fcf), sum: true },
+    );
+    if (anyDist) rows.push({ k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distributions) });
+    rows.push(
+      { k: "h", head: true, l: "Überleitung Nettoverschuldung" },
+      { k: "nd0", l: "Nettoverschuldung Anfang", v: (p) => (p.opening ? null : p.netDebtOpen) },
+      { k: "dnd", l: "Veränderung", v: (p) => (p.opening ? null : p.dNetDebt) },
+      { k: "nd1", l: "Nettoverschuldung Ende", v: (p) => p.netDebt, sum: true },
+    );
+  }
+  rows.push({ k: "conv", memo: true, l: "Cash Conversion (vor Zins und Steuern)",
+    s: (p) => (p.opening ? "—" : fpct(ratiosOf(p, st.levered).conversion)) });
+  return rows;
+}
+
+const VIEWS = [
+  { id: "pl", n: "GuV", rows: plRows },
+  { id: "bs", n: "Bilanz", rows: bsRows },
+  { id: "cf", n: "Cashflow", rows: cfRows },
+];
+
+function StatementsSheet({ st, hidden, close }) {
+  const [view, setView] = useState("pl");
+  const P = st.periods;
+  const rows = (VIEWS.find((v) => v.id === view) || VIEWS[0]).rows(st);
+  /* Die Tabelle startet am rechten Rand. Ein Abschluss wird von links nach
+     rechts gelesen, aber die Frage ist immer die letzte Spalte — bei einer
+     Beteiligung mit acht Jahren Historie hätte man sonst erst vier Wischer zu
+     tun, bevor die Gegenwart überhaupt sichtbar wird.                       */
+  const wrapRef = useRef(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+    setScrolls(el.scrollWidth > el.clientWidth + 4);
+  }, [view]);
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true"
+      aria-label={`Financial Statements ${st.name}`} onClick={close}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="tomb">
+          <div className="sub">Financial Statements</div>
+          <div className="amt" style={{ fontSize: 22 }}>{st.name}</div>
+          <div className="sub">
+            {SECLABEL[st.sector] || st.sector} · {st.kind === "deal"
+              ? `${P.length} Geschäftsjahre, cash-free/debt-free`
+              : "Historie seit Vollzug, inklusive Transaktionseffekte"}
+          </div>
+        </div>
+        <div className="card">
+          <div className="finseg">
+            {VIEWS.map((v) => (
+              <button key={v.id} className={view === v.id ? "on" : ""} onClick={() => { haptic(5); setView(v.id); }}>
+                {v.n}
+              </button>
+            ))}
+          </div>
+          <div className="finwrap" ref={wrapRef}>
+            <table className="fin">
+              <thead>
+                <tr>
+                  <th className="rl">Mio. €</th>
+                  {P.map((p) => (
+                    <th key={p.key}>{p.label}<small>{p.estimated ? "geschätzt" : p.sub}</small></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  if (r.head) {
+                    /* Kein colSpan: die Bezeichnungsspalte klebt links, eine
+                       über die volle Breite gespannte Zelle täte das nicht und
+                       die Überschrift wäre beim Scrollen weg.               */
+                    return (
+                      <tr className="head" key={r.k}>
+                        <td className="rl">{r.l}</td>
+                        {P.map((p) => <td key={p.key} />)}
+                      </tr>
+                    );
+                  }
+                  /* Ohne Datenraum steht auf der Karte nur der Umsatz. Der
+                     Bericht darf nicht mehr verraten als die Karte darüber. */
+                  const veiled = hidden && r.k !== "rev" && r.k !== "growth";
+                  return (
+                    <tr className={(r.sum ? "sum" : "") + (r.memo ? " memo" : "")} key={r.k}>
+                      <td className="rl">{r.l}</td>
+                      {P.map((p, i) => (
+                        <td key={p.key} className={p.estimated ? "est" : ""}>
+                          {veiled ? "—" : r.memo ? r.s!(p, i, P) : fnum(r.v!(p, i, P))}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {scrolls && (
+            <p className="finnote">Die jüngste Periode steht rechts — waagerecht wischen zeigt die früheren.</p>
+          )}
+          <StatementNotes st={st} view={view} hidden={hidden} />
+          <div className="pad" style={{ paddingTop: 14 }}>
+            <button className="solid" style={{ width: "100%" }} onClick={close}>Schließen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Fußnoten. Sie sind kein Beiwerk: Ohne sie stünde in der GuV eine
+   Abschreibung, deren Höhe niemand nachvollziehen kann, und eine Steuer, die
+   auf einem anderen Ergebnis bemessen ist als dem darüber. */
+function StatementNotes({ st, view, hidden }) {
+  if (hidden) {
+    return (
+      <p className="finnote ox" style={{ color: "var(--ox)" }}>
+        Ohne Datenraum liegt nur die Umsatzreihe vor. Alles darunter — Ertrag, Kapitalbindung,
+        Cashflow — steht erst mit der Due Diligence zur Verfügung.
+      </p>
+    );
+  }
+  const common = (
+    <p className="finnote">
+      <b>Adjusted gegen Reported EBITDA.</b> Das Modell führt das operative Ergebnis frei von
+      Einmaleffekten — das ist das <b>Adjusted EBITDA</b>, und nur dieses steht auf der Karte,
+      im Multiple und im Covenant. Programmkosten aus Initiativen und Kosten eines
+      Managementwechsels sind Einmalaufwendungen: sie werden hier abgezogen und ergeben das
+      <b> Reported EBITDA</b>. Investitionsnachholung, Cash Release, Zukäufe und Ausschüttungen
+      sind keine Ergebnisgrößen und stehen unterhalb des EBITDA.
+    </p>
+  );
+  return (
+    <>
+      {common}
+      {view === "pl" && (
+        <p className="finnote">
+          <b>Abschreibungen = Investitionen.</b> Die Steuerbemessungsgrundlage des Modells ist
+          EBITDA abzüglich Zins und Capex; Capex steht dort stellvertretend für die Abschreibung.
+          Der Steuersatz beträgt {Math.round(TAX_RATE * 100)} %, bemessen auf dem Ergebnis
+          <i> vor</i> Einmalaufwendungen — die sind im Modell nicht steuerwirksam.
+          {!st.levered && " Zinsen erscheinen nicht: Die Darstellung ist cash-free/debt-free, die Finanzierung des Verkäufers gehört nicht zum Kaufgegenstand."}
+        </p>
+      )}
+      {view === "bs" && (
+        <p className="finnote">
+          <b>Herleitung.</b> Net Working Capital folgt der Kapitalbindungsquote des Unternehmens,
+          die Sachanlagen entsprechen {PPE_YEARS} Jahren Investitionsaufwand — bei linearer
+          Abschreibung über rund {PPE_YEARS * 2} Jahre der Restbuchwert im Beharrungszustand.
+          {st.kind === "holding" && " Die Eröffnungsbilanz steht zum Enterprise Value des Erwerbs; die Kaufpreisallokation trägt den Unterschied zum übernommenen Vermögen, die Akquisitionsfinanzierung steht als Nettoverschuldung darunter. Transaktionskosten des Erwerbs trägt der Fonds, nicht das Unternehmen."}
+        </p>
+      )}
+      {view === "cf" && st.levered && (
+        <p className="finnote">
+          <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Free Cashflow zuzüglich
+          Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
+          Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
+        </p>
+      )}
+      {st.kind === "deal" && (
+        <p className="finnote">
+          <b>Historie.</b> Die Umsatzreihe ist über das ausgewiesene Wachstum der letzten drei
+          Jahre zurückgerechnet. Marge, Investitions- und Kapitalbindungsquote weist der
+          Datenraum nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
+        </p>
+      )}
+      {st.anyEstimated && (
+        <p className="finnote">
+          <b>Geschätzte Spalten.</b> Perioden aus Partien, die vor der Einführung dieser Ansicht
+          begonnen haben, tragen keine Detailmitschrift. Sie sind mit den Formeln des Modells
+          rekonstruiert; die Nettoverschuldung am Periodenende ist trotzdem die tatsächliche.
+        </p>
+      )}
+    </>
+  );
+}
+
+/* Schaltfläche mit eigenem Sheet. Das Sheet hängt per Portal in der .pel-Wurzel
+   und nicht in der Karte: .card trägt durch die Einblendanimation dauerhaft
+   einen transform-Wert, und ein transformierter Vorfahr macht position:fixed
+   relativ zu sich selbst — siehe die gleiche Begründung bei Info.           */
+export function StatementsButton({ statements, hidden = false, label, className = "" }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef(null);
+  const [host, setHost] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const root = btnRef.current?.closest?.(".pel");
+    setHost(root ?? document.body);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!statements) return null;
+
+  return (
+    <>
+      <button ref={btnRef} className={className} style={{ width: "100%" }}
+        onClick={(e) => { e.stopPropagation(); haptic(8); setOpen(true); }}>
+        {label}
+      </button>
+      {open && host && createPortal(
+        <StatementsSheet st={statements} hidden={hidden} close={() => setOpen(false)} />, host)}
+    </>
   );
 }
 
@@ -1169,13 +1554,13 @@ export function Track({ c }) {
           <text x={R} y={pyEq(last.eq) - 6} fontSize="9" textAnchor="end" style={{ fill: "var(--ink)" }}
             fontFamily="JetBrains Mono" fontWeight="700">{Math.round(last.eq)}</text>
           <text x={L} y={H - 2} fontSize="7.5" style={{ fill: "var(--ink2)" }} fontFamily="Inter">
-            <tspan fill={SECCOLOR[c.sector]}>▮</tspan> Umsatz   <tspan style={{ fill: "var(--teal)" }}>▮</tspan> EBITDA   <tspan style={{ fill: "var(--ink)" }}>▬</tspan> Gesamtwert
+            <tspan fill={SECCOLOR[c.sector]}>▮</tspan> Umsatz   <tspan style={{ fill: "var(--teal)" }}>▮</tspan> Adj. EBITDA   <tspan style={{ fill: "var(--ink)" }}>▬</tspan> Gesamtwert
           </text>
         </svg>
       </div>
       {/* Drei Deltas als Spalten. Fünf im Fließtext waren auf dem Telefon unlesbar. */}
       <div className="deltas">
-        {[["EBITDA", dEb, "%", 0], ["Marge", dMg, "pp", 1], ["Leverage", dNd, "×", 1]].map(([l, v, u, dg]) => (
+        {[["Adj. EBITDA", dEb, "%", 0], ["Marge", dMg, "pp", 1], ["Leverage", dNd, "×", 1]].map(([l, v, u, dg]) => (
           <div key={l}>
             <div className="eyebrow">{l}</div>
             <div className="mono dv" style={{ color: (l === "Leverage" ? v <= 0 : v >= 0) ? "var(--teal)" : "var(--ox)" }}>
@@ -1342,6 +1727,16 @@ export function Def({ t, children }) {
    TVPI oder Leverage stehen bewusst nicht darin — die erklärt niemand, der
    das Spiel spielt, gern erklärt bekommen. */
 export const GLOSSARY = {
+  adjEbitda: {
+    t: "Adjusted vs. Reported EBITDA",
+    d: <>Das <b>Adjusted EBITDA</b> ist das operative Ergebnis ohne Einmaleffekte — die Zahl, auf die
+      ein Käufer sein Multiple ansetzt und auf die der Kreditvertrag seinen Covenant rechnet. Genau sie
+      steht überall in dieser Ansicht, im Enterprise Value und im Leverage. Das <b>Reported EBITDA</b>
+      liegt darunter: Es enthält die Einmalaufwendungen einer Periode — Programmkosten laufender
+      Initiativen, Abfindungen, Signing Bonus, Retainer eines Search-Mandats. In den Financial
+      Statements stehen beide untereinander samt Überleitung; die Karte zeigt bewusst nur das
+      bereinigte Ergebnis, weil jede Bewertung im Spiel darauf beruht.</>,
+  },
   drift: {
     t: "Erwartete Performance vs. Markt",
     d: <>Wächst dieses Unternehmen dauerhaft <b>schneller oder langsamer als sein Sektor</b> — gewinnt es
@@ -1797,7 +2192,7 @@ export function Offers({ item, holding, market, neg, decide }) {
                 <div style={{ fontSize: 12, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>{o.note}</div>
               </div>
               <table className="ledger"><tbody>
-                <tr><td className="lab">EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
+                <tr><td className="lab">Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
                 <tr><td className="lab">Gebotenes Multiple</td><td>{x(impMult)}
                   <span style={{ color: impMult >= mMult ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                     {" "}{impMult >= mMult ? "+" : ""}{(impMult - mMult).toFixed(1).replace(".", ",")} vs. Markt
