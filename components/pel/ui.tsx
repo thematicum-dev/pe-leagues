@@ -1242,10 +1242,12 @@ function StatementNotes({ st, view, hidden }) {
         </p>
       )}
       {st.anyEstimated && (
-        <p className="finnote">
-          <b>Geschätzte Spalten.</b> Perioden aus Partien, die vor der Einführung dieser Ansicht
-          begonnen haben, tragen keine Detailmitschrift. Sie sind mit den Formeln des Modells
-          rekonstruiert; die Nettoverschuldung am Periodenende ist trotzdem die tatsächliche.
+        <p className="finnote ox" style={{ color: "var(--ox)" }}>
+          <b>Vorläufige Spalten.</b> Für diese Perioden lag die Detailmitschrift der Engine beim
+          Laden noch nicht vor — sie sind hier mit den Formeln des Modells rekonstruiert, die
+          Nettoverschuldung am Periodenende ist aber die tatsächliche. Der Server rechnet solche
+          Perioden nach und trägt die exakten Beträge nach; nach dem nächsten Halbjahreswechsel
+          steht hier die gespielte Zahlenreihe.
         </p>
       )}
     </>

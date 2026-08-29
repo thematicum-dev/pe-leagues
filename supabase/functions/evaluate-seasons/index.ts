@@ -20,6 +20,7 @@ import { createRng } from "../../../lib/engine/rng.ts";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../../../lib/engine/runQuarter.ts";
 import { firstHalfYearDeadline, nextHalfYearDeadline } from "../../../lib/engine/deadline.ts";
 import { PERIODS } from "../../../lib/engine/engine.ts";
+import { backfillSeason, needsBackfill } from "../../../lib/engine/replay.ts";
 import type { RuntimeState, TurnDecisions } from "../../../lib/engine/turnTypes.ts";
 
 const EXPECTED_SECRET = Deno.env.get("EVALUATE_SEASONS_SECRET");
@@ -28,6 +29,116 @@ function serviceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return createClient(url, key, { auth: { persistSession: false } });
+}
+
+/* Abgaben eines Halbjahres nach Fondsplatz, so wie die Auswertung sie sieht.
+   Wird von der regulären Auswertung und vom Nachtrag gleichermaßen benutzt --
+   eine zweite Zuordnung von Profil auf Slot dürfte es hier nicht geben. */
+function decisionsBySlotFrom(
+  players: { slot: number; profile_id: string | null }[],
+  submissions: { profile_id: string; payload: unknown }[],
+): Record<number, TurnDecisions> {
+  const slotByProfile = new Map<string, number>();
+  players.forEach((p) => { if (p.profile_id) slotByProfile.set(p.profile_id, p.slot); });
+  const out: Record<number, TurnDecisions> = {};
+  submissions.forEach((s) => {
+    const slot = slotByProfile.get(s.profile_id);
+    if (slot != null) out[slot] = (s.payload ?? {}) as TurnDecisions;
+  });
+  return out;
+}
+
+/* ---------- Nachtrag der Periodenmitschrift ----------
+   Partien, die vor Einführung der Mitschrift begonnen haben, tragen für ihre
+   bisherigen Halbjahre keine Periodenbeträge -- die Berichtsansicht könnte
+   dort nur schätzen. Weil die Auswertung deterministisch ist und Spielstände
+   wie Abgaben vollständig gespeichert sind, lässt sich die Partie exakt
+   nachspielen: lib/engine/replay.ts rechnet dazu die Position im Zufallsstrom
+   aus seasons.seed zurück und prüft Halbjahr für Halbjahr, dass derselbe
+   Spielstand wieder herauskommt.
+
+   Geschrieben wird nur, wenn das für jedes Halbjahr gelingt. Schlägt auch nur
+   eines fehl, bleibt alles unverändert und der nächste Sweep versucht es
+   erneut -- ein halb zurückgerechneter Verlauf wäre schlimmer als gar keiner. */
+async function backfillOneSeason(db: SupabaseClient, seasonId: string) {
+  const { data: token, error: claimErr } = await db.rpc("claim_season_for_backfill", { p_season_id: seasonId });
+  if (claimErr) throw claimErr;
+  if (!token) return "skipped";
+
+  try {
+    const { data: season, error: seasonErr } = await db
+      .from("seasons").select("id, seed, current_half_year").eq("id", seasonId).single();
+    if (seasonErr || !season) throw seasonErr ?? new Error("season_not_found");
+
+    const { data: stateRows, error: stateErr } = await db
+      .from("season_state").select("half_year, state")
+      .eq("season_id", seasonId).order("half_year", { ascending: true });
+    if (stateErr) throw stateErr;
+    const states = (stateRows ?? []).map((r) => ({
+      halfYear: r.half_year as number, state: r.state as RuntimeState,
+    }));
+
+    // Nichts nachzutragen: als geprüft abhaken, damit der Sweep sie nicht wieder anfasst.
+    const latest = states.length ? states[states.length - 1].state : null;
+    if (!latest || states.length < 2 || !needsBackfill(latest)) {
+      const { error } = await db.rpc("commit_season_backfill", {
+        p_season_id: seasonId, p_token: token, p_states: [],
+      });
+      if (error) throw error;
+      return "nothing_to_do";
+    }
+
+    const { data: players, error: playersErr } = await db
+      .from("season_players").select("slot, profile_id").eq("season_id", seasonId);
+    if (playersErr) throw playersErr;
+
+    const { data: submissions, error: subErr } = await db
+      .from("turn_submissions").select("half_year, profile_id, payload").eq("season_id", seasonId);
+    if (subErr) throw subErr;
+
+    const decisionsByHalfYear: Record<number, Record<number, TurnDecisions>> = {};
+    const byHalfYear = new Map<number, { profile_id: string; payload: unknown }[]>();
+    (submissions ?? []).forEach((s) => {
+      const hy = s.half_year as number;
+      if (!byHalfYear.has(hy)) byHalfYear.set(hy, []);
+      byHalfYear.get(hy)!.push({ profile_id: s.profile_id as string, payload: s.payload });
+    });
+    byHalfYear.forEach((rows, hy) => {
+      decisionsByHalfYear[hy] = decisionsBySlotFrom((players ?? []) as never, rows);
+    });
+
+    /* Nur die bereits ausgewerteten Halbjahre. Das laufende ist noch nicht
+       gespielt und hat auch noch keine season_state-Zeile. */
+    const evaluated = states.filter((r) => r.halfYear < (season.current_half_year as number));
+    const result = backfillSeason({
+      states: evaluated,
+      decisionsByHalfYear,
+      endSeed: Number(season.seed),
+    });
+
+    if (!result.ok) {
+      /* Deterministisches Ergebnis: Ohne Codeänderung käme beim nächsten Sweep
+         dasselbe heraus. Deshalb abhaken statt jede Minute erneut rechnen —
+         der Grund steht in der Antwort, und ein Zurücksetzen von
+         seasons.statements_backfilled_at stellt die Partie wieder in die
+         Warteschlange (siehe Migration 20260829120000).                     */
+      const { error } = await db.rpc("commit_season_backfill", {
+        p_season_id: seasonId, p_token: token, p_states: [],
+      });
+      if (error) throw error;
+      return "not_reproducible:" + result.reason;
+    }
+
+    const { error: commitErr } = await db.rpc("commit_season_backfill", {
+      p_season_id: seasonId, p_token: token,
+      p_states: result.states.map((r) => ({ half_year: r.halfYear, state: r.state })),
+    });
+    if (commitErr) throw commitErr;
+    return "backfilled:" + result.states.length;
+  } catch (err) {
+    await db.rpc("abort_season_backfill", { p_season_id: seasonId, p_token: token });
+    throw err;
+  }
 }
 
 async function evaluateOneSeason(db: SupabaseClient, seasonId: string) {
@@ -95,14 +206,10 @@ async function evaluateOneSeason(db: SupabaseClient, seasonId: string) {
     .eq("half_year", halfYear);
   if (subErr) throw subErr;
 
-  const slotByProfile = new Map<string, number>();
-  (players ?? []).forEach((p) => { if (p.profile_id) slotByProfile.set(p.profile_id, p.slot); });
-
-  const decisionsBySlot: Record<number, TurnDecisions> = {};
-  (submissions ?? []).forEach((s) => {
-    const slot = slotByProfile.get(s.profile_id as string);
-    if (slot != null) decisionsBySlot[slot] = (s.payload ?? {}) as TurnDecisions;
-  });
+  const decisionsBySlot = decisionsBySlotFrom(
+    (players ?? []) as never,
+    (submissions ?? []).map((s) => ({ profile_id: s.profile_id as string, payload: s.payload })),
+  );
 
   const state = prevStateRow.state as RuntimeState;
   const out = runQuarter({ state, halfYear, decisionsBySlot, rng });
@@ -148,7 +255,27 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ evaluated: results.length, results }), {
+  /* Zweiter Durchgang: Partien, deren Periodenmitschrift noch fehlt. Läuft
+     unabhängig von der Fälligkeit, weil ein Nachtrag nichts mit dem
+     Halbjahreswechsel zu tun hat -- und nur einmal je Partie, danach ist sie
+     in seasons.statements_backfilled_at abgehakt. */
+  const backfilled: { seasonId: string; result: string }[] = [];
+  const { data: pending } = await db.rpc("list_seasons_for_statements_backfill");
+  /* Zeitschranke: Der Sweep läuft minütlich, ein Nachtrag ist einmalig. Lieber
+     eine Partie pro Durchgang liegen lassen, als die Auswertung der nächsten
+     Runde zu blockieren -- die Warteschlange arbeitet sich von selbst ab. */
+  const deadline = Date.now() + 25000;
+  for (const row of pending ?? []) {
+    if (Date.now() > deadline) break;
+    const seasonId = (row as { season_id: string }).season_id;
+    try {
+      backfilled.push({ seasonId, result: await backfillOneSeason(db, seasonId) });
+    } catch (err) {
+      backfilled.push({ seasonId, result: "error: " + (err instanceof Error ? err.message : String(err)) });
+    }
+  }
+
+  return new Response(JSON.stringify({ evaluated: results.length, results, backfilled }), {
     headers: { "Content-Type": "application/json" },
   });
 });
