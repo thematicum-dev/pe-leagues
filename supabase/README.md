@@ -36,15 +36,98 @@ Dateinamen-Reihenfolge angewendet:
 31. `20260821090000_fund_profile_selection.sql` – Fondsprofil je Spielerplatz (`season_players.fund_attrs`)
 32. `20260824090000_request_season_evaluation.sql` – `request_season_evaluation()`: ein Mitspieler stößt die ohnehin fällige Auswertung selbst an
 33. `20260829120000_season_state_backfill.sql` – Nachtrag der Periodenmitschrift für Partien, die vor deren Einführung begonnen haben (Claim/Commit, nur `service_role`)
+34. `20260830100000_universes.sql` – `universes`: voneinander getrennte Spielwelten (Test- und Live-Universum als Startbestand)
+35. `20260830100100_access_control.sql` – Zugangskontrolle: `profiles.access_status`, `profile_universes`, `request_access()`, `my_access()`
+36. `20260830100200_universe_seasons.sql` – `seasons.universe_id` + universumsweite Sichtbarkeit, `join_season`/`create_and_join_season`/`global_leaderboard` je Universum
+37. `20260830100300_access_admin_functions.sql` – Admin-Funktionen für Freigaben und Universen
+
+## Zugangskontrolle und Universen
+
+Niemand spielt mit, den der Admin nicht freigegeben hat. Der Weg eines neuen
+Spielers:
+
+1. **Registrieren** (`/signup`) und E-Mail bestätigen — das legt nur den
+   Login an, noch kein Profil.
+2. **Zugang beantragen** (`/onboarding`): Anzeigename und optional eine
+   Nachricht an den Admin. Das ruft `request_access()` auf, die einzige
+   Funktion, die ein Profil anlegen kann — immer mit
+   `access_status = 'pending'`. Danach landet der Nutzer auf `/access` und
+   sieht dort seinen Stand.
+3. **Freigabe durch den Admin** (`/admin/users`): `admin_set_user_access()`
+   setzt den Status auf `approved` und teilt in derselben Transaktion ein
+   oder mehrere Universen zu. Eine Freigabe ohne Universum lässt die
+   Oberfläche gar nicht erst zu — sie brächte nichts.
+4. **Anmelden** (`/login`): Wer noch wartet, abgelehnt wurde oder kein
+   Universum hat, wird sofort wieder abgemeldet und erfährt den Grund. Erst
+   mit Freigabe **und** Universum geht es aufs Dashboard.
+
+Der Admin-Account selbst (`is_admin()`) gibt sich in `request_access()`
+automatisch selbst frei und bekommt alle Universen — sonst könnte nach einem
+Neuaufsetzen der Datenbank niemand mehr irgendetwas freigeben.
+
+### Was ein Universum trennt
+
+Universen (`universes`) sind vollständig getrennte Spielwelten. Zwei sind von
+Anfang an angelegt (`live`, `test`), weitere legt der Admin unter
+`/admin/universes` an (`admin_create_universe()`) — ohne Migration. Jede
+Partie trägt `seasons.universe_id`; ein Spieler sieht ausschließlich Partien
+der Universen, die ihm über `profile_universes` zugeteilt wurden:
+
+- `seasons_select` und `season_players_select` verlangen zusätzlich
+  `is_universe_member(...)`. Damit sind auch `season_state` und
+  `turn_results` fremder Universen unsichtbar: deren Policies hängen an
+  eben diesen `seasons`-Zeilen.
+- `join_season()` und `create_and_join_season()` prüfen Freigabe und
+  Zuteilung selbst noch einmal und lehnen fremde Universen mit
+  `universe_not_granted` ab — auch bei direkt geratener Partie-UUID.
+- `global_leaderboard(p_universe_id)` liefert die Rangliste genau eines
+  Universums und nur an dessen Mitglieder.
+- Die Regel "höchstens eine aktive Partie" gilt **je Universum**: Wer im
+  Test-Universum spielt, kann parallel eine Live-Partie bestreiten.
+
+Ein Spieler kann mehreren Universen zugeteilt sein und wechselt im Dashboard
+zwischen ihnen (`profiles.active_universe_id`).
+
+### Warum sich niemand selbst freischalten kann
+
+Die Zugangsspalten in `profiles` sind gegen den eigenen Client abgesichert:
+
+- **Kein direktes INSERT mehr.** Die Policy `profiles_insert_own` ist
+  entfernt; Profile entstehen nur über `request_access()`. Sonst könnte ein
+  Nutzer sein Profil gleich mit `access_status = 'approved'` anlegen.
+- **Kein UPDATE auf Zugangsspalten.** Der Trigger
+  `profiles_guard_access_columns()` setzt `access_status`,
+  `access_requested_at`, `access_decided_at`, `access_decided_by`,
+  `access_note` und `request_message` bei jedem UPDATE der Rolle
+  `authenticated` stur auf den alten Stand zurück und lässt einen Wechsel
+  von `active_universe_id` nur auf zugeteilte Universen zu. Der Trigger ist
+  ausdrücklich **nicht** `security definer` — sonst wäre `current_user`
+  immer der Funktionseigentümer und die Prüfung liefe ins Leere.
+- **Kein INSERT in `profile_universes`.** Die Tabelle hat nur eine
+  SELECT-Policy für die eigenen Zeilen; geschrieben wird ausschließlich über
+  `admin_set_user_access()`.
+- **Notiz und Anfragetext bleiben privat.** `authenticated` hat auf
+  `profiles` nur noch Spaltenrechte für `id`, `display_name`, `created_at`,
+  `updated_at`, `access_status` und `active_universe_id` — Anzeigenamen
+  müssen für Lobbys und Ranglisten lesbar bleiben, die Nachricht an den
+  Admin und dessen Notiz nicht. Den eigenen vollständigen Stand liefert
+  `my_access()`.
+
+Bestandsnutzer und Bestandspartien bleiben unangetastet: Die Migration setzt
+alle bereits vorhandenen Profile auf `approved` und teilt ihnen das
+Live-Universum zu; alle bestehenden Partien landen ebenfalls im
+Live-Universum.
 
 ## Admin-Bereich
 
 `/admin` (siehe `app/admin/`) ist ausschließlich für den Account mit der
 E-Mail-Adresse `thematicum.dev@gmail.com` sichtbar (`public.is_admin()`,
 Migration 26). Dort lassen sich alle Partien inkl. Fortschritt und alle
-Nutzer inkl. E-Mail und Statistik einsehen, einzelne Nutzer löschen
-(`auth.admin.deleteUser`, service_role) und eine Partie vollständig
-zurücksetzen (`admin_reset_season()`).
+Nutzer inkl. E-Mail und Statistik einsehen, Zugänge freigeben oder sperren
+und Universen zuteilen (`admin_set_user_access()`), Universen anlegen und
+bearbeiten (`admin_create_universe()`, `admin_update_universe()`), einzelne
+Nutzer löschen (`auth.admin.deleteUser`, service_role) und eine Partie
+vollständig zurücksetzen (`admin_reset_season()`).
 
 Jede `admin_*`-Funktion prüft `is_admin()` selbst noch einmal serverseitig
 -- die Prüfung in `app/admin/adminAuth.ts` ist nur für den sofortigen

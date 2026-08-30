@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/access/context";
 import type { RuntimeState } from "@/lib/engine/turnTypes";
 import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
@@ -16,14 +16,11 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    notFound();
-  }
+  // Dieselbe Schranke wie auf dem Dashboard. Partien fremder Universen sind
+  // darüber hinaus schon durch RLS unsichtbar (seasons_select) und landen
+  // deshalb unten in notFound().
+  const { supabase, user } = await requireAccess(`/season/${id}`);
 
   const { data: season } = await supabase
     .from("seasons")

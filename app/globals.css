@@ -474,3 +474,89 @@ body {
     width: 100%;
   }
 }
+
+/* Universums-Umschalter im Dashboard (nur sichtbar, wenn einem Spieler
+   mehr als ein Universum zugeteilt ist). */
+.universeswitch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+
+.universeswitch select {
+  flex: 1;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+/* Freigabe-Werkzeuge im Admin-Bereich */
+.accessbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+}
+
+.accessuniverses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accesscheck {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+
+.accessnote,
+.universeform input[type="text"] {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.accessbox .dashform .btn-primary,
+.accessbox .dashform .btn-secondary {
+  width: auto;
+  margin-top: 0;
+}
+
+.universeform {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.universeform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+.universeform .btn-primary,
+.universeform .btn-secondary {
+  width: 100%;
+  margin-top: 4px;
+}

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/access/context";
 
 interface LeaderboardRow {
   profile_id: string;
@@ -26,13 +25,13 @@ function fmtIrr(v: number | null): string {
 }
 
 export default async function LeaderboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/leaderboard");
+  const { supabase, activeUniverse } = await requireAccess("/leaderboard");
 
-  const { data, error } = await supabase.rpc("global_leaderboard");
+  // Jedes Universum hat seine eigene Rangliste -- Ergebnisse aus einem
+  // anderen Universum tauchen hier nicht auf.
+  const { data, error } = await supabase.rpc("global_leaderboard", {
+    p_universe_id: activeUniverse.id,
+  });
   const rows = (data ?? []) as LeaderboardRow[];
 
   return (
@@ -41,7 +40,9 @@ export default async function LeaderboardPage() {
         <div className="dashheader">
           <div>
             <h1>Rangliste</h1>
-            <div className="dashsub">Über alle abgeschlossenen Partien</div>
+            <div className="dashsub">
+              {activeUniverse.name} · über alle abgeschlossenen Partien dieses Universums
+            </div>
           </div>
           <Link href="/dashboard" className="btn-secondary">
             Zum Dashboard
@@ -52,7 +53,10 @@ export default async function LeaderboardPage() {
           <h2>Alle Spieler ({rows.length})</h2>
           {error && <p className="autherror">{error.message}</p>}
           {rows.length === 0 && !error && (
-            <div className="quiet">Noch keine abgeschlossene Partie — die Rangliste füllt sich, sobald die erste Partie beendet ist.</div>
+            <div className="quiet">
+              Noch keine abgeschlossene Partie in {activeUniverse.name} — die Rangliste füllt sich,
+              sobald die erste Partie beendet ist.
+            </div>
           )}
           {rows.map((r, i) => (
             <div className="seasonrow" key={r.profile_id} style={{ alignItems: "flex-start" }}>
