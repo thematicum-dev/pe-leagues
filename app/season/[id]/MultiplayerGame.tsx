@@ -42,6 +42,12 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
+/* Taktgrenzen für das Nachfassen nach der eigenen Abgabe (siehe den Effekt
+   weiter unten). Der enge Takt gilt, solange die Auswertung tatsächlich
+   ansteht; beim Warten auf Mitspieler wird bis zur Obergrenze abgestuft. */
+const WAIT_POLL_MIN_MS = 5_000;
+const WAIT_POLL_MAX_MS = 60_000;
+
 interface HistoryRow {
   halfYear: number;
   market: RuntimeState["market"];
@@ -159,21 +165,46 @@ export default function MultiplayerGame({
     if (row.current_half_year !== currentHalfYear) router.refresh();
   }, [supabase, seasonId, currentHalfYear, router]);
 
-  /* Nach der eigenen Abgabe eng takten: solange die Auswertung aussteht, wird
-     sie alle 5 Sekunden erneut angestoßen (falls die Edge Function den ersten
-     Anstoß verschluckt hat) und der Stand geprüft. Das ist die Phase, in der
-     der Spieler auf den Bildschirm schaut — hier kostet jede Sekunde
-     Wartezeit spürbar. Sobald das Halbjahr wechselt, mountet die Komponente
-     über den key in page.tsx ohnehin neu und der Intervall verschwindet. */
+  /* Nach der eigenen Abgabe nachfassen: die Auswertung anstoßen (falls die
+     Edge Function den ersten Anstoß verschluckt hat) und den Stand prüfen.
+
+     Der Takt richtet sich danach, worauf tatsächlich gewartet wird, statt
+     stur bei 5 Sekunden zu bleiben. request_season_evaluation() liefert
+     genau diese Auskunft mit zurück:
+
+     - true  = die Partie ist fällig, die Auswertung läuft an. Der Wechsel
+               steht unmittelbar bevor, also eng bleiben. Das ist der
+               Einzelspielerfall (vier KI-Fonds), in dem nach der eigenen
+               Abgabe niemand mehr fehlt — hier kostet jede Sekunde spürbar.
+     - false = es fehlen noch Abgaben von Mitspielern. Das kann bis zur
+               Frist dauern, also bis zu zwölf Stunden. Vorher hat ein
+               Spieler, der den Tab offen ließ, in dieser Lage 1.440
+               Anfragen pro Stunde erzeugt, ohne dass sich irgendetwas
+               ändern konnte.
+
+     Beim Warten auf Mitspieler wird der Abstand deshalb verdoppelt, bis auf
+     eine Minute. Das senkt die Last in diesem Fall um gut das Zwölffache und
+     lässt den schnellen Fall unangetastet. Den eigentlichen Übergang meldet
+     ohnehin die Realtime-Subscription; dieser Takt ist nur der Rückfall für
+     mobile Browser, die Websockets im Hintergrund pausieren. */
   useEffect(() => {
     if (!submitted) return;
     let stopped = false;
-    const id = setInterval(async () => {
+    let delay = WAIT_POLL_MIN_MS;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = async () => {
       if (stopped) return;
-      await requestEvaluation();
+      const due = await requestEvaluation();
+      if (stopped) return;
       await refreshStatus();
-    }, 5_000);
-    return () => { stopped = true; clearInterval(id); };
+      if (stopped) return;
+      delay = due ? WAIT_POLL_MIN_MS : Math.min(delay * 2, WAIT_POLL_MAX_MS);
+      timer = setTimeout(tick, delay);
+    };
+
+    timer = setTimeout(tick, delay);
+    return () => { stopped = true; clearTimeout(timer); };
   }, [submitted, refreshStatus, requestEvaluation]);
 
   // Live-Übergang ins nächste Halbjahr (bzw. in den Endstand): zwei
