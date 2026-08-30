@@ -33,6 +33,7 @@ import {
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod,
 } from "./engine.ts";
+import type { EngineCompat } from "./engine.ts";
 
 type Archetype = (typeof ARCHES)[number];
 function archetypeByKey(key: string): Archetype {
@@ -85,7 +86,7 @@ function pushFeed(news: Any[], q: number, emoji: string, tone: "neu" | "pos" | "
    selbst schaden, nie einen ungültigen Zustand erzwingen. */
 function applyImmediateDecisions(
   rng: Rng, f: RuntimeFund, decisions: TurnDecisions, exitQueue: ExitQueueItem[], shortlist: ShortlistItem[],
-  market: Record<string, number>, quarter: number, news: Any[],
+  market: Record<string, number>, quarter: number, news: Any[], compat: EngineCompat,
 ): { exitQueue: ExitQueueItem[]; shortlist: ShortlistItem[] } {
   const holdingByUid = (uid: string) => (f.holdings as Any[]).find((h) => h.uid === uid);
   let queue = [...exitQueue];
@@ -217,9 +218,11 @@ function applyImmediateDecisions(
     if (intent.dim === "plat" && c.initP) return;
     if (intent.dim === "acc" && c.initA) return;
     if (busyInitSlots >= maxInitSlots) return;
-    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter);
+    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat);
     if (!B || B.blocked) return;
-    c.netDebt += B.debt; bookOff(c, "restr", B.debt);
+    // Der Kaufpreis eines Zukaufs ist eine Akquisition, Programmkosten sind
+    // Einmalaufwand — in der Berichtsansicht stehen sie an verschiedenen Stellen.
+    c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
     c[B.slot] = B.init;
     busyInitSlots++;
     pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu", `${c.name}: ${B.spec.n} gestartet.`, f.slot);
@@ -345,6 +348,10 @@ export interface RunQuarterInput {
   halfYear: number;
   decisionsBySlot: Record<number, TurnDecisions>;
   rng: Rng;
+  /* Regelstand, nach dem gerechnet wird. Nur die Wiederholung bereits
+     ausgewerteter Halbjahre setzt hier etwas (siehe lib/engine/replay.ts);
+     eine laufende Partie rechnet immer nach dem aktuellen Stand.          */
+  compat?: EngineCompat;
 }
 
 export interface RunQuarterOutput {
@@ -365,6 +372,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   const exitQueueBySlot: Record<string, ExitQueueItem[]> = { ...input.state.exitQueue };
   const shortlistBySlot: Record<string, ShortlistItem[]> = { ...input.state.shortlist };
   const decisionsBySlot = input.decisionsBySlot;
+  const compat: EngineCompat = input.compat ?? {};
 
   // 0 — Due-Diligence-Kosten für den aktuellen Dealflow verrechnen
   const ddBySlot: Record<number, Set<string>> = {};
@@ -386,7 +394,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const decisions = decisionsBySlot[f.slot] || {};
     const key = String(f.slot);
     const res = applyImmediateDecisions(
-      rng, f, decisions, exitQueueBySlot[key] || [], shortlistBySlot[key] || [], mk, q, news,
+      rng, f, decisions, exitQueueBySlot[key] || [], shortlistBySlot[key] || [], mk, q, news, compat,
     );
     exitQueueBySlot[key] = res.exitQueue;
     shortlistBySlot[key] = res.shortlist;
@@ -502,11 +510,14 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         const id = cands.reduce((a: string, b: string) => (fitOf(b, c) * Math.pow(0.82, initRuns(c, b))
           > fitOf(a, c) * Math.pow(0.82, initRuns(c, a)) ? b : a));
         if (fitOf(id, c) * Math.pow(0.82, initRuns(c, id)) < 0.30 && id !== "ma") return;
-        const B = buildInit(rng, c, dim, id, mk, q);
+        const B = buildInit(rng, c, dim, id, mk, q, compat);
         if (!B || B.blocked) return;
         const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
-        if (B.debt > 0 && head < 0.6) return;
-        c.netDebt += B.debt; bookOff(c, "restr", B.debt);
+        /* Der Zukaufspreis steckt seit dem 30.08.2026 in B.debt. Die
+           Finanzierbarkeit prüft für ihn aber addonCheck() pro forma, nicht
+           dieser grobe Puffer — sonst blockierte er Zukäufe doppelt. */
+        if (B.debt > 0 && !B.spec.ma && head < 0.6) return;
+        c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
         c[slot] = B.init;
       });
     });
@@ -515,7 +526,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   /* 3 — Halbjahr simulieren */
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
-      stepCompany(rng, c, mk, f.attrs.operations);
+      stepCompany(rng, c, mk, f.attrs.operations, compat);
       if (rng.rnd() < 0.15) {
         const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
         if (pool.length) {
@@ -535,7 +546,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   /* 3y — People */
   const newShortlists: { uid: string; name: string; seat: string; cands: Any[] }[] = [];
   F.forEach((f) => {
-    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists));
+    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists, compat));
   });
   newShortlists.forEach((sl) => {
     const owner = F.find((f) => (f.holdings as Any[]).some((h) => h.uid === sl.uid));

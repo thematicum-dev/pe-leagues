@@ -48,12 +48,19 @@ describe("Operating Capacity wird serverseitig durchgesetzt", () => {
     // deutlich vor Halbjahr PERIODS (20) abgeschlossen sein, sonst greift
     // die automatische Schlussliquidation und wirft alle Holdings hinaus.
     let hy = 0;
-    while ((state.funds[0].holdings as Any[]).length < 5 && hy < 15) {
+    while ((state.funds[0].holdings as Any[]).length < 5 && hy < 17) {
       hy++;
-      const d = state.deals[0] as Any;
-      const decisions: Record<number, TurnDecisions> = d
-        ? { 0: { bids: [{ dealId: d.id, multiple: d.askMult * 1.02, leverage: d.levCap }] } }
-        : {};
+      /* Auf den ganzen Dealflow bieten, mit maßvollem Leverage: Der Test misst
+         die Operating Capacity, nicht das Überleben am Covenant oder die
+         Trefferquote in der Auktion. Mit maximaler Verschuldung reißen
+         einzelne Beteiligungen den Covenant, bevor fünf zusammenkommen. */
+      const decisions: Record<number, TurnDecisions> = {
+        0: {
+          bids: (state.deals as Any[]).map((d) => ({
+            dealId: d.id, multiple: d.askMult * 1.08, leverage: Math.min(d.levCap, 2.5),
+          })),
+        },
+      };
       const out = runQuarter({ state, halfYear: hy, decisionsBySlot: decisions, rng });
       state = out.state;
     }

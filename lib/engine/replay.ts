@@ -41,6 +41,7 @@
    nicht mehr herstellen lässt.                                               */
 import { createRng, LCG_A, LCG_C, LCG_M } from "./rng.ts";
 import { runQuarter } from "./runQuarter.ts";
+import { LEGACY_COMPAT } from "./engine.ts";
 import type { RuntimeState, TurnDecisions } from "./turnTypes.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,8 +76,10 @@ export function rngStepBack(seed: number, steps = 1): number {
 }
 
 /* Die Mitschrift selbst gehört nicht zum Vergleich: Sie ist genau das, was der
-   gespeicherte Zustand noch nicht hat und die Wiederholung hinzufügt.        */
-const RECORDING_KEYS = new Set(["fin", "per", "off"]);
+   gespeicherte Zustand noch nicht hat und die Wiederholung hinzufügt. nwcBal
+   gehört dazu — im Altverhalten ist der Bestand eine reine Fortschreibung und
+   fließt in keine Formel zurück, ein alter Spielstand kennt ihn deshalb nicht. */
+const RECORDING_KEYS = new Set(["fin", "per", "off", "nwcBal"]);
 
 /* Tiefer Vergleich zweier Spielstände. Zahlen exakt, Schlüsselreihenfolge egal,
    fehlende und undefinierte Felder gleichwertig — ein Zustand aus der Datenbank
@@ -112,13 +115,20 @@ export function statesMatch(a: RuntimeState, b: RuntimeState): boolean {
 }
 
 /* Ein Halbjahr von einer gegebenen Startposition aus wiederholen. Liefert den
-   Zustand danach, die Endposition und die Zahl der verbrauchten Ziehungen. */
+   Zustand danach, die Endposition und die Zahl der verbrauchten Ziehungen.
+
+   Gerechnet wird nach dem Regelstand, unter dem das Halbjahr gespielt wurde
+   (LEGACY_COMPAT) — nicht nach dem heutigen. Ein Halbjahr, das vor einer
+   Regelkorrektur ausgewertet wurde, ergäbe sonst einen anderen Spielstand als
+   den gespeicherten, und die Wiederherstellung müsste scheitern, obwohl mit
+   den Daten alles in Ordnung ist. Wiederhergestellt wird immer nur
+   Vergangenheit; alles ab dem laufenden Halbjahr rechnet nach heutigem Stand. */
 export function replayHalfYear(
   state: RuntimeState, halfYear: number,
   decisionsBySlot: Record<number, TurnDecisions>, startSeed: number,
 ) {
   const rng = createRng(startSeed);
-  const out = runQuarter({ state, halfYear, decisionsBySlot, rng });
+  const out = runQuarter({ state, halfYear, decisionsBySlot, rng, compat: LEGACY_COMPAT });
   return { state: out.state, feed: out.feed, endSeed: rng.seed, draws: rng.draws };
 }
 

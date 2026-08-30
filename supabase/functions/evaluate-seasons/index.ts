@@ -242,23 +242,16 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  const results: { seasonId: string; ok: boolean; error?: string }[] = [];
-  for (const row of due ?? []) {
-    const seasonId = (row as { season_id: string }).season_id;
-    try {
-      await evaluateOneSeason(db, seasonId);
-      results.push({ seasonId, ok: true });
-    } catch (err) {
-      // Eine fehlerhafte Partie darf die übrigen fälligen Auswertungen
-      // nicht verhindern -- derselbe Grundsatz wie bei start_due_seasons().
-      results.push({ seasonId, ok: false, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  /* Zweiter Durchgang: Partien, deren Periodenmitschrift noch fehlt. Läuft
+  /* Erster Durchgang: Partien, deren Periodenmitschrift noch fehlt. Läuft
      unabhängig von der Fälligkeit, weil ein Nachtrag nichts mit dem
      Halbjahreswechsel zu tun hat -- und nur einmal je Partie, danach ist sie
-     in seasons.statements_backfilled_at abgehakt. */
+     in seasons.statements_backfilled_at abgehakt.
+
+     Bewusst VOR den Auswertungen: Eine Wiederherstellung rechnet vergangene
+     Halbjahre nach dem Regelstand nach, unter dem sie gespielt wurden (siehe
+     EngineCompat). Käme erst die Auswertung, wäre das jüngste Halbjahr schon
+     nach heutigem Stand gespielt und ließe sich mit dem alten nicht mehr
+     herstellen -- der Nachtrag scheiterte an einer selbst gebauten Hürde. */
   const backfilled: { seasonId: string; result: string }[] = [];
   const { data: pending } = await db.rpc("list_seasons_for_statements_backfill");
   /* Zeitschranke: Der Sweep läuft minütlich, ein Nachtrag ist einmalig. Lieber
@@ -272,6 +265,20 @@ Deno.serve(async (req: Request) => {
       backfilled.push({ seasonId, result: await backfillOneSeason(db, seasonId) });
     } catch (err) {
       backfilled.push({ seasonId, result: "error: " + (err instanceof Error ? err.message : String(err)) });
+    }
+  }
+
+  // Zweiter Durchgang: die fälligen Halbjahre auswerten.
+  const results: { seasonId: string; ok: boolean; error?: string }[] = [];
+  for (const row of due ?? []) {
+    const seasonId = (row as { season_id: string }).season_id;
+    try {
+      await evaluateOneSeason(db, seasonId);
+      results.push({ seasonId, ok: true });
+    } catch (err) {
+      // Eine fehlerhafte Partie darf die übrigen fälligen Auswertungen
+      // nicht verhindern -- derselbe Grundsatz wie bei start_due_seasons().
+      results.push({ seasonId, ok: false, error: err instanceof Error ? err.message : String(err) });
     }
   }
 

@@ -11,10 +11,19 @@ import {
 /* Spielt eine vollständige Partie über alle 20 Halbjahre mit einem festen
    Startwert und festgelegten Entscheidungsregeln durch — ausschließlich über
    die extrahierten Engine-Funktionen, ohne React. Das Ergebnis muss exakt dem
-   Sollwert entsprechen, der vor dem Umbau aus dem damaligen Code erzeugt
-   wurde (siehe PR-Beschreibung). Weicht auch nur eine einzige Zufallsziehung
-   an irgendeiner Stelle von der ursprünglichen Reihenfolge ab, ändert sich
-   die Kaskade der Folgeziehungen und der Test schlägt fehl. */
+   hinterlegten Sollwert entsprechen. Weicht auch nur eine einzige
+   Zufallsziehung an irgendeiner Stelle von der Reihenfolge ab, ändert sich die
+   Kaskade der Folgeziehungen und der Test schlägt fehl.
+
+   Der Sollwert stammt ursprünglich aus dem Code vor der Extraktion der
+   Spiellogik nach lib/engine/ und war seither unverändert. Am 30.08.2026
+   wurde er einmal bewusst neu gesetzt, weil zwei Regeln korrigiert wurden:
+   Das Working Capital rechnet seither auf dem Bestand statt nur auf dem
+   Umsatzzuwachs, und der Kaufpreis eines Add-ons wird gegen die
+   Nettoverschuldung gebucht. Die Zahl der Zufallsziehungen ist dabei
+   unverändert geblieben (finalRngPosition), es haben sich ausschließlich
+   Beträge verschoben — genau das, was die beiden Korrekturen bewirken
+   sollten. Jede weitere Abweichung ist unbeabsichtigt.                    */
 function runGoldenGame() {
   const rng = createRng(20260803);
   const market: Record<string, number> = {};
@@ -168,12 +177,12 @@ const GOLDEN_RESULT = {
   cash: 40.417132,
   undrawn: 40.417132,
   drawn: 459.582868,
-  nav: 198.797578,
-  tvpi: 1.572624,
-  dpi: 1.176154,
-  irr: 0.081885,
-  score: 0.666105,
-  carry: 65.792027,
+  nav: 195.371067,
+  tvpi: 1.558837,
+  dpi: 1.168698,
+  irr: 0.080391,
+  score: 0.657678,
+  carry: 64.208005,
   landmark: {
     sector: "Consumer",
     revenue: 250.534344,
@@ -181,13 +190,13 @@ const GOLDEN_RESULT = {
     askMult: 11.137611,
     name: "Obereck Nutrition Gruppe",
   },
-  healthMoic: 1.817112,
+  healthMoic: 1.781943,
   healthCount: 2,
   bridge: {
     entry: 82.956383,
     ebitda: 86.005777,
-    mult: -65.041386,
-    delev: -1.721856,
+    mult: -62.123914,
+    delev: -4.639328,
     exit: 90,
   },
   marketFinal: {

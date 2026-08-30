@@ -46,6 +46,14 @@ type Any = any;
    mal Jahres-Capex. Das ist die einzige Brückenannahme des ganzen Moduls und
    steht als Fußnote unter der Bilanz.                                        */
 export const PPE_YEARS = 4;
+/* Operative Mindestliquidität in Prozent vom Jahresumsatz. Die Engine führt
+   nur die Nettoverschuldung — Kasse und Bankdarlehen sind darin verrechnet.
+   Für die Bilanz müssen beide getrennt stehen, und die Trennlinie ist genau
+   die Kasse, die ein Unternehmen im laufenden Betrieb ohnehin hält. Der Rest
+   ergibt sich: Bankdarlehen = Nettoverschuldung + Kasse. Ist die Beteiligung
+   netto schuldenfrei, verschwindet das Darlehen und die Kasse trägt den
+   Überschuss.                                                              */
+export const MIN_CASH_PCT = 2;
 // Historie einer Deal-Karte: drei Geschäftsjahre, wie im Verkaufsmemorandum
 export const DEAL_YEARS = 3;
 
@@ -78,8 +86,10 @@ export interface FinPeriod {
   ppe: number;
   goodwill: number;
   nwc: number;
+  cash: number;
   assets: number;
-  netDebt: number;
+  debt: number;            // Bankdarlehen (brutto)
+  netDebt: number;         // = debt − cash
   equity: number;
 
   // Kapitalflussrechnung
@@ -87,9 +97,10 @@ export interface FinPeriod {
   capex: number;
   acquisitions: number;
   distributions: number;
-  cfo: number;
-  fcfPreFin: number;
-  fcf: number;
+  /* Free Cashflow vor Steuern und Finanzierung: was das Geschäft selbst
+     erwirtschaftet, bevor Fiskus und Bank bedient sind.                    */
+  fcfPreTax: number;
+  netCashFlow: number;     // nach Steuern und Zinsen
   netDebtOpen: number;
   dNetDebt: number;
 }
@@ -112,7 +123,7 @@ const pctOf = (v: number, base: number) => (base > 0 ? (v / base) * 100 : 0);
    was dieses Modul selbst rechnet.                                          */
 function makePeriod(base: {
   key: string; label: string; sub: string; months: number;
-  opening?: boolean; estimated?: boolean;
+  opening?: boolean; estimated?: boolean; levered?: boolean;
   revenue: number; adjEbitda: number; oneOff: number; da: number; interest: number; tax: number;
   dNwc: number; capex: number; acquisitions: number; distributions: number;
   ppe: number; goodwill: number; nwc: number; netDebt: number; equity: number; netDebtOpen: number;
@@ -121,19 +132,29 @@ function makePeriod(base: {
   const ebit = repEbitda - base.da;
   const ebt = ebit - base.interest;
   const netIncome = ebt - base.tax;
-  const cfo = repEbitda - base.dNwc - base.tax;
-  const fcfPreFin = cfo - base.capex - base.acquisitions;
-  const fcf = fcfPreFin - base.interest;
+  /* Erst das Geschäft, dann Fiskus und Bank: Der Free Cashflow vor Steuern
+     und Zinsen misst das Unternehmen, der Netto-Cashflow danach das, was der
+     Kapitalstruktur nach übrig bleibt und die Verschuldung bewegt.        */
+  const fcfPreTax = repEbitda - base.dNwc - base.capex - base.acquisitions;
+  const netCashFlow = fcfPreTax - base.tax - base.interest;
+  /* Kasse und Bankdarlehen aus der Nettoverschuldung: Die operative
+     Mindestliquidität bleibt stehen, das Darlehen trägt den Rest. Ist die
+     Nettoverschuldung negativ, gibt es kein Darlehen mehr und die Kasse
+     nimmt den Überschuss auf. In beiden Fällen gilt Kasse − Darlehen =
+     −Nettoverschuldung, die Bilanz geht also unverändert auf.             */
+  const minCash = base.levered ? (MIN_CASH_PCT / 100) * base.revenue * (12 / Math.max(1, base.months)) : 0;
+  const debt = Math.max(0, base.netDebt + minCash);
+  const cash = debt - base.netDebt;
   return {
     key: base.key, label: base.label, sub: base.sub, months: base.months,
     opening: !!base.opening, estimated: !!base.estimated,
     revenue: base.revenue, adjEbitda: base.adjEbitda, oneOff: base.oneOff, repEbitda,
     da: base.da, ebit, interest: base.interest, ebt, tax: base.tax, netIncome,
-    ppe: base.ppe, goodwill: base.goodwill, nwc: base.nwc,
-    assets: base.ppe + base.goodwill + base.nwc,
-    netDebt: base.netDebt, equity: base.equity,
+    ppe: base.ppe, goodwill: base.goodwill, nwc: base.nwc, cash,
+    assets: base.ppe + base.goodwill + base.nwc + cash,
+    debt, netDebt: base.netDebt, equity: base.equity,
     dNwc: base.dNwc, capex: base.capex, acquisitions: base.acquisitions,
-    distributions: base.distributions, cfo, fcfPreFin, fcf,
+    distributions: base.distributions, fcfPreTax, netCashFlow,
     netDebtOpen: base.netDebtOpen, dNetDebt: base.netDebt - base.netDebtOpen,
   };
 }
@@ -163,6 +184,7 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
     periods.push(makePeriod({
       key: "y" + back, label: back === 0 ? "LTM" : `−${back}J`,
       sub: back === 0 ? "letzte 12M" : "12M", months: 12,
+      levered: false,
       revenue, adjEbitda, oneOff: 0, da: capex, interest: 0, tax,
       dNwc: (nwPct / 100) * (revenue - revPrev), capex, acquisitions: 0, distributions: 0,
       ppe: PPE_YEARS * capex, goodwill: 0, nwc, netDebt: 0,
@@ -196,16 +218,25 @@ export function holdingStatements(c: Any): Statements | null {
   const ev0 = c.entryEV ?? entryEbitda * entryMult;
   const nd0 = c.entryDebt ?? h[0].nd ?? 0;
 
-  // Eröffnungsbilanz nach Kaufpreisallokation: Vermögen zum Enterprise Value
+  /* Eröffnungsbilanz nach Kaufpreisallokation: Vermögen zum Enterprise Value.
+     Das gebundene Working Capital kommt aus der Mitschrift der ersten Periode
+     — Schlussbestand abzüglich der Veränderung dieser Periode ist genau der
+     Eröffnungsbestand. Die Quote der Karte (benchNwc) taugt dafür nicht: Sie
+     ist die Branchenreferenz, während die Engine mit einer Quote rechnet, die
+     auch Reifegrad und Wachstum enthält — anders angesetzt liefe die
+     Kapitalbindung der Bilanz von Anfang an neben der Engine her.          */
+  const firstFin = h.length > 1 ? h[1].fin : null;
   let ppe = (PPE_YEARS * cxPct0 * h[0].rev) / 100;
-  let nwc = (nwPct0 * h[0].rev) / 100;
+  let nwc = firstFin && firstFin.nwcBal != null
+    ? firstFin.nwcBal - firstFin.nwc
+    : (nwPct0 * h[0].rev) / 100;
   let goodwill = ev0 - ppe - nwc;
   let equity = ev0 - nd0;
   let netDebt = nd0;
 
   const entryCapex = (h[0].rev * cxPct0) / 100;
   const opening = makePeriod({
-    key: "entry", label: "Einstieg", sub: "LTM bei Vollzug", months: 12, opening: true,
+    key: "entry", label: "Einstieg", sub: "LTM bei Vollzug", months: 12, opening: true, levered: true,
     revenue: h[0].rev, adjEbitda: h[0].eb, oneOff: 0, da: entryCapex, interest: 0,
     tax: TAX_RATE * Math.max(0, h[0].eb - entryCapex),
     dNwc: 0, capex: entryCapex, acquisitions: 0, distributions: 0,
@@ -214,15 +245,18 @@ export function holdingStatements(c: Any): Statements | null {
 
   // Halbjahre einzeln aufbauen, danach zu Geschäftsjahren verdichten
   const halves: FinPeriod[] = [];
+  let nwcRelCum = 0;
   for (let i = 1; i < h.length; i++) {
     const prev = h[i - 1], now = h[i];
     const rec = now.fin || null;
     const estimated = !rec;
 
     let ebH: number, revH: number, capex: number, dNwc: number, interest: number, tax: number;
+    let nwcBal: number | null = null;
     if (rec) {
       ebH = rec.ebH; revH = rec.revH; capex = rec.capex; dNwc = rec.nwc;
       interest = rec.interest; tax = rec.tax;
+      nwcBal = rec.nwcBal != null ? rec.nwcBal : null;
     } else {
       /* Perioden aus Partien, die vor der Berichtsansicht begonnen haben, tragen
          keine Mitschrift. Sie werden mit exakt den Formeln aus stepCompany()
@@ -252,13 +286,23 @@ export function holdingStatements(c: Any): Statements | null {
 
     ppe = ppe + off.capexOff;                 // Abschreibungen = Capex, netto null
     goodwill = goodwill + off.addon;
-    nwc = nwc + dNwc + off.nwcRel;
+    /* Der Bestand steht mitgeschrieben zur Verfügung; die Fortschreibung ist
+       nur der Rückfallweg für Perioden ohne Mitschrift. Beide Wege sind
+       deckungsgleich, weil der Zufluss der Periode genau die Veränderung des
+       Bestands ist — die Bilanz geht so oder so auf.
+
+       Der pauschale Einmaleffekt des alten NWC-Programms lief an der Quote
+       vorbei (nur gegen die Nettoverschuldung) und fehlt im mitgeschriebenen
+       Bestand. Er wird deshalb kumuliert dazugerechnet, nicht je Periode —
+       sonst fiele die Freisetzung der Vorperiode in der nächsten wieder weg. */
+    nwcRelCum += off.nwcRel;
+    nwc = nwcBal != null ? nwcBal + nwcRelCum : nwc + dNwc + off.nwcRel;
     netDebt = now.nd;
     const netIncome = (ebH - oneOff - capex) - interest - tax;
     equity = equity + netIncome - off.dist;
 
     halves.push(makePeriod({
-      key: "h" + i, label: "HJ " + i, sub: "6M", months: 6, estimated,
+      key: "h" + i, label: "HJ " + i, sub: "6M", months: 6, estimated, levered: true,
       revenue: revH, adjEbitda: ebH, oneOff, da: capex, interest, tax,
       dNwc: dNwc + off.nwcRel, capex: capex + off.capexOff, acquisitions: off.addon,
       distributions: off.dist,
@@ -266,7 +310,7 @@ export function holdingStatements(c: Any): Statements | null {
     }));
   }
 
-  const periods = [opening, ...groupToYears(halves)];
+  const periods = [opening, ...groupToYears(halves, true)];
   return {
     kind: "holding", name: c.name, sector: c.sector,
     periods, levered: true,
@@ -277,7 +321,7 @@ export function holdingStatements(c: Any): Statements | null {
 /* Zwei Halbjahre ergeben ein Geschäftsjahr: Stromgrößen addiert, Bilanz vom
    Stichtag des zweiten. Bleibt am Ende ein einzelnes Halbjahr übrig, wird es
    als Sechsmonatsspalte ausgewiesen statt stillschweigend hochgerechnet.    */
-function groupToYears(halves: FinPeriod[]): FinPeriod[] {
+function groupToYears(halves: FinPeriod[], levered: boolean): FinPeriod[] {
   const out: FinPeriod[] = [];
   for (let i = 0; i < halves.length; i += 2) {
     const a = halves[i], b = halves[i + 1];
@@ -288,7 +332,7 @@ function groupToYears(halves: FinPeriod[]): FinPeriod[] {
     }
     out.push(makePeriod({
       key: "y" + year, label: "J" + year, sub: "12M", months: 12,
-      estimated: a.estimated || b.estimated,
+      estimated: a.estimated || b.estimated, levered,
       revenue: a.revenue + b.revenue,
       adjEbitda: a.adjEbitda + b.adjEbitda,
       oneOff: a.oneOff + b.oneOff,
@@ -317,6 +361,7 @@ export function ratiosOf(p: FinPeriod, levered: boolean) {
     // Cash Conversion vor Finanzierung: dieselbe Definition wie auf der Karte
     conversion: p.adjEbitda > 0 ? ((p.adjEbitda - p.capex - p.dNwc) / p.adjEbitda) * 100 : null,
     leverage: levered && ebAnn > 0 ? p.netDebt / ebAnn : null,
+    grossLeverage: levered && ebAnn > 0 ? p.debt / ebAnn : null,
     interestCover: levered && p.interest > 0.001 ? p.adjEbitda / p.interest : null,
     capexPct: pctOf(p.capex, p.revenue),
     nwcPct: pctOf(p.nwc, p.revenue * annual),

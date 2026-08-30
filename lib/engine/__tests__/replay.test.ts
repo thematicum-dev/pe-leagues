@@ -3,6 +3,7 @@ import { createRng, LCG_M } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, newDeal } from "../engine";
 import { runQuarter } from "../runQuarter";
 import { backfillSeason, findStartSeed, needsBackfill, rngStepBack, statesMatch } from "../replay";
+import { LEGACY_COMPAT } from "../engine";
 import { holdingStatements } from "../financials";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
@@ -77,7 +78,10 @@ function playSeason(seed: number, halfYears: number) {
       bySlot[slot] = d;
     });
     decisionsByHalfYear[hy] = bySlot;
-    state = runQuarter({ state, halfYear: hy, decisionsBySlot: bySlot, rng }).state;
+    /* Eine Partie, die vor der Regelkorrektur begonnen hat — genau der Fall,
+       für den die Wiederherstellung da ist. Deshalb nach dem damaligen Stand
+       gespielt, so wie der Server es getan hätte.                          */
+    state = runQuarter({ state, halfYear: hy, decisionsBySlot: bySlot, rng, compat: LEGACY_COMPAT }).state;
     states.push({ halfYear: hy, state });
   }
   return { states, decisionsByHalfYear, endSeed: rng.seed };
@@ -154,7 +158,10 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
     expect(found).not.toBeNull();
     // Von dieser Position aus ergibt die Wiederholung exakt den Endstand
     const rng = createRng(found!.seed);
-    const out = runQuarter({ state: stored[n - 1].state, halfYear: n, decisionsBySlot: played.decisionsByHalfYear[n], rng });
+    const out = runQuarter({
+      state: stored[n - 1].state, halfYear: n,
+      decisionsBySlot: played.decisionsByHalfYear[n], rng, compat: LEGACY_COMPAT,
+    });
     expect(rng.seed).toBe(played.endSeed);
     expect(statesMatch(out.state, stored[n].state)).toBe(true);
   });
@@ -196,9 +203,9 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
         const st = holdingStatements(c)!;
         expect(st.anyEstimated, `${c.name} trägt geschätzte Perioden`).toBe(false);
         st.periods.forEach((p) => {
-          expect(Math.abs(p.assets - (p.netDebt + p.equity))).toBeLessThan(1e-6);
+          expect(Math.abs(p.assets - (p.debt + p.equity))).toBeLessThan(1e-6);
           if (p.opening) return;
-          expect(Math.abs((p.netDebtOpen - p.fcf + p.distributions) - p.netDebt)).toBeLessThan(1e-6);
+          expect(Math.abs((p.netDebtOpen - p.netCashFlow + p.distributions) - p.netDebt)).toBeLessThan(1e-6);
         });
         checked++;
       });
@@ -283,7 +290,7 @@ describe("Wiederherstellung einer vollen Partie mit fünf Spielern", () => {
         bySlot[slot] = d;
       });
       dec[hy] = bySlot;
-      state = runQuarter({ state, halfYear: hy, decisionsBySlot: bySlot, rng }).state;
+      state = runQuarter({ state, halfYear: hy, decisionsBySlot: bySlot, rng, compat: LEGACY_COMPAT }).state;
       states.push({ halfYear: hy, state });
     }
     const stored = states.map((r: Any) => ({ halfYear: r.halfYear, state: tj(strip(r.state)) }));
