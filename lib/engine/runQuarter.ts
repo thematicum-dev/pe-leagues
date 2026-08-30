@@ -31,6 +31,7 @@ import {
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
+  bookOff, periodFin, resetPeriod,
 } from "./engine.ts";
 
 type Archetype = (typeof ARCHES)[number];
@@ -146,7 +147,8 @@ function applyImmediateDecisions(
     const c = holdingByUid(dec.holdingUid);
     if (!c) { list = list.filter((it) => it !== item); return; }
     if (dec.choice === "reject") {
-      c.netDebt += retainerOf(dec.seat, ebitdaOf(c)) * 0.5;
+      const abort = retainerOf(dec.seat, ebitdaOf(c)) * 0.5;
+      c.netDebt += abort; bookOff(c, "mgmt", abort);
       c.searches = (c.searches || []).map((se: Any) => (se.seat === dec.seat ? { seat: dec.seat, readyQ: quarter + 1 } : se));
       pushFeed(news, quarter, "🔍", "neu", `${c.name}: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.`, f.slot);
       list = list.filter((it) => it !== item);
@@ -159,7 +161,8 @@ function applyImmediateDecisions(
     c[dec.seat] = { skill: cand.skill, dev: cand.dev, poach: cand.poach };
     c.searches = (c.searches || []).filter((se: Any) => se.seat !== dec.seat);
     c.onboard = 1;
-    c.netDebt += signBonusOf(dec.seat, cand.skill, ebitdaOf(c)) + (had ? severanceOf(dec.seat, prevSkill, ebitdaOf(c)) : 0);
+    const hireCost = signBonusOf(dec.seat, cand.skill, ebitdaOf(c)) + (had ? severanceOf(dec.seat, prevSkill, ebitdaOf(c)) : 0);
+    c.netDebt += hireCost; bookOff(c, "mgmt", hireCost);
     const nm = dec.seat === "ceo" ? "CEO" : dec.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     pushFeed(news, quarter, "🤝", "pos", `${c.name}: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}.`, f.slot);
     list = list.filter((it) => it !== item);
@@ -193,7 +196,8 @@ function applyImmediateDecisions(
     const c = holdingByUid(s.holdingUid);
     if (!c) return;
     if ((c.searches || []).some((se: Any) => se.seat === s.seat)) return;
-    c.netDebt += retainerOf(s.seat, ebitdaOf(c));
+    const retainer = retainerOf(s.seat, ebitdaOf(c));
+    c.netDebt += retainer; bookOff(c, "mgmt", retainer);
     c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + 1 }];
     const nm = s.seat === "ceo" ? "CEO" : s.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     pushFeed(news, quarter, "🔍", "neu", `${c.name}: Search-Mandat für einen neuen ${nm} erteilt.`, f.slot);
@@ -215,7 +219,7 @@ function applyImmediateDecisions(
     if (busyInitSlots >= maxInitSlots) return;
     const B = buildInit(rng, c, intent.dim, intent.id, market, quarter);
     if (!B || B.blocked) return;
-    c.netDebt += B.debt;
+    c.netDebt += B.debt; bookOff(c, "restr", B.debt);
     c[B.slot] = B.init;
     busyInitSlots++;
     pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu", `${c.name}: ${B.spec.n} gestartet.`, f.slot);
@@ -480,8 +484,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       if (seat && rng.rnd() < 0.8) {
         const eb = ebitdaOf(c);
         const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
-        c.netDebt += retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+        const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
           + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
+        c.netDebt += cost; bookOff(c, "mgmt", cost);
         c[seat] = { skill: sk };
         c.onboard = 1;
         return;
@@ -501,7 +506,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         if (!B || B.blocked) return;
         const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
         if (B.debt > 0 && head < 0.6) return;
-        c.netDebt += B.debt;
+        c.netDebt += B.debt; bookOff(c, "restr", B.debt);
         c[slot] = B.init;
       });
     });
@@ -562,6 +567,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     (f.holdings as Any[]).forEach((c) => {
       if (c.netDebt < -0.5) {
         const sweep = -c.netDebt * (c.st ?? 1);
+        bookOff(c, "dist", -c.netDebt);
         c.netDebt = 0;
         c.cashOut = (c.cashOut || 0) + sweep;
         c.recapOut = (c.recapOut || 0) + sweep;
@@ -604,8 +610,15 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
       const eb = ebitdaOf(c);
+      /* Die Detailmitschrift für die Berichtsansicht wird nur für menschliche
+         Fondsplätze geschrieben: Beteiligungen der KI-Fonds wechseln nie den
+         Eigentümer, ihre Abschlüsse sieht also niemand — und der Zustand einer
+         Partie wird jede Runde als JSON gespeichert. Zurückgesetzt wird
+         trotzdem überall, sonst liefen die Einmaleffekte endlos auf. */
       c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
-        eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0 }];
+        eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0,
+        ...(f.isAi ? {} : { fin: periodFin(c) }) }];
+      resetPeriod(c);
     });
   });
 

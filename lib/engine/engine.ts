@@ -204,6 +204,57 @@ export const targetMargin = (c) => (c.benchMargin ?? c.margin) + (c.plat - PLAT_
 export const DECAY = 0.08;
 export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
 
+/* ---------- Periodenerfassung für die Finanzberichte ----------
+   Die Berichtsansicht (siehe lib/engine/financials.ts) rechnet nicht selbst,
+   sie liest ab. Damit das geht, hält jede Beteiligung zwei Mitschriften:
+
+   c.per — was stepCompany() für das laufende Halbjahr tatsächlich gerechnet
+           hat. Ausnahmslos Halbjahresbeträge, keine hochgerechneten
+           Jahreswerte (anders als c.cf, das für die Karte annualisiert).
+   c.off — Einmaleffekte, die unterhalb des EBITDA direkt gegen die
+           Nettoverschuldung gebucht werden und deshalb in keiner Formel von
+           stepCompany() vorkommen: Programmkosten, Personalwechsel,
+           nachgeholte Investitionen, Cash Release, Zukäufe, Ausschüttungen.
+           Vorzeichen wie gebucht — positiv erhöht die Nettoverschuldung.
+
+   Genau daraus entsteht die Unterscheidung von bereinigtem und berichtetem
+   EBITDA: Die Engine rechnet mit Umsatz × Marge, also mit einem um alle
+   Einmaleffekte bereinigten Ergebnis. Was sie zusätzlich gegen die
+   Verschuldung bucht, ist der Unterschied zum berichteten Ergebnis.       */
+export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
+/* Welche Einmaleffekte im berichteten EBITDA stehen und beim bereinigten
+   wieder hinzugerechnet werden: Programm- und Personalkosten. Nachgeholte
+   Investitionen, Cash Release, Zukäufe und Ausschüttungen sind keine
+   Ergebnisgrößen — sie stehen unterhalb des EBITDA.                        */
+export const OFF_EBITDA_KEYS = ["restr", "mgmt"];
+
+export function bookOff(c, key: string, amt: number) {
+  if (!c || !(Math.abs(amt) > 1e-12)) return;
+  c.off = { ...(c.off || {}), [key]: (((c.off || {})[key]) || 0) + amt };
+}
+export function offOf(c) {
+  const o = (c && c.off) || {};
+  const out = {};
+  OFF_KEYS.forEach((k) => { out[k] = o[k] || 0; });
+  return out;
+}
+/* Der Finanzteil einer hist-Zeile: die Halbjahresbeträge aus stepCompany plus
+   die Einmaleffekte derselben Periode. Wird beim Periodenschluss geschrieben,
+   danach setzt resetPeriod() den Einmaleffekt-Zähler zurück.               */
+export function periodFin(c) {
+  if (!c || !c.per) return null;
+  return { ...c.per, ...offOf(c) };
+}
+export function resetPeriod(c) { if (c) c.off = null; }
+/* Unveränderliche Variante für die React-Pfade in components/PeLeagues.tsx:
+   dort werden Beteiligungen per map() ersetzt statt mutiert. Bucht den Betrag
+   in einem Zug auf Nettoverschuldung und Einmaleffekt-Konto, damit beide nie
+   auseinanderlaufen können.                                                 */
+export function chargeOff(h, key: string, amt: number) {
+  if (!(Math.abs(amt) > 1e-12)) return h;
+  return { ...h, netDebt: h.netDebt + amt, off: { ...(h.off || {}), [key]: (((h.off || {})[key]) || 0) + amt } };
+}
+
 export function stepCompany(rng: Rng, c, market, ops) {
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
@@ -235,9 +286,15 @@ export function stepCompany(rng: Rng, c, market, ops) {
   const ebH = eb / 2;
   const rate = rateOf(c, eb);
   const interest = (c.netDebt >= 0 ? c.netDebt * rate : c.netDebt * c.rate * 0.4) / 200;
-  const tax = 0.3 * Math.max(0, ebH - interest - capex);
+  const tax = TAX_RATE * Math.max(0, ebH - interest - capex);
   const fcf = ebH - interest - capex - nwc - tax;
+  const nd0 = c.netDebt;
   c.netDebt = c.netDebt - fcf;
+  /* Mitschrift für die Berichtsansicht: exakt die Beträge dieser Zeile, in
+     Halbjahresgröße. cxPct und nwcPct kommen mit, weil Bilanz und Anhang
+     sonst die Investitions- und Kapitalbindungsquote der Periode nicht
+     kennen -- beide bewegen sich mit Reifegrad und laufenden Maßnahmen. */
+  c.per = { revH: c.revenue / 2, ebH, interest, capex, nwc, tax, fcf, rate, cxPct, nwcPct, nd0 };
 
   // Rückfall zum Mittel, solange in dieser Dimension keine Initiative läuft
   if (!c.initP) c.plat = Math.max(PLAT_BENCH, c.plat - decayOf(c.plat));
@@ -280,9 +337,9 @@ export const EVENTS = [
     f: (c) => { c.margin -= 2.5; c.marginDrift = (c.marginDrift || 0) - 1.5; } },
   { t: "Add-on-Gelegenheit genutzt", m: null, bad: 0,
     ok: (c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) < (c.covLimit ?? 6.5) - 1.5,
-    f: (c) => { c.revenue *= 1.25; c.netDebt += ebitdaOf(c) * 1.6; } },
+    f: (c) => { c.revenue *= 1.25; const p = ebitdaOf(c) * 1.6; c.netDebt += p; bookOff(c, "addon", p); } },
   { t: "Investitionsstau aufgedeckt", m: "analysis", bad: 1,
-    f: (c) => { c.netDebt += ebitdaOf(c) * 0.8; c.capexPct = (c.capexPct ?? 4) + 1.5; } },
+    f: (c) => { const p = ebitdaOf(c) * 0.8; c.netDebt += p; bookOff(c, "capexOff", p); c.capexPct = (c.capexPct ?? 4) + 1.5; } },
   { t: "Regulatorische Auflage", m: "operations", bad: 1,
     // Der Healthcare-Sitz 3 halbiert regulatorische Ereignisse
     ok: (c, rng: Rng) => !(c.sector === "Healthcare" && c.r3.skill >= 3 && rng.rnd() < 0.5),
@@ -335,6 +392,11 @@ export const RESERVE_PROC = 0.85;  // Reservationspreis in der Auktion, Anteil d
 export const RESERVE_PROP = 0.90;  // Reservationspreis des Gesellschafters beim Off-Market-Deal
 export const COV_FLOOR = 4.0;      // Untergrenze des Covenants
 export const BASE_RATE = 6.5;      // Basismarge auf die Akquisitionsfinanzierung (Euribor + Marge)
+/* Ertragsteuersatz. Bemessungsgrundlage im Modell ist EBITDA abzüglich Zins und
+   Capex — Capex steht dabei stellvertretend für die Abschreibung. Genau diese
+   Konvention bildet die Berichtsansicht ab (D&A = Capex), sonst ließe sich der
+   Steueraufwand der Engine in keiner GuV wiederfinden.                       */
+export const TAX_RATE = 0.30;
 /* Kreditmarge staffelt sich mit der Verschuldung. Bis 3,0× gilt die Basismarge,
    darüber kostet jeder weitere Turn 75 bp — so wie ein Kreditvertrag über ein
    Margin Grid funktioniert. Vorher war Leverage bis zum Covenant gratis und die
@@ -1044,11 +1106,15 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists) {
         else c.acc = Math.min(5, c.acc + g);
       }
       if (IN.ok) {
-        if (spec && spec.release) c.netDebt -= ebitdaOf(c) * spec.release;
+        if (spec && spec.release) {
+          const rel = ebitdaOf(c) * spec.release;
+          c.netDebt -= rel; bookOff(c, "nwcRel", -rel);
+        }
         if (spec && spec.nwcFix) c.nwcFix = (c.nwcFix || 0) + spec.nwcFix;
         if (spec && spec.capexFix) c.benchCapex = Math.max(0.5, (c.benchCapex ?? 4) + spec.capexFix);
       } else {
-        c.netDebt += ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK);
+        const sunk = ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK);
+        c.netDebt += sunk; bookOff(c, "restr", sunk);
         if (spec && spec.failMargin) c.marginDrift = (c.marginDrift || 0) + spec.failMargin;
       }
     }
@@ -1199,7 +1265,7 @@ export function lboProjection(
     const nwc = (nwcPct / 100) * (revenue - revPrev);
     const rate = baseRate + Math.max(0, netDebt / Math.max(0.5, eb) - LEV_FREE) * LEV_STEP;
     const interest = (netDebt >= 0 ? netDebt * rate : netDebt * baseRate * 0.4) / 200;
-    const tax = 0.3 * Math.max(0, ebH - interest - capex);
+    const tax = TAX_RATE * Math.max(0, ebH - interest - capex);
     netDebt -= ebH - interest - capex - nwc - tax;
   }
 

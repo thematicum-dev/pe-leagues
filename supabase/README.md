@@ -33,6 +33,9 @@ Dateinamen-Reihenfolge angewendet:
 28. `20260819110200_admin_reset_season.sql` – `admin_reset_season()`: Partie vollständig zurücksetzen
 29. `20260819110400_global_leaderboard.sql` – `global_leaderboard()`: Rangliste aller Spieler über alle abgeschlossenen Partien
 30. `20260819110500_realtime_season_state.sql` – Realtime auch für `season_state`, damit der Halbjahreswechsel ohne manuellen Reload ankommt
+31. `20260821090000_fund_profile_selection.sql` – Fondsprofil je Spielerplatz (`season_players.fund_attrs`)
+32. `20260824090000_request_season_evaluation.sql` – `request_season_evaluation()`: ein Mitspieler stößt die ohnehin fällige Auswertung selbst an
+33. `20260829120000_season_state_backfill.sql` – Nachtrag der Periodenmitschrift für Partien, die vor deren Einführung begonnen haben (Claim/Commit, nur `service_role`)
 
 ## Admin-Bereich
 

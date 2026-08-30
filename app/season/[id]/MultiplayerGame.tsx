@@ -496,7 +496,7 @@ export default function MultiplayerGame({
 
     let exMult = dMult, eqDisc = 1, share = st, feeRate = 0, costBasis = c.entryEquity, note = "";
     const recap = c.recapOut || 0;
-    const rows: [string, string][] = [["EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
+    const rows: [string, string][] = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
     if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
