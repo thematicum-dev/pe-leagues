@@ -221,6 +221,30 @@ export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
    EBITDA: Die Engine rechnet mit Umsatz × Marge, also mit einem um alle
    Einmaleffekte bereinigten Ergebnis. Was sie zusätzlich gegen die
    Verschuldung bucht, ist der Unterschied zum berichteten Ergebnis.       */
+/* ---------- Verhaltensstand für die Wiederholung ----------
+   Ein bereits ausgewertetes Halbjahr muss sich exakt so nachrechnen lassen,
+   wie es gespielt wurde — auch wenn die Engine seither korrigiert wurde. Nur
+   so lassen sich laufende Partien nachträglich mit der Periodenmitschrift
+   versehen (siehe lib/engine/replay.ts). Jeder Eintrag hier ist eine
+   Korrektur, die das Spielverhalten verändert hat; die Wiederholung schaltet
+   sie ab und rechnet nach dem Stand, unter dem tatsächlich gespielt wurde.
+
+   Die Liste ist bewusst kurz zu halten. Wächst sie über eine Handvoll
+   Einträge, ist das das Zeichen, laufende Partien bei Regeländerungen
+   zurückzusetzen, statt zwei Regelstände dauerhaft parallel zu pflegen.    */
+export interface EngineCompat {
+  /* Bis 30.08.2026 buchte buildInit() den Kaufpreis eines Add-ons nicht gegen
+     die Nettoverschuldung: Der Zukauf war im Mehrspieler- und KI-Pfad
+     geschenkt, während der Übungsmodus ihn bezahlte.                       */
+  addonWithoutDebt?: boolean;
+  /* Bis 30.08.2026 wurde die Veränderung des Working Capital nur auf den
+     Umsatzzuwachs gerechnet, nie auf den Bestand — eine verbesserte
+     Kapitalbindungsquote setzte deshalb nichts frei. Ersatzweise gab es beim
+     NWC-Programm einen pauschalen Einmaleffekt (legacyRelease).            */
+  nwcOnIncrementOnly?: boolean;
+}
+export const LEGACY_COMPAT: EngineCompat = { addonWithoutDebt: true, nwcOnIncrementOnly: true };
+
 export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
 /* Welche Einmaleffekte im berichteten EBITDA stehen und beim bereinigten
    wieder hinzugerechnet werden: Programm- und Personalkosten. Nachgeholte
@@ -255,7 +279,21 @@ export function chargeOff(h, key: string, amt: number) {
   return { ...h, netDebt: h.netDebt + amt, off: { ...(h.off || {}), [key]: (((h.off || {})[key]) || 0) + amt } };
 }
 
-export function stepCompany(rng: Rng, c, market, ops) {
+/* Investitions- und Kapitalbindungsquote einer Beteiligung, beide in Prozent
+   vom Jahresumsatz. Stehen als eigene Funktionen, weil außer stepCompany()
+   auch die Eröffnungsbilanz und die Berichtsansicht sie brauchen — zwei
+   Abschriften derselben Formel würden früher oder später auseinanderlaufen. */
+export const capexPctOf = (c) => Math.max(0.5, (c.benchCapex ?? 4) * (1 - 0.07 * (c.plat - PLAT_BENCH))
+  + accEff(c) * 0.6 + sumInit(c, "cx")
+  - (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.5 : 0));
+export const nwcPctOf = (c) => Math.max(-10, (c.benchNwc ?? 15) - (c.plat - PLAT_BENCH) * 2.5
+  + accEff(c) * 2 + sumInit(c, "nwcRun") + (c.nwcFix || 0));
+/* Gebundenes Working Capital in Mio. €. Für eine Beteiligung, die den Bestand
+   noch nicht mitführt (Partie vor dem 30.08.2026), ergibt sich er aus Quote
+   und Umsatz — genau der Wert, mit dem sie gestartet wäre.                 */
+export const nwcBalanceOf = (c) => c.nwcBal != null ? c.nwcBal : (nwcPctOf(c) / 100) * c.revenue;
+
+export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {}) {
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
@@ -271,13 +309,20 @@ export function stepCompany(rng: Rng, c, market, ops) {
 
   const eb = ebitdaOf(c);
   // Capex und Working Capital relativ zum Branchenniveau verbessern
-  const cxPct = Math.max(0.5, (c.benchCapex ?? 4) * (1 - 0.07 * (c.plat - PLAT_BENCH)) + A * 0.6
-    + sumInit(c, "cx")
-    - (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.5 : 0));
+  const cxPct = capexPctOf(c);
   const capex = (c.revenue * cxPct) / 200;
-  const nwcPct = Math.max(-10, (c.benchNwc ?? 15) - (c.plat - PLAT_BENCH) * 2.5 + A * 2
-    + sumInit(c, "nwcRun") + (c.nwcFix || 0));
-  const nwc = (nwcPct / 100) * (c.revenue - rev0);
+  const nwcPct = nwcPctOf(c);
+  /* Working Capital ist ein Bestand, keine Bewegung: Gebunden ist die Quote
+     mal Umsatz, und was in der Periode zu- oder abfließt, ist die Veränderung
+     dieses Bestands. Genau daran hängt die Wirkung eines NWC-Programms — eine
+     um zwei Punkte bessere Quote setzt zwei Prozent des ganzen Umsatzes frei,
+     nicht nur zwei Prozent des Zuwachses. Vorher lief die Quote nur auf den
+     Zuwachs, ein besseres Working Capital blieb damit im Bestand gefangen und
+     die Maßnahme wirkte fast nur über ihren pauschalen Einmaleffekt.       */
+  const nwcBase = nwcBalanceOf({ ...c, revenue: rev0 });
+  const nwcTarget = (nwcPct / 100) * c.revenue;
+  const nwc = compat.nwcOnIncrementOnly ? (nwcPct / 100) * (c.revenue - rev0) : nwcTarget - nwcBase;
+  c.nwcBal = nwcBase + nwc;
 
   /* ebitdaOf liefert einen Jahreswert — er ist die Basis für Bewertung und
      Leverage. Der Periodenschritt ist aber ein Halbjahr, deshalb geht nur die
@@ -294,7 +339,8 @@ export function stepCompany(rng: Rng, c, market, ops) {
      Halbjahresgröße. cxPct und nwcPct kommen mit, weil Bilanz und Anhang
      sonst die Investitions- und Kapitalbindungsquote der Periode nicht
      kennen -- beide bewegen sich mit Reifegrad und laufenden Maßnahmen. */
-  c.per = { revH: c.revenue / 2, ebH, interest, capex, nwc, tax, fcf, rate, cxPct, nwcPct, nd0 };
+  c.per = { revH: c.revenue / 2, ebH, interest, capex, nwc, tax, fcf, rate, cxPct, nwcPct, nd0,
+    nwcBal: c.nwcBal };
 
   // Rückfall zum Mittel, solange in dieser Dimension keine Initiative läuft
   if (!c.initP) c.plat = Math.max(PLAT_BENCH, c.plat - decayOf(c.plat));
@@ -532,8 +578,13 @@ export const INITS = {
   plat: [
     { id: "opex", n: "Cost-out-Programm", cls: "rel", d: "Einkauf bündeln, Gemeinkosten straffen, Standorte verdichten.",
       sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.10, cx: 0 },
-    { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Setzt sofort Liquidität frei.",
-      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.06, cx: 0, release: 0.35, nwcFix: -2 },
+    /* Der Ertrag steckt jetzt in der Quote selbst: nwcFix senkt die
+       Kapitalbindung dauerhaft, und weil die Quote auf dem Bestand rechnet,
+       fließt der Unterschied sofort als Liquidität zu. legacyRelease ist der
+       pauschale Einmaleffekt von früher und wird nur noch bei der
+       Wiederholung alter Halbjahre angewandt (siehe EngineCompat).         */
+    { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Senkt die Kapitalbindung dauerhaft und setzt den Unterschied sofort frei.",
+      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.06, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
     { id: "erp", n: "ERP & Digitalisierung", cls: "tr", d: "Systemlandschaft ersetzen. Großer Hebel, langer Atem — und ein Fehlschlag bringt gar nichts.",
       sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.30, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
     { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
@@ -661,7 +712,7 @@ export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1,
    dieselbe Funktion — vorher war die KI mit einem pauschalen Reifegradgewinn
    von 0,85 unterwegs, während der Spieler über initGain das Drei- bis Vierfache
    holte. Das war der eigentliche Grund, warum die Kohorte nie mithalten konnte. */
-export function buildInit(rng: Rng, c, dim, id, market, quarter) {
+export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineCompat = {}) {
   const spec = initById(dim, id);
   if (!spec) return null;
   const runs = initRuns(c, id);
@@ -681,6 +732,11 @@ export function buildInit(rng: Rng, c, dim, id, market, quarter) {
   if (spec.ma) {
     chk = addonCheck(c, market);
     if (!chk.ok) return { blocked: chk };
+    /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung hier —
+       im Mehrspieler- und KI-Pfad kam das EBITDA des Add-ons an, ohne dass
+       die Akquisitionsschuld je gebucht wurde, während der Übungsmodus sie
+       (in seiner eigenen Kopie der Mechanik) korrekt buchte.               */
+    if (!compat.addonWithoutDebt) debt += chk.price;
     /* Der Reifegradgewinn ist bewusst klein: Der Wert eines Zukaufs steckt im
        zugekauften EBITDA, nicht in einer dauerhaft schnelleren Organik. Vorher
        gab es hier eine volle Stufe obendrauf — rund zwei Drittel des gemessenen
@@ -1063,7 +1119,7 @@ export function scoreOf(f, market, quarter) {
    Abschluss laufender Maßnahmen, Entwicklung und Abwerbung der Amtsinhaber.
    Hauptspiel und Übungsmodus rufen exakt diese Funktion auf — der Übungsmodus
    läuft dadurch nachweislich auf derselben Logik wie eine echte Partie.      */
-export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists) {
+export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: EngineCompat = {}) {
   if (c.onboard > 0) c.onboard -= 1;
   /* Mehrere Positionen dürfen parallel besetzt werden — Headhunter arbeiten
      extern und binden keine Operating-Kapazität. Pro Position ein Mandat.   */
@@ -1106,8 +1162,11 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists) {
         else c.acc = Math.min(5, c.acc + g);
       }
       if (IN.ok) {
-        if (spec && spec.release) {
-          const rel = ebitdaOf(c) * spec.release;
+        /* Der pauschale Einmaleffekt existiert nur noch im Altverhalten. Seit
+           die Kapitalbindungsquote auf dem Bestand rechnet, entsteht die
+           Freisetzung dort von selbst — beides zusammen wäre doppelt. */
+        if (compat.nwcOnIncrementOnly && spec && spec.legacyRelease) {
+          const rel = ebitdaOf(c) * spec.legacyRelease;
           c.netDebt -= rel; bookOff(c, "nwcRel", -rel);
         }
         if (spec && spec.nwcFix) c.nwcFix = (c.nwcFix || 0) + spec.nwcFix;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, TAX_RATE, newDeal, ebitdaOf } from "../engine";
 import { runQuarter } from "../runQuarter";
-import { dealStatements, holdingStatements, PPE_YEARS, ratiosOf } from "../financials";
+import { dealStatements, holdingStatements, MIN_CASH_PCT, PPE_YEARS, ratiosOf } from "../financials";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,8 +83,26 @@ describe("Finanzberichte einer Beteiligung", () => {
     holdings.forEach((c) => {
       const st = holdingStatements(c)!;
       st.periods.forEach((p) => {
-        expect(Math.abs(p.assets - (p.netDebt + p.equity)),
-          `${c.name} ${p.label}: Aktiva ${p.assets} vs. Passiva ${p.netDebt + p.equity}`).toBeLessThan(1e-6);
+        expect(Math.abs(p.assets - (p.debt + p.equity)),
+          `${c.name} ${p.label}: Aktiva ${p.assets} vs. Passiva ${p.debt + p.equity}`).toBeLessThan(1e-6);
+      });
+    });
+  });
+
+  it("trennt Nettoverschuldung in Bankdarlehen und liquide Mittel", () => {
+    holdings.forEach((c) => {
+      const st = holdingStatements(c)!;
+      st.periods.forEach((p) => {
+        // Die Aufteilung ist eine Darstellung, keine zweite Rechnung:
+        // Darlehen minus Kasse muss die Nettoverschuldung der Engine ergeben.
+        expect(p.debt - p.cash).toBeCloseTo(p.netDebt, 9);
+        expect(p.debt).toBeGreaterThanOrEqual(0);
+        expect(p.cash).toBeGreaterThanOrEqual(0);
+        // Solange die Beteiligung netto verschuldet ist, steht die operative
+        // Mindestliquidität in der Kasse.
+        if (p.netDebt > 0) {
+          expect(p.cash).toBeCloseTo((MIN_CASH_PCT / 100) * p.revenue * (12 / p.months), 9);
+        }
       });
     });
   });
@@ -95,7 +113,7 @@ describe("Finanzberichte einer Beteiligung", () => {
       st.periods.forEach((p) => {
         if (p.opening) return;
         // Nettoverschuldung Ende = Anfang − Free Cashflow + Ausschüttung
-        const closing = p.netDebtOpen - p.fcf + p.distributions;
+        const closing = p.netDebtOpen - p.netCashFlow + p.distributions;
         expect(Math.abs(closing - p.netDebt),
           `${c.name} ${p.label}: abgeleitet ${closing} vs. Engine ${p.netDebt}`).toBeLessThan(1e-6);
       });
@@ -183,13 +201,21 @@ describe("Finanzberichte einer Beteiligung", () => {
       hist: [{ rev: 80, eb: 10, nd: 30, mg: 12.5, ql: 50, eq: 50, mult: 8, st: 1, out: 0 }] };
     const st = holdingStatements(fresh as Any)!;
     expect(st.periods).toHaveLength(1);
-    expect(st.periods[0].opening).toBe(true);
+    const p0 = st.periods[0];
+    expect(p0.opening).toBe(true);
     // Eröffnungsbilanz zum Enterprise Value, finanziert mit Fremd- und Eigenkapital
-    expect(st.periods[0].assets).toBeCloseTo(80, 9);
-    expect(st.periods[0].netDebt).toBe(30);
-    expect(st.periods[0].equity).toBeCloseTo(50, 9);
-    expect(st.periods[0].nwc).toBeCloseTo(16, 9);
-    expect(st.periods[0].ppe).toBeCloseTo(PPE_YEARS * 4, 9);
+    expect(p0.netDebt).toBe(30);
+    expect(p0.equity).toBeCloseTo(50, 9);
+    expect(p0.nwc).toBeCloseTo(16, 9);
+    expect(p0.ppe).toBeCloseTo(PPE_YEARS * 4, 9);
+    // Kasse und Darlehen getrennt: 2 % von 80 Umsatz stehen als Liquidität,
+    // das Darlehen trägt den Rest der Nettoverschuldung.
+    expect(p0.cash).toBeCloseTo(1.6, 9);
+    expect(p0.debt).toBeCloseTo(31.6, 9);
+    expect(p0.assets).toBeCloseTo(81.6, 9);
+    expect(p0.assets).toBeCloseTo(p0.debt + p0.equity, 9);
+    // Vermögen ohne Kasse steht zum Enterprise Value des Erwerbs
+    expect(p0.ppe + p0.goodwill + p0.nwc).toBeCloseTo(80, 9);
   });
 
   it("verkraftet Altbestände ohne Periodenmitschrift und trifft trotzdem die Nettoverschuldung", () => {
@@ -200,9 +226,9 @@ describe("Finanzberichte einer Beteiligung", () => {
       const st = holdingStatements(c as Any)!;
       expect(st.anyEstimated).toBe(true);
       st.periods.forEach((p) => {
-        expect(Math.abs(p.assets - (p.netDebt + p.equity))).toBeLessThan(1e-6);
+        expect(Math.abs(p.assets - (p.debt + p.equity))).toBeLessThan(1e-6);
         if (p.opening) return;
-        expect(Math.abs((p.netDebtOpen - p.fcf + p.distributions) - p.netDebt)).toBeLessThan(1e-6);
+        expect(Math.abs((p.netDebtOpen - p.netCashFlow + p.distributions) - p.netDebt)).toBeLessThan(1e-6);
       });
     });
   });
@@ -242,7 +268,10 @@ describe("Finanzberichte eines Zielunternehmens", () => {
       st.periods.forEach((p) => {
         expect(p.netDebt).toBe(0);
         expect(p.interest).toBe(0);
-        expect(p.assets).toBeCloseTo(p.netDebt + p.equity, 9);
+        // Cash-free/debt-free: weder Kasse noch Darlehen im Kaufgegenstand
+        expect(p.cash).toBe(0);
+        expect(p.debt).toBe(0);
+        expect(p.assets).toBeCloseTo(p.debt + p.equity, 9);
         expect(p.nwc).toBeCloseTo((d.nwcPct / 100) * p.revenue, 9);
         expect(p.capex).toBeCloseTo((d.capexPct / 100) * p.revenue, 9);
         expect(p.tax).toBeCloseTo(TAX_RATE * Math.max(0, p.adjEbitda - p.capex), 9);

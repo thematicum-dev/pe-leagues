@@ -19,7 +19,7 @@ import {
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf,
-  PPE_YEARS, TAX_RATE, DEAL_YEARS,
+  PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
   retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
@@ -169,6 +169,19 @@ export const CSS = `
 .pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
 .pel .ledger tr.sep + tr td{padding-top:11px;}
 .pel .lb .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* Gegenüberstellung zweier Zeiträume: letztes Halbjahr gegen die ganze
+   Halteperiode. Drei Spalten, damit sich beide Zahlen direkt vergleichen
+   lassen statt in zwei getrennten Blöcken zu stehen. */
+.pel table.cmp{width:100%;border-collapse:collapse;}
+.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 16px;text-align:right;
+  border-bottom:1px solid var(--rule);white-space:nowrap;
+  font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+.pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
+.pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
+  font-family:'Inter',system-ui,sans-serif;white-space:normal;}
+.pel table.cmp tr:last-child td{border-bottom:0;}
 
 /* ---------- Berichtsansicht: GuV, Bilanz, Kapitalflussrechnung ----------
    Ein Abschluss ist breiter als ein Telefon. Statt die Spalten zu stauchen,
@@ -856,6 +869,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       </tbody></table>
       <Stages c={c} compact={quarter} />
       <HalfYearDelta c={c} />
+      <PerformanceCompare c={c} />
       <Track c={c} />
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
         <StatementsButton statements={statements}
@@ -965,6 +979,84 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   );
 }
 
+/* Wie hat sich die Beteiligung entwickelt — im letzten Halbjahr und über die
+   ganze Halteperiode? Beides nebeneinander, weil erst der Vergleich die Frage
+   beantwortet, um die es im Portfolio-Review geht: Läuft das Asset gerade
+   besser oder schlechter als im Schnitt der bisherigen Haltezeit?
+
+   Alle Zahlen kommen aus der hist-Reihe, also aus denselben Periodenständen,
+   die auch der Verlaufsgraph und die Berichtsansicht benutzen.             */
+function deltaSet(a, b) {
+  return {
+    rev: a.rev > 0 ? (b.rev / a.rev - 1) * 100 : null,
+    eb: a.eb > 0 ? (b.eb / a.eb - 1) * 100 : null,
+    mg: b.mg - a.mg,
+    lev: b.nd / Math.max(0.5, b.eb) - a.nd / Math.max(0.5, a.eb),
+    eq: (b.eq ?? 0) - (a.eq ?? 0),
+  };
+}
+
+export function PerformanceCompare({ c }) {
+  const h = c.hist || [];
+  if (h.length < 2) {
+    return (
+      <div className="pad" style={{ paddingTop: 4, paddingBottom: 14, fontSize: 12, color: "var(--ink2)" }}>
+        Der Vergleich erscheint nach dem ersten vollen Halbjahr im Portfolio.
+      </div>
+    );
+  }
+  const last = deltaSet(h[h.length - 2], h[h.length - 1]);
+  const since = deltaSet(h[0], h[h.length - 1]);
+  const num = (v, dg, unit) => v == null ? "—"
+    : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
+  /* Beim Leverage ist weniger besser, bei allem anderen mehr. */
+  const rows = [
+    { l: "Umsatz", k: "rev", dg: 1, unit: " %", good: (v) => v >= 0 },
+    { l: "Adj. EBITDA", k: "eb", dg: 1, unit: " %", good: (v) => v >= 0 },
+    { l: "Adj. EBITDA-Marge", k: "mg", dg: 1, unit: " pp", good: (v) => v >= 0 },
+    { l: "Leverage", k: "lev", dg: 2, unit: "×", good: (v) => v <= 0 },
+    { l: "Gesamtwert", k: "eq", dg: 1, unit: " Mio. €", good: (v) => v >= 0 },
+  ];
+  const cell = (set, r) => {
+    const v = set[r.k];
+    return (
+      <td style={{ color: v == null ? "var(--ink2)" : r.good(v) ? "var(--teal)" : "var(--ox)" }}>
+        {num(v, r.dg, r.unit)}
+      </td>
+    );
+  };
+  return (
+    <>
+      <div className="pad" style={{ paddingTop: 12, paddingBottom: 4 }}>
+        <div className="eyebrow">
+          Performance im Vergleich
+          <Info t="Letztes Halbjahr gegen Halteperiode">
+            Links die Veränderung der letzten Periode, rechts die seit dem Vollzug. Der Vergleich
+            beantwortet die Frage des Portfolio-Reviews: Läuft die Beteiligung <b>gerade</b> besser
+            oder schlechter als im Schnitt der bisherigen Haltezeit? Ein starker Gesamtwert seit
+            Einstieg bei schwachem letztem Halbjahr heißt, dass die Wertsteigerung hinter dir liegt
+            — ein guter Zeitpunkt, über den Exit nachzudenken.
+          </Info>
+        </div>
+      </div>
+      <table className="cmp"><tbody>
+        <tr>
+          <th>Veränderung</th>
+          <th>Letztes HJ</th>
+          <th>Seit Einstieg</th>
+        </tr>
+        {rows.map((r) => (
+          <tr key={r.k}>
+            <td>{r.l}</td>
+            {cell(last, r)}
+            {cell(since, r)}
+          </tr>
+        ))}
+      </tbody></table>
+    </>
+  );
+}
+
 /* ---------- Financial Statements ----------
    GuV, Bilanz und Kapitalflussrechnung zu einem Zielunternehmen oder einer
    Beteiligung. Die Zahlen kommen vollständig aus lib/engine/financials.ts und
@@ -1033,8 +1125,9 @@ function bsRows(st): FinRow[] {
     { k: "ppe", l: "Sachanlagen & immaterielle VG", v: (p) => p.ppe },
   ];
   if (st.kind === "holding") rows.push({ k: "gw", l: "Kaufpreisallokation & Goodwill", v: (p) => p.goodwill });
+  rows.push({ k: "nwc", l: "Net Working Capital", v: (p) => p.nwc });
+  if (st.levered) rows.push({ k: "cash", l: "Liquide Mittel", v: (p) => p.cash });
   rows.push(
-    { k: "nwc", l: "Net Working Capital", v: (p) => p.nwc },
     { k: "ta", l: "Bilanzsumme", v: (p) => p.assets, sum: true },
     { k: "nwcp", memo: true, l: "NWC in % vom Jahresumsatz",
       s: (p) => fpct(ratiosOf(p, st.levered).nwcPct) },
@@ -1042,17 +1135,21 @@ function bsRows(st): FinRow[] {
   );
   if (st.levered) {
     rows.push(
-      { k: "nd", l: "Nettoverschuldung", v: (p) => p.netDebt },
+      { k: "debt", l: "Bankdarlehen", v: (p) => p.debt },
+      { k: "eq", l: "Eigenkapital", v: (p) => p.equity },
+      { k: "tp", l: "Bilanzsumme", v: (p) => p.debt + p.equity, sum: true },
+      { k: "nd", memo: true, l: "Nettoverschuldung (Darlehen − Liquidität)",
+        s: (p) => fnum(p.netDebt) },
       { k: "lev", memo: true, l: "Leverage (Nettoverschuldung / Adj. EBITDA)",
         s: (p) => fx(ratiosOf(p, st.levered).leverage) },
     );
   } else {
-    rows.push({ k: "nd", l: "Nettoverschuldung (cash-free/debt-free)", v: (p) => p.netDebt });
+    rows.push(
+      { k: "nd", l: "Nettoverschuldung (cash-free/debt-free)", v: (p) => p.netDebt },
+      { k: "eq", l: "Eigenkapital", v: (p) => p.equity },
+      { k: "tp", l: "Bilanzsumme", v: (p) => p.netDebt + p.equity, sum: true },
+    );
   }
-  rows.push(
-    { k: "eq", l: "Eigenkapital", v: (p) => p.equity },
-    { k: "tp", l: "Bilanzsumme", v: (p) => p.netDebt + p.equity, sum: true },
-  );
   return rows;
 }
 
@@ -1064,17 +1161,20 @@ function cfRows(st): FinRow[] {
     { k: "off", l: "Einmalaufwendungen", v: (p) => (p.opening ? null : -p.oneOff) },
     { k: "rep", l: "Reported EBITDA", v: (p) => (p.opening ? null : p.repEbitda), sum: true },
     { k: "nwc", l: "Veränderung Net Working Capital", v: (p) => (p.opening ? null : -p.dNwc) },
-    { k: "tax", l: "Ertragsteuern", v: (p) => (p.opening ? null : -p.tax) },
-    { k: "cfo", l: "Operativer Cashflow", v: (p) => (p.opening ? null : p.cfo), sum: true },
     { k: "cap", l: "Investitionen (Capex)", v: (p) => (p.opening ? null : -p.capex) },
   ];
   if (anyAcq) rows.push({ k: "acq", l: "Akquisitionen (Add-ons)", v: (p) => (p.opening ? null : -p.acquisitions) });
-  rows.push({ k: "fcfp", l: "Free Cashflow vor Finanzierung", v: (p) => (p.opening ? null : p.fcfPreFin), sum: true });
+  /* Erst was das Geschäft erwirtschaftet, dann was Fiskus und Bank davon
+     nehmen. Diese Reihenfolge trennt die Leistung des Unternehmens von den
+     Folgen seiner Kapitalstruktur — dieselbe Trennung wie zwischen Cash
+     Conversion und Leverage auf der Beteiligungskarte.                     */
+  rows.push(
+    { k: "fcfp", l: "Free Cashflow vor Steuern und Zinsen", v: (p) => (p.opening ? null : p.fcfPreTax), sum: true },
+    { k: "tax", l: "Ertragsteuern", v: (p) => (p.opening ? null : -p.tax) },
+  );
+  if (st.levered) rows.push({ k: "int", l: "Zinsen", v: (p) => (p.opening ? null : -p.interest) });
+  rows.push({ k: "ncf", l: "Netto-Cashflow", v: (p) => (p.opening ? null : p.netCashFlow), sum: true });
   if (st.levered) {
-    rows.push(
-      { k: "int", l: "Zinsen", v: (p) => (p.opening ? null : -p.interest) },
-      { k: "fcf", l: "Free Cashflow", v: (p) => (p.opening ? null : p.fcf), sum: true },
-    );
     if (anyDist) rows.push({ k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distributions) });
     rows.push(
       { k: "h", head: true, l: "Überleitung Nettoverschuldung" },
@@ -1221,15 +1321,16 @@ function StatementNotes({ st, view, hidden }) {
       )}
       {view === "bs" && (
         <p className="finnote">
-          <b>Herleitung.</b> Net Working Capital folgt der Kapitalbindungsquote des Unternehmens,
-          die Sachanlagen entsprechen {PPE_YEARS} Jahren Investitionsaufwand — bei linearer
-          Abschreibung über rund {PPE_YEARS * 2} Jahre der Restbuchwert im Beharrungszustand.
+          <b>Herleitung.</b> Net Working Capital ist der Bestand, mit dem die Engine rechnet:
+          Kapitalbindungsquote mal Umsatz. Die Sachanlagen entsprechen {PPE_YEARS} Jahren
+          Investitionsaufwand — bei linearer Abschreibung über rund {PPE_YEARS * 2} Jahre der
+          Restbuchwert im Beharrungszustand.{st.levered ? ` Das Modell führt nur die Nettoverschuldung; für die Bilanz wird sie getrennt in eine operative Kasse von ${MIN_CASH_PCT} % vom Jahresumsatz und das Bankdarlehen, das den Rest trägt. Ist die Beteiligung netto schuldenfrei, entfällt das Darlehen und die Kasse trägt den Überschuss.` : ""}
           {st.kind === "holding" && " Die Eröffnungsbilanz steht zum Enterprise Value des Erwerbs; die Kaufpreisallokation trägt den Unterschied zum übernommenen Vermögen, die Akquisitionsfinanzierung steht als Nettoverschuldung darunter. Transaktionskosten des Erwerbs trägt der Fonds, nicht das Unternehmen."}
         </p>
       )}
       {view === "cf" && st.levered && (
         <p className="finnote">
-          <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Free Cashflow zuzüglich
+          <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Netto-Cashflow zuzüglich
           Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
           Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
         </p>
@@ -1518,12 +1619,7 @@ export function Track({ c }) {
   const bw = Math.max(1.6, gw / 2 - 0.7);
   const line = h.map((p, i) => `${i ? "L" : "M"}${px(i).toFixed(1)},${pyEq(p.eq).toFixed(1)}`).join(" ");
 
-  const first = h[0], last = h[h.length - 1];
-  const dRev = (last.rev / first.rev - 1) * 100;
-  const dEb = (last.eb / first.eb - 1) * 100;
-  const dMg = last.mg - first.mg;
-  const dNd = last.nd / last.eb - first.nd / first.eb;
-  const dQl = (last.ql ?? 0) - (first.ql ?? 0);
+  const last = h[h.length - 1];
 
   return (
     <>
@@ -1560,17 +1656,9 @@ export function Track({ c }) {
           </text>
         </svg>
       </div>
-      {/* Drei Deltas als Spalten. Fünf im Fließtext waren auf dem Telefon unlesbar. */}
-      <div className="deltas">
-        {[["Adj. EBITDA", dEb, "%", 0], ["Marge", dMg, "pp", 1], ["Leverage", dNd, "×", 1]].map(([l, v, u, dg]) => (
-          <div key={l}>
-            <div className="eyebrow">{l}</div>
-            <div className="mono dv" style={{ color: (l === "Leverage" ? v <= 0 : v >= 0) ? "var(--teal)" : "var(--ox)" }}>
-              {v >= 0 ? "+" : "−"}{Math.abs(v).toFixed(dg)}{u === "%" ? " %" : u}
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Die Deltas über die Halteperiode stehen jetzt in PerformanceCompare,
+          dort neben denen des letzten Halbjahres — als Vergleich statt als
+          zweite, für sich stehende Zahlenreihe. */}
     </>
   );
 }
@@ -2079,7 +2167,12 @@ export function InitPicker({ c, dim, market, start, close }) {
                   {!!k.drag && <tr><td className="lab">Margenbelastung</td>
                     <td>−{k.drag.toFixed(1).replace(".", ",")} pp während der Laufzeit</td></tr>}
                   {!!k.cx && <tr><td className="lab">Zusätzlicher Investitionsbedarf</td><td>+{k.cx.toFixed(1).replace(".", ",")} pp vom Umsatz</td></tr>}
-                  {!!k.release && <tr><td className="lab">Cash Release</td><td style={{ color: "var(--teal)" }}>{eur(eb * k.release)}</td></tr>}
+                  {!!k.nwcFix && <tr><td className="lab">Cash Release</td>
+                    <td style={{ color: "var(--teal)" }}>{eur(Math.abs(k.nwcFix) / 100 * c.revenue)}
+                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                        {" "}— {Math.abs(k.nwcFix).toFixed(1).replace(".", ",")} pp weniger Kapitalbindung auf {eur(c.revenue)} Umsatz,
+                        dazu der Anteil aus dem Reifegradgewinn
+                      </span></td></tr>}
                   <tr><td className="lab">Sunk Cost bei Fehlschlag</td>
                     <td style={{ color: "var(--ox)" }}>{eur(eb * (k.failCost != null ? k.failCost : FAIL_SUNK))}
                       {k.failMargin ? ` · dauerhaft ${k.failMargin.toFixed(1).replace(".", ",")} pp Marge` : ""}</td></tr>
