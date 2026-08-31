@@ -12,9 +12,8 @@ export default function OnboardingForm() {
         <h1>Zugang beantragen</h1>
         <p className="authhint">
           PE Leagues ist ein geschlossener Kreis: Ein Administrator gibt jeden Zugang einzeln
-          frei und teilt dir dabei ein oder mehrere Universen zu. Wähle zuerst deinen
-          Anzeigenamen — unter ihm erscheint dein Fonds später in der Rangliste. Er muss
-          eindeutig sein und 3–24 Zeichen lang.
+          frei. Wähle zuerst deinen Anzeigenamen — unter ihm erscheint dein Fonds später in der
+          Rangliste. Er muss eindeutig sein und 3–24 Zeichen lang.
         </p>
         <label>
           Anzeigename

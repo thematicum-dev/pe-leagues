@@ -19,7 +19,10 @@ export default async function AccessPage() {
   }
 
   const rejected = ctx.profile.accessStatus === "rejected";
-  const approvedWithoutUniverse = ctx.profile.accessStatus === "approved";
+  // Freigegeben, aber (noch) ohne zugeteiltes Universum. Für den Nutzer ist
+  // das schlicht "noch nicht ganz fertig" -- von Universen ist hier bewusst
+  // nicht die Rede, solange er nicht selbst in mehreren spielt.
+  const approvedButIncomplete = ctx.profile.accessStatus === "approved";
 
   return (
     <main className="authwrap">
@@ -28,8 +31,8 @@ export default async function AccessPage() {
         <h1>
           {rejected
             ? "Zugang abgelehnt"
-            : approvedWithoutUniverse
-              ? "Noch kein Universum"
+            : approvedButIncomplete
+              ? "Fast freigeschaltet"
               : "Zugang beantragt"}
         </h1>
         {rejected ? (
@@ -37,17 +40,16 @@ export default async function AccessPage() {
             Dein Zugang wurde nicht freigegeben. Wenn du das für einen Irrtum hältst, wende dich
             bitte an den Administrator.
           </p>
-        ) : approvedWithoutUniverse ? (
+        ) : approvedButIncomplete ? (
           <p>
-            Dein Zugang ist freigegeben, dir wurde aber noch kein Universum zugeteilt. Sobald der
-            Administrator das nachholt, geht es hier weiter.
+            Dein Zugang ist bestätigt, die Freischaltung ist aber noch nicht abgeschlossen.
+            Sobald der Administrator das erledigt hat, geht es hier weiter.
           </p>
         ) : (
           <p>
             Danke, {ctx.profile.displayName}. Deine Anfrage liegt beim Administrator. Sobald er
-            dich freigegeben und dir ein Universum zugeteilt hat, kannst du dich anmelden und
-            loslegen — wir schicken dir keine Erinnerung, schau einfach später noch einmal
-            vorbei.
+            dich freigegeben hat, kannst du dich anmelden und loslegen — wir schicken dir keine
+            Erinnerung, schau einfach später noch einmal vorbei.
           </p>
         )}
         {ctx.profile.accessNote && (

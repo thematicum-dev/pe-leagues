@@ -16,6 +16,15 @@ export async function login(_prevState: unknown, formData: FormData) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.user) {
+    // Eine noch nicht bestätigte Adresse ist kein Tippfehler beim Passwort --
+    // dieser Fall braucht den Weg zum neuen Bestätigungslink, nicht die
+    // Standardmeldung (siehe app/confirm-email/page.tsx).
+    if (error?.code === "email_not_confirmed") {
+      return {
+        error: "Diese E-Mail-Adresse ist noch nicht bestätigt.",
+        needsConfirmation: email,
+      };
+    }
     return { error: "E-Mail-Adresse oder Passwort ist falsch." };
   }
 
@@ -24,6 +33,10 @@ export async function login(_prevState: unknown, formData: FormData) {
   // abgelehnt wurde, wird sofort wieder abgemeldet und erfährt hier, woran es
   // liegt. Wer noch gar kein Profil hat, kommt ins Onboarding und stellt dort
   // seine Anfrage.
+  //
+  // Von Universen ist in den Meldungen bewusst nicht die Rede: Für den
+  // wartenden Nutzer ist das eine interne Einteilung, die ihn erst etwas
+  // angeht, wenn er tatsächlich in mehreren Universen spielt.
   const { data: profile } = await supabase.rpc("my_access").maybeSingle();
 
   if (!profile) {
@@ -55,7 +68,7 @@ export async function login(_prevState: unknown, formData: FormData) {
     await supabase.auth.signOut();
     return {
       error:
-        "Dein Zugang ist freigegeben, dir wurde aber noch kein Universum zugeteilt. Bitte wende dich an den Administrator.",
+        "Dein Zugang ist noch nicht vollständig freigegeben. Bitte wende dich an den Administrator.",
     };
   }
 

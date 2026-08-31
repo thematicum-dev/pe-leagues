@@ -24,6 +24,13 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   `lib/access/context.ts` ist die gemeinsame Schranke aller Spielseiten.
   Ausführlich beschrieben ist das in `supabase/README.md`.
 
+- **`app/confirm-email/`**
+  Hilfeseite für den Fall, dass der Bestätigungslink aus der Registriermail
+  nicht mehr greift (er gilt nur einmal und wird von manchen Mail-Programmen
+  schon beim Anzeigen verbraucht). Sie erklärt, dass das Konto in aller Regel
+  trotzdem bestätigt ist, führt zur normalen Anmeldung und verschickt auf
+  Wunsch einen neuen Link.
+
 - **`app/admin/`**
   Der Admin-Bereich: Partien, Nutzer samt Freigaben und Universen. Universen
   sind voneinander getrennte Spielwelten (zu Beginn Test und Live, beliebig
