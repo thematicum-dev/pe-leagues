@@ -25,7 +25,11 @@ function fmtIrr(v: number | null): string {
 }
 
 export default async function LeaderboardPage() {
-  const { supabase, activeUniverse } = await requireAccess("/leaderboard");
+  const { supabase, universes, activeUniverse } = await requireAccess("/leaderboard");
+
+  // Wie im Dashboard: Das Universum wird erst benannt, wenn der Spieler in
+  // mehreren unterwegs ist.
+  const showUniverse = universes.length > 1;
 
   // Jedes Universum hat seine eigene Rangliste -- Ergebnisse aus einem
   // anderen Universum tauchen hier nicht auf.
@@ -41,7 +45,9 @@ export default async function LeaderboardPage() {
           <div>
             <h1>Rangliste</h1>
             <div className="dashsub">
-              {activeUniverse.name} · über alle abgeschlossenen Partien dieses Universums
+              {showUniverse
+                ? `${activeUniverse.name} · über alle abgeschlossenen Partien dieses Universums`
+                : "Über alle abgeschlossenen Partien"}
             </div>
           </div>
           <Link href="/dashboard" className="btn-secondary">
@@ -54,8 +60,9 @@ export default async function LeaderboardPage() {
           {error && <p className="autherror">{error.message}</p>}
           {rows.length === 0 && !error && (
             <div className="quiet">
-              Noch keine abgeschlossene Partie in {activeUniverse.name} — die Rangliste füllt sich,
-              sobald die erste Partie beendet ist.
+              {showUniverse
+                ? `Noch keine abgeschlossene Partie in ${activeUniverse.name} — die Rangliste füllt sich, sobald die erste Partie beendet ist.`
+                : "Noch keine abgeschlossene Partie — die Rangliste füllt sich, sobald die erste Partie beendet ist."}
             </div>
           )}
           {rows.map((r, i) => (

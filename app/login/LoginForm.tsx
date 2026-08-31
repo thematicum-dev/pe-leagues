@@ -27,6 +27,13 @@ export default function LoginForm() {
           <input type="password" name="password" autoComplete="current-password" required />
         </label>
         {state?.error && <p className="autherror">{state.error}</p>}
+        {state?.needsConfirmation && (
+          <div className="authlinks">
+            <Link href={`/confirm-email?email=${encodeURIComponent(state.needsConfirmation)}`}>
+              Neuen Bestätigungslink anfordern
+            </Link>
+          </div>
+        )}
         <button type="submit" disabled={pending}>
           {pending ? "Melde an …" : "Anmelden"}
         </button>

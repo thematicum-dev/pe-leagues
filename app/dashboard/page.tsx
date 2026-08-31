@@ -10,6 +10,11 @@ export default async function DashboardPage() {
 
   const { data: isAdmin } = await supabase.rpc("is_admin");
 
+  // Universen sind eine interne Einteilung. Wer nur in einem spielt, soll
+  // davon gar nichts mitbekommen -- erst ab zwei zugeteilten Universen wird
+  // die Zugehörigkeit angezeigt und umschaltbar.
+  const showUniverse = universes.length > 1;
+
   // Alles ab hier ist auf das aktive Universum beschränkt -- in der Abfrage
   // wie auch in der Datenbank (siehe seasons_select in
   // supabase/migrations/20260830100200_universe_seasons.sql).
@@ -75,10 +80,12 @@ export default async function DashboardPage() {
           <div>
             <h1>Willkommen, {profile.displayName}</h1>
             <div className="dashsub">{user.email}</div>
-            <div className="dashsub">
-              Universum: <strong>{activeUniverse.name}</strong>
-              {activeUniverse.description ? ` — ${activeUniverse.description}` : ""}
-            </div>
+            {showUniverse && (
+              <div className="dashsub">
+                Universum: <strong>{activeUniverse.name}</strong>
+                {activeUniverse.description ? ` — ${activeUniverse.description}` : ""}
+              </div>
+            )}
           </div>
           <div className="landingactions">
             <a href="/leaderboard" className="btn-secondary">
@@ -112,6 +119,7 @@ export default async function DashboardPage() {
           universeId={activeUniverse.id}
           universeName={activeUniverse.name}
           universeActive={activeUniverse.isActive}
+          showUniverse={showUniverse}
         />
       </div>
     </main>

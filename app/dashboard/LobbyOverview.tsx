@@ -19,20 +19,29 @@ export interface MySeasonSummary {
   occupancy: number;
 }
 
-const RPC_ERROR_MESSAGES: Record<string, string> = {
-  already_in_active_season: "Du bist in diesem Universum bereits in einer aktiven Partie.",
-  profile_missing: "Bitte lege zuerst deinen Anzeigenamen fest.",
-  access_not_approved: "Dein Zugang ist noch nicht freigegeben.",
-  universe_not_granted: "Dir ist dieses Universum nicht zugeteilt.",
-  universe_inactive: "In diesem Universum werden keine neuen Partien mehr eröffnet.",
-  season_not_joinable: "Diese Lobby ist nicht mehr offen — bitte versuch es erneut.",
-  season_full: "Diese Lobby ist bereits voll.",
-  season_not_found: "Diese Partie gibt es nicht mehr.",
-  not_authenticated: "Bitte melde dich erneut an.",
-};
+// Von Universen ist in diesen Meldungen nur die Rede, wenn der Spieler
+// überhaupt in mehreren unterwegs ist (showUniverse) -- sonst wäre es ein
+// Begriff, den er nirgends sonst zu sehen bekommt.
+function rpcErrorMessages(showUniverse: boolean): Record<string, string> {
+  return {
+    already_in_active_season: showUniverse
+      ? "Du bist in diesem Universum bereits in einer aktiven Partie."
+      : "Du bist bereits in einer aktiven Partie.",
+    profile_missing: "Bitte lege zuerst deinen Anzeigenamen fest.",
+    access_not_approved: "Dein Zugang ist noch nicht freigegeben.",
+    universe_not_granted: "Für diese Partie fehlt dir die Freigabe.",
+    universe_inactive: showUniverse
+      ? "In diesem Universum werden keine neuen Partien mehr eröffnet."
+      : "Zurzeit können keine neuen Partien eröffnet werden.",
+    season_not_joinable: "Diese Lobby ist nicht mehr offen — bitte versuch es erneut.",
+    season_full: "Diese Lobby ist bereits voll.",
+    season_not_found: "Diese Partie gibt es nicht mehr.",
+    not_authenticated: "Bitte melde dich erneut an.",
+  };
+}
 
-function friendlyError(message: string): string {
-  for (const [key, text] of Object.entries(RPC_ERROR_MESSAGES)) {
+function friendlyError(message: string, showUniverse: boolean): string {
+  for (const [key, text] of Object.entries(rpcErrorMessages(showUniverse))) {
     if (message.includes(key)) return text;
   }
   return "Das hat nicht geklappt. Bitte versuch es erneut.";
@@ -65,12 +74,14 @@ export default function LobbyOverview({
   universeId,
   universeName,
   universeActive,
+  showUniverse,
 }: {
   initialMySeason: MySeasonSummary | null;
   initialOpenLobbies: LobbySummary[];
   universeId: string;
   universeName: string;
   universeActive: boolean;
+  showUniverse: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -159,7 +170,7 @@ export default function LobbyOverview({
     const { error: rpcError } = await supabase.rpc("join_season", { p_season_id: seasonId });
     setPending(false);
     if (rpcError) {
-      setError(friendlyError(rpcError.message));
+      setError(friendlyError(rpcError.message, showUniverse));
       return;
     }
     router.push(`/season/${seasonId}`);
@@ -173,7 +184,7 @@ export default function LobbyOverview({
     });
     setPending(false);
     if (rpcError) {
-      setError(friendlyError(rpcError.message));
+      setError(friendlyError(rpcError.message, showUniverse));
       return;
     }
     if (data) router.push(`/season/${data}`);
@@ -182,7 +193,7 @@ export default function LobbyOverview({
   if (mySeason) {
     return (
       <div className="dashcard">
-        <h2>Deine Partie · {universeName}</h2>
+        <h2>Deine Partie{showUniverse ? ` · ${universeName}` : ""}</h2>
         <div className="seasonrow">
           <span>Partie {mySeason.id.slice(0, 8)}</span>
           <span className="seasonstatus">
@@ -207,14 +218,18 @@ export default function LobbyOverview({
 
   return (
     <div className="dashcard">
-      <h2>Offene Partien · {universeName}</h2>
+      <h2>Offene Partien{showUniverse ? ` · ${universeName}` : ""}</h2>
       {error && <p className="autherror">{error}</p>}
       {openLobbies.length === 0 && (
         <>
           <p className="dashsub">
             {universeActive
-              ? "Aktuell ist in diesem Universum keine Lobby offen."
-              : "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."}
+              ? showUniverse
+                ? "Aktuell ist in diesem Universum keine Lobby offen."
+                : "Aktuell ist keine Lobby offen."
+              : showUniverse
+                ? "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."
+                : "Zurzeit können keine neuen Partien eröffnet werden."}
           </p>
           {universeActive && (
             <button className="btn-primary" onClick={handleCreate} disabled={pending}>

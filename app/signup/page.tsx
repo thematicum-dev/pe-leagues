@@ -17,8 +17,14 @@ export default function SignupPage() {
             Wir haben dir eine E-Mail geschickt. Bitte öffne den Bestätigungslink darin, um dein
             Konto zu aktivieren.
           </p>
+          <p className="authhint">
+            Zeigt der Link &bdquo;abgelaufen&ldquo; oder &bdquo;ungültig&ldquo;? Das passiert, wenn dein Mail-Programm
+            ihn schon beim Anzeigen der Nachricht öffnet. Dein Konto ist dann trotzdem bestätigt
+            — melde dich einfach ganz normal an.
+          </p>
           <div className="authlinks">
             <Link href="/login">Zur Anmeldung</Link>
+            <Link href="/confirm-email">Link kam nicht an?</Link>
           </div>
         </div>
       </main>

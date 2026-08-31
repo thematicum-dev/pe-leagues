@@ -191,6 +191,43 @@ dieses Repository verbinden und den Produktions-Branch auf `main` setzen.
 Supabase wendet danach `supabase/migrations/*.sql` automatisch an, sobald
 ein Pull Request auf `main` gemerged wird.
 
+## Bestätigungs-E-Mails (Registrierung, Passwort vergessen)
+
+Der Link in der Bestätigungsmail gilt genau **einmal**. In der Praxis geht er
+deshalb öfter verloren, als man denkt:
+
+- Mail-Programme und Spamfilter (Apple Mail, Gmail, Outlook-Schutzfunktionen)
+  öffnen Links häufig schon beim Anzeigen der Nachricht und verbrauchen ihn
+  dabei. Der echte Klick landet danach auf „Link abgelaufen" — obwohl die
+  E-Mail-Adresse in Supabase längst bestätigt ist.
+- Wird die Mail auf einem anderen Gerät geöffnet als dem, auf dem die
+  Registrierung lief (oder im In-App-Browser einer Mail-App), fehlt der
+  PKCE-Cookie, mit dem `exchangeCodeForSession()` den Code einlösen würde.
+  Auch dann: Adresse bestätigt, Anmeldung per Link scheitert trotzdem.
+
+`app/auth/callback/route.ts` fängt beide Fälle ab: Es probiert zuerst den
+Einmal-Token (`token_hash` + `verifyOtp()`, der ohne Cookie auskommt), dann
+den PKCE-Code, und prüft danach, ob ohnehin schon eine gültige Session
+besteht. Erst wenn nichts davon greift, geht es auf `/confirm-email` — eine
+Seite, die den Sachverhalt erklärt, zur normalen Anmeldung führt (die in
+diesen Fällen einfach funktioniert) und notfalls einen neuen Bestätigungslink
+verschickt.
+
+### Optional: den Link unabhängig vom Registriergerät machen
+
+Der `token_hash`-Weg greift nur, wenn die E-Mail-Vorlage direkt auf die
+Anwendung zeigt statt auf Supabases `/auth/v1/verify`. Unter
+**Authentication → Email Templates → Confirm signup** dafür den Link
+ersetzen durch:
+
+```
+{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/onboarding
+```
+
+Analog für **Reset password** (`type=recovery`, `next=/update-password`).
+Ohne diese Änderung funktioniert alles weiterhin über den PKCE-Code, nur eben
+mit der oben beschriebenen Geräteabhängigkeit.
+
 ## Zeitsteuerung (pg_cron)
 
 Migration 16 legt einen minütlichen pg_cron-Job an (`start-due-seasons`),
