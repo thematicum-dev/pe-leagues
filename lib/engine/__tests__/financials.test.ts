@@ -321,9 +321,10 @@ describe("Finanzberichte eines Zielunternehmens", () => {
         }
       });
     });
-    // Nicht jedes Jahr, aber regelmäßig — sonst wäre die Zeile totes Beiwerk
-    expect(yearsWithOneOff).toBeGreaterThan(years * 0.15);
-    expect(yearsWithOneOff).toBeLessThan(years * 0.6);
+    /* Nicht jedes Jahr, aber regelmäßig — sonst wäre die Zeile totes Beiwerk.
+       Gemessen rund jedes vierte Jahr (ONEOFF_P), die Schranken lassen Luft. */
+    expect(yearsWithOneOff).toBeGreaterThan(years * 0.12);
+    expect(yearsWithOneOff).toBeLessThan(years * 0.45);
   });
 
   it("stellt cash-free/debt-free dar und lässt die Bilanz aufgehen", () => {

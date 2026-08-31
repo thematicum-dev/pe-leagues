@@ -224,6 +224,17 @@ export const NRM_SD = Math.sqrt(1 / 3);
    Reihe fallen kann. Ein Ereignis trifft ein Unternehmen im Mittel jedes
    dritte Halbjahr; nicht jedes davon bewegt den Umsatz.                    */
 export const EVENT_P = 0.15;
+/* Wie oft ein Geschäftsjahr Einmalaufwendungen ausweist — Restrukturierung,
+   ein Managementwechsel, ein abgebrochenes Programm. Betrifft die Historie
+   eines Zielunternehmens (lib/engine/financials.ts): Während der
+   Halteperiode entstehen Einmalaufwendungen nicht nach Wahrscheinlichkeit,
+   sondern weil der Spieler ein Programm auflegt oder eine Position neu
+   besetzt. Für die Zeit davor gibt es diese Entscheidung nicht, also steht
+   hier eine Quote — rund jedes vierte Jahr, wie sie ein Vendor-Due-
+   Diligence-Bericht typischerweise ausweist. Die Höhe stammt dagegen aus dem
+   Maßnahmenkatalog (INITS): dieselben Beträge, die auch eine Beteiligung für
+   ihre Programme zahlt.                                                    */
+export const ONEOFF_P = 0.25;
 
 /* ---------- Periodenerfassung für die Finanzberichte ----------
    Die Berichtsansicht (siehe lib/engine/financials.ts) rechnet nicht selbst,

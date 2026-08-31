@@ -34,7 +34,7 @@
    Finanzierung des Verkäufers — die ist nicht Teil der Transaktion.          */
 import {
   BASE_RATE, LEV_FREE, LEV_STEP, TAX_RATE, OFF_KEYS, OFF_EBITDA_KEYS,
-  EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE, INITS,
+  EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE, INITS, ONEOFF_P,
 } from "./engine.ts";
 import { createRng, type Rng } from "./rng.ts";
 
@@ -100,13 +100,7 @@ export const DEAL_YEARS = 3;
    Der Rest der Dämpfung ist Absicht: Die Historie soll die unterliegende
    Entwicklung zeigen, nicht jedes Quartal nachzeichnen.                    */
 export const HIST_SHOCK_DAMP = 0.3;
-/* Wie oft ein Geschäftsjahr Einmalaufwendungen ausweist. Die einzige Zahl
-   dieses Modells, die nicht aus der Engine kommt — sie kennt kein Programm
-   eines Zielunternehmens vor dem Erwerb. Rund jedes dritte Jahr trägt eine
-   Normalisierung, so wie ein Vendor-Due-Diligence-Bericht sie typischerweise
-   ausweist. Die Höhe dagegen stammt aus dem Maßnahmenkatalog: Es sind
-   dieselben Beträge, die auch eine Beteiligung für ihre Programme zahlt.  */
-export const HIST_ONEOFF_P = 0.35;
+
 
 /* Wirkung der Ereignisse auf Umsatz und Marge, direkt aus EVENTS abgelesen
    statt hier abgeschrieben: Jedes Ereignis wird einmal auf ein Musterunter-
@@ -182,7 +176,7 @@ function yearDeviation(rng: Rng) {
     }
   }
   const offs = oneOffTable();
-  const oneOff = rng.rnd() < HIST_ONEOFF_P ? offs[Math.floor(rng.rnd() * offs.length)] : 0;
+  const oneOff = rng.rnd() < ONEOFF_P ? offs[Math.floor(rng.rnd() * offs.length)] : 0;
   return { g, m, oneOff };
 }
 
