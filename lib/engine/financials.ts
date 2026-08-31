@@ -34,7 +34,9 @@
    Finanzierung des Verkäufers — die ist nicht Teil der Transaktion.          */
 import {
   BASE_RATE, LEV_FREE, LEV_STEP, TAX_RATE, OFF_KEYS, OFF_EBITDA_KEYS,
+  EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE,
 } from "./engine.ts";
+import { createRng, type Rng } from "./rng.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -56,6 +58,92 @@ export const PPE_YEARS = 4;
 export const MIN_CASH_PCT = 2;
 // Historie einer Deal-Karte: drei Geschäftsjahre, wie im Verkaufsmemorandum
 export const DEAL_YEARS = 3;
+
+/* ---------- Schwankung der historischen Jahre ----------
+   Ein Zielunternehmen, dessen drei Geschäftsjahre exakt gleich wachsen und
+   exakt dieselbe Marge zeigen, gibt es nicht. Die Jahre müssen schwanken —
+   aber nicht irgendwie, sondern mit der Volatilität, die dieses Spiel für die
+   Zukunft unterstellt. Sonst verspricht der Datenraum eine Ruhe (oder eine
+   Unruhe), die nach dem Kauf niemand wiederfindet.
+
+   Beides kommt deshalb aus der Engine selbst:
+   - das laufende Rauschen aus stepCompany() (GROWTH_NOISE, MARGIN_NOISE),
+     zwei Halbjahresschritte je Geschäftsjahr;
+   - die Sprünge aus dem Ereigniskatalog (EVENTS, EVENT_P) — ein verlorener
+     Schlüsselkunde, ein Großauftrag, ein Zukauf. Sie sind der Grund, warum
+     ein einzelnes Jahr aus der Reihe fällt.
+
+   Zwei Anker bleiben dabei exakt erhalten, weil die Karte sie zeigt: das
+   LTM-Jahr (Umsatz, Marge, EBITDA) und die Dreijahres-CAGR. Die Streuung
+   verteilt sich also *innerhalb* der Historie und verändert weder den
+   Ausgangspunkt noch das ausgewiesene Wachstum.
+
+   Gezogen wird deterministisch aus der Kennung des Deals: Dieselbe Karte
+   zeigt bei jedem Öffnen dieselbe Historie, und zwei Spieler sehen für
+   dasselbe Zielunternehmen dieselben Zahlen.                               */
+
+/* Wirkung der Ereignisse auf Umsatz und Marge, direkt aus EVENTS abgelesen
+   statt hier abgeschrieben: Jedes Ereignis wird einmal auf ein Musterunter-
+   nehmen angewandt und die Veränderung gemessen. So bleibt der Katalog die
+   einzige Quelle — wer dort ein Ereignis ändert, ändert die Historie mit. */
+let SHOCKS: { rev: number; mg: number }[] | null = null;
+function shockTable() {
+  if (SHOCKS) return SHOCKS;
+  const probeRng = createRng(1);
+  const out: { rev: number; mg: number }[] = [];
+  (EVENTS as Any[]).forEach((e) => {
+    const probe: Any = {
+      revenue: 100, margin: 20, quality: 60, netDebt: 30, rate: BASE_RATE, covLimit: 6.5,
+      sector: "Industrials", drift: 0, marginDrift: 0, capexPct: 4, benchMargin: 20,
+      ceo: { skill: 3 }, cfo: { skill: 3 }, r3: { skill: 3 }, plat: 2, acc: 2,
+      initP: null, initA: null, holdQ: 4, hist: [{ rev: 100, eb: 20 }],
+    };
+    try {
+      if (e.ok && !e.ok(probe, probeRng)) return;
+      e.f(probe, probeRng);
+      /* Auch Ereignisse ohne Wirkung auf Umsatz oder Marge kommen in die
+         Tabelle: Sie besetzen im Katalog einen Platz und senken damit die
+         Wahrscheinlichkeit der übrigen. Ließe man sie weg, träfe das
+         Zielunternehmen dreimal so oft ein sichtbarer Sprung wie eine
+         Beteiligung im Spiel.                                             */
+      out.push({ rev: probe.revenue / 100, mg: probe.margin - 20 });
+    } catch {
+      /* Ein Ereignis, das mehr Kontext braucht als das Musterunternehmen
+         hergibt, bleibt eben draußen — die Berichtsansicht darf daran nicht
+         scheitern. */
+    }
+  });
+  SHOCKS = out;
+  return out;
+}
+
+/* Deterministischer Startwert aus der Kennung des Deals (FNV-1a). */
+function seedFrom(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/* Abweichung eines Geschäftsjahres: zwei Halbjahresschritte, jeweils mit dem
+   laufenden Rauschen der Engine und der Chance auf ein Sonderereignis.
+   Wachstum in Logarithmen, damit sich die Jahre sauber zur CAGR verketten. */
+function yearDeviation(rng: Rng) {
+  let g = 0, m = 0;
+  const shocks = shockTable();
+  for (let half = 0; half < 2; half++) {
+    g += rng.nrm(GROWTH_NOISE) / 200;
+    m += rng.nrm(MARGIN_NOISE);
+    if (shocks.length && rng.rnd() < EVENT_P) {
+      const sh = shocks[Math.floor(rng.rnd() * shocks.length)];
+      g += Math.log(sh.rev);
+      m += sh.mg;
+    }
+  }
+  return { g, m };
+}
 
 export interface FinPeriod {
   key: string;
@@ -114,6 +202,12 @@ export interface Statements {
   periods: FinPeriod[];
   levered: boolean;        // Zinsergebnis und Nettoverschuldung Teil der Sicht?
   anyEstimated: boolean;
+  /* Zielunternehmen: der Umsatz des Jahres vor der ersten gezeigten Spalte.
+     Er ist die Basis der Dreijahres-CAGR, die auf der Karte steht — drei
+     Jahre zurück heißt drei Wachstumsschritte, und der erste davon liegt vor
+     dem Anzeigefenster. Ohne diesen Bezugspunkt ließe sich das ausgewiesene
+     Wachstum aus den Spalten nicht nachrechnen.                            */
+  cagrBase?: number;
 }
 
 const pctOf = (v: number, base: number) => (base > 0 ? (v / base) * 100 : 0);
@@ -170,12 +264,41 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
   const g = (d.growth || 0) / 100;
   const cxPct = d.capexPct ?? d.benchCapex ?? 4;
   const nwPct = d.nwcPct ?? d.benchNwc ?? 15;
-  const periods: FinPeriod[] = [];
 
-  for (let back = years - 1; back >= 0; back--) {
-    const revenue = d.revenue / Math.pow(1 + g, back);
-    const revPrev = d.revenue / Math.pow(1 + g, back + 1);
-    const adjEbitda = (revenue * d.margin) / 100;
+  /* Schwankung der Jahre, deterministisch aus der Kennung des Deals. Ein
+     Jahr mehr als angezeigt, weil die Veränderung des Working Capital im
+     ersten sichtbaren Jahr den Umsatz des Jahres davor braucht. */
+  const rng = createRng(seedFrom(String(d.id ?? d.name ?? "deal")));
+  const dev = Array.from({ length: years + 1 }, () => yearDeviation(rng));
+  /* Die Dreijahres-CAGR der Karte muss exakt bleiben: Über die angezeigten
+     Jahre hinweg heben sich die Wachstumsabweichungen deshalb auf. Der
+     Mittelwert wird abgezogen, nicht eine einzelne Abweichung gekappt —
+     sonst trüge ein Jahr die ganze Korrektur.                             */
+  const shown = dev.slice(1);
+  const meanG = shown.reduce((a, x) => a + x.g, 0) / shown.length;
+  shown.forEach((x) => { x.g -= meanG; });
+  /* Und das LTM-Jahr trägt die Marge der Karte: Die Abweichungen der
+     Vorjahre stehen relativ dazu.                                         */
+  const mLtm = shown[shown.length - 1].m;
+
+  /* Umsatzreihe rückwärts aufbauen: vom LTM-Umsatz aus mit dem jeweiligen
+     Jahreswachstum (Basiswachstum plus Abweichung) zurückgerechnet.       */
+  const logBase = Math.log(1 + g);
+  const revenues: number[] = new Array(years + 1);
+  revenues[years] = d.revenue;
+  for (let i = years - 1; i >= 0; i--) {
+    revenues[i] = revenues[i + 1] / Math.exp(logBase + shown[i].g);
+  }
+  // Umsatz des Jahres vor dem ersten sichtbaren, nur für dessen NWC-Bewegung
+  const revBefore = revenues[0] / Math.exp(logBase + dev[0].g);
+
+  const periods: FinPeriod[] = [];
+  for (let i = 0; i < years; i++) {
+    const back = years - 1 - i;
+    const revenue = revenues[i + 1];
+    const revPrev = i === 0 ? revBefore : revenues[i];
+    const margin = Math.max(2, d.margin + shown[i].m - mLtm);
+    const adjEbitda = (revenue * margin) / 100;
     const capex = (revenue * cxPct) / 100;
     // Ohne Fremdkapital im Perimeter ist die Steuerbasis EBITDA − Capex,
     // also exakt die Formel der Engine mit Zins null.
@@ -193,7 +316,7 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
   }
   return {
     kind: "deal", name: d.name, sector: d.sector,
-    periods, levered: false, anyEstimated: false,
+    periods, levered: false, anyEstimated: false, cagrBase: revenues[0],
   };
 }
 

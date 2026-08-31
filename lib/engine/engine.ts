@@ -204,6 +204,27 @@ export const targetMargin = (c) => (c.benchMargin ?? c.margin) + (c.plat - PLAT_
 export const DECAY = 0.08;
 export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
 
+/* ---------- Streuung eines Halbjahres ----------
+   Wie stark Wachstum und Marge einer Beteiligung um ihren Erwartungswert
+   schwanken. Beide stehen als benannte Konstanten, weil außer stepCompany()
+   auch die historischen Zahlen eines Zielunternehmens sie brauchen (siehe
+   lib/engine/financials.ts): Die Historie einer Deal-Karte soll mit genau der
+   Volatilität schwanken, mit der die Beteiligung später tatsächlich läuft.
+   Eine zweite, frei gewählte Zahl dort würde eine Schwankung behaupten, die
+   das Spiel gar nicht hat.
+
+   rng.nrm(x) summiert vier Gleichverteilungen und zentriert sie; die
+   Standardabweichung ist damit x·√(4/12) = 0,577·x.                       */
+export const GROWTH_NOISE = 6;      // Streubreite auf das annualisierte Wachstum, in pp
+export const MARGIN_NOISE = 0.6;    // Streubreite auf die Marge, in pp
+export const NRM_SD = Math.sqrt(1 / 3);
+/* Wahrscheinlichkeit eines Sonderereignisses je Halbjahr (siehe EVENTS und
+   den Sektorabschwung in runQuarter). Die Ereignisse verschieben Umsatz und
+   Marge sprunghaft — der eigentliche Grund, warum ein Geschäftsjahr aus der
+   Reihe fallen kann. Ein Ereignis trifft ein Unternehmen im Mittel jedes
+   dritte Halbjahr; nicht jedes davon bewegt den Umsatz.                    */
+export const EVENT_P = 0.15;
+
 /* ---------- Periodenerfassung für die Finanzberichte ----------
    Die Berichtsansicht (siehe lib/engine/financials.ts) rechnet nicht selbst,
    sie liest ab. Damit das geht, hält jede Beteiligung zwei Mitschriften:
@@ -297,7 +318,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(6);
+  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(GROWTH_NOISE);
   const rev0 = c.revenue;
   c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
 
@@ -305,7 +326,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const target = targetMargin(c);
   c.vcRun = anyInit(c) ? (c.vcRun || 0) + 1 : 0;
   const pull = c.margin < target ? 0.30 * opsMult : 0.40;
-  c.margin = clamp(c.margin + (target - c.margin) * pull + rng.nrm(0.6), 3, 45);
+  c.margin = clamp(c.margin + (target - c.margin) * pull + rng.nrm(MARGIN_NOISE), 3, 45);
 
   const eb = ebitdaOf(c);
   // Capex und Working Capital relativ zum Branchenniveau verbessern
@@ -348,7 +369,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
 
   c.holdQ += 1;
   /* Assetqualität folgt der realisierten Umsatz-CAGR seit Einstieg, nicht dem
-     Wachstum einer einzelnen Periode. Vorher entschied das Rauschen von rng.nrm(6)
+     Wachstum einer einzelnen Periode. Vorher entschied das Wachstumsrauschen
      über das Vorzeichen, wodurch der Qualitätskanal für Growth praktisch tot war. */
   const relMargin = c.margin - (c.benchMargin ?? c.margin);
   const gPrem = cagrPrem(c);

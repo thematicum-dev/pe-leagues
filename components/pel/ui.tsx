@@ -1101,7 +1101,17 @@ function plRows(st): FinRow[] {
   const rows: FinRow[] = [
     { k: "rev", l: "Umsatz", v: (p) => p.revenue },
     { k: "growth", memo: true, l: "Wachstum ggü. Vorperiode",
-      s: (p, i, P) => { const g = growthOf(p, P[i - 1] || null, "revenue"); return g == null ? "—" : fpct(g); } },
+      /* Für die erste Spalte eines Zielunternehmens ist die Vorperiode das
+         Basisjahr der Dreijahres-CAGR — sichtbar ist sie nicht, aber ihr
+         Umsatz ist bekannt, und ohne sie bliebe ausgerechnet die Zeile leer,
+         die die Schwankung zeigen soll. */
+      s: (p, i, P) => {
+        if (i === 0 && st.kind === "deal" && st.cagrBase > 0) {
+          return fpct((p.revenue / st.cagrBase - 1) * 100);
+        }
+        const g = growthOf(p, P[i - 1] || null, "revenue");
+        return g == null ? "—" : fpct(g);
+      } },
     { k: "adj", l: "Adjusted EBITDA", v: (p) => p.adjEbitda, sum: true },
     { k: "adjm", memo: true, l: "Adj. EBITDA-Marge", s: (p) => fpct(p.revenue > 0 ? (p.adjEbitda / p.revenue) * 100 : null) },
     { k: "off", l: "Einmalaufwendungen", v: (p) => -p.oneOff },
@@ -1337,8 +1347,12 @@ function StatementNotes({ st, view, hidden }) {
       )}
       {st.kind === "deal" && (
         <p className="finnote">
-          <b>Historie.</b> Die Umsatzreihe ist über das ausgewiesene Wachstum der letzten drei
-          Jahre zurückgerechnet. Marge, Investitions- und Kapitalbindungsquote weist der
+          <b>Historie.</b> Die Jahre schwanken mit derselben Volatilität, die das Spiel für die
+          Zukunft unterstellt — laufendes Wachstums- und Margenrauschen plus die Sprünge aus dem
+          Ereigniskatalog (verlorener Schlüsselkunde, Großauftrag, Zukauf). Zwei Größen bleiben
+          dabei exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen
+          Basis liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei
+          gezeigten Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der
           Datenraum nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
         </p>
       )}
