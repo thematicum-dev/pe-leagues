@@ -271,13 +271,16 @@ describe("Finanzberichte eines Zielunternehmens", () => {
       const m = a.reduce((x, y) => x + y, 0) / a.length;
       return Math.sqrt(a.reduce((s2, v) => s2 + (v - m) ** 2, 0) / a.length);
     };
-    // Gemessen rund 7 pp beim Wachstum und 0,9 pp bei der Marge — die Schranken
-    // lassen Luft, schlagen aber an, wenn die Historie wieder glattgezogen wird.
-    expect(sd(growthRates)).toBeGreaterThan(2);
+    /* Gemessen rund 2,8 pp beim Wachstum und 0,6 pp bei der Marge. Die
+       Schranken fassen beides ein: Nach unten schlagen sie an, wenn die
+       Historie wieder glattgezogen wird, nach oben, wenn die Reihe zu
+       unruhig wird und nicht mehr die unterliegende Entwicklung zeigt.   */
+    expect(sd(growthRates)).toBeGreaterThan(1.5);
+    expect(sd(growthRates)).toBeLessThan(4.5);
     expect(sd(marginGaps)).toBeGreaterThan(0.3);
-    // Und sie darf nicht ins Absurde laufen
-    expect(sd(growthRates)).toBeLessThan(15);
-    expect(Math.max(...marginGaps.map(Math.abs))).toBeLessThan(8);
+    expect(sd(marginGaps)).toBeLessThan(1.5);
+    expect(Math.max(...growthRates.map(Math.abs))).toBeLessThan(20);
+    expect(Math.max(...marginGaps.map(Math.abs))).toBeLessThan(5);
   });
 
   it("zeigt für dieselbe Karte immer dieselbe Historie", () => {
@@ -293,11 +296,34 @@ describe("Finanzberichte eines Zielunternehmens", () => {
   it("weist EBITDA und Marge der Karte aus", () => {
     deals.forEach((d: Any) => {
       const ltm = dealStatements(d).periods[2];
+      // Die Karte zeigt das bereinigte Ergebnis — genau das steht hier
       expect(ltm.adjEbitda).toBeCloseTo(ebitdaOf(d), 9);
-      expect(ltm.adjEbitda / ltm.revenue * 100).toBeCloseTo(d.margin, 9);
-      // Ohne Halteperiode gibt es keine Einmaleffekte: beide EBITDA sind gleich
-      expect(ltm.repEbitda).toBeCloseTo(ltm.adjEbitda, 9);
+      expect((ltm.adjEbitda / ltm.revenue) * 100).toBeCloseTo(d.margin, 9);
     });
+  });
+
+  /* Der Kern der Unterscheidung: Umsatz und Marge zeigen die unterliegende
+     Entwicklung, Einmaliges steht daneben. Ein Restrukturierungsprogramm im
+     Jahr vor dem Verkauf drückt das berichtete Ergebnis, nicht das
+     bereinigte — dieselbe Regel wie während der Halteperiode.              */
+  it("hält Einmalaufwendungen aus dem bereinigten EBITDA heraus", () => {
+    let yearsWithOneOff = 0, years = 0;
+    deals.forEach((d: Any) => {
+      dealStatements(d).periods.forEach((p) => {
+        years++;
+        expect(p.oneOff).toBeGreaterThanOrEqual(0);
+        expect(p.repEbitda).toBeCloseTo(p.adjEbitda - p.oneOff, 9);
+        if (p.oneOff > 1e-9) {
+          yearsWithOneOff++;
+          // Normalisierungen in der Größenordnung des Maßnahmenkatalogs,
+          // nicht in beliebiger Höhe
+          expect(p.oneOff / p.adjEbitda).toBeLessThan(0.5);
+        }
+      });
+    });
+    // Nicht jedes Jahr, aber regelmäßig — sonst wäre die Zeile totes Beiwerk
+    expect(yearsWithOneOff).toBeGreaterThan(years * 0.15);
+    expect(yearsWithOneOff).toBeLessThan(years * 0.6);
   });
 
   it("stellt cash-free/debt-free dar und lässt die Bilanz aufgehen", () => {

@@ -34,7 +34,7 @@
    Finanzierung des Verkäufers — die ist nicht Teil der Transaktion.          */
 import {
   BASE_RATE, LEV_FREE, LEV_STEP, TAX_RATE, OFF_KEYS, OFF_EBITDA_KEYS,
-  EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE,
+  EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE, INITS,
 } from "./engine.ts";
 import { createRng, type Rng } from "./rng.ts";
 
@@ -73,14 +73,40 @@ export const DEAL_YEARS = 3;
      Schlüsselkunde, ein Großauftrag, ein Zukauf. Sie sind der Grund, warum
      ein einzelnes Jahr aus der Reihe fällt.
 
-   Zwei Anker bleiben dabei exakt erhalten, weil die Karte sie zeigt: das
-   LTM-Jahr (Umsatz, Marge, EBITDA) und die Dreijahres-CAGR. Die Streuung
+   Umsatz und Marge zeigen dabei die *unterliegende* Entwicklung. Was einmalig
+   ist, gehört nicht dorthin, sondern in die Zeile der Einmalaufwendungen —
+   genau dafür gibt es die Unterscheidung von bereinigtem und berichtetem
+   EBITDA, und sie gilt in der Historie wie in der Halteperiode. Ein
+   Restrukturierungsprogramm oder ein Managementwechsel im Jahr vor dem
+   Verkauf drückt deshalb das berichtete Ergebnis, nicht das bereinigte.
+
+   Die Sprünge aus dem Ereigniskatalog wirken gedämpft (HIST_SHOCK_DAMP): Ein
+   Ereignis trifft im Spiel ein Halbjahr, ein Geschäftsjahr nimmt davon aber
+   nur den Teil auf, der nach dem Ereignis liegt. Eine Jahresreihe zeigt den
+   Verlauf, nicht jede einzelne Erschütterung.
+
+   Zwei Anker bleiben exakt erhalten, weil die Karte sie zeigt: das LTM-Jahr
+   (Umsatz, Marge, bereinigtes EBITDA) und die Dreijahres-CAGR. Die Streuung
    verteilt sich also *innerhalb* der Historie und verändert weder den
    Ausgangspunkt noch das ausgewiesene Wachstum.
 
    Gezogen wird deterministisch aus der Kennung des Deals: Dieselbe Karte
    zeigt bei jedem Öffnen dieselbe Historie, und zwei Spieler sehen für
    dasselbe Zielunternehmen dieselben Zahlen.                               */
+
+/* Dämpfung der Ereignissprünge in der Jahresreihe. Ein Ereignis verschiebt im
+   Spiel die Laufrate eines Halbjahres; im Jahresabschluss schlägt es nur mit
+   dem Teil des Jahres durch, der danach liegt — im Mittel etwa die Hälfte.
+   Der Rest der Dämpfung ist Absicht: Die Historie soll die unterliegende
+   Entwicklung zeigen, nicht jedes Quartal nachzeichnen.                    */
+export const HIST_SHOCK_DAMP = 0.3;
+/* Wie oft ein Geschäftsjahr Einmalaufwendungen ausweist. Die einzige Zahl
+   dieses Modells, die nicht aus der Engine kommt — sie kennt kein Programm
+   eines Zielunternehmens vor dem Erwerb. Rund jedes dritte Jahr trägt eine
+   Normalisierung, so wie ein Vendor-Due-Diligence-Bericht sie typischerweise
+   ausweist. Die Höhe dagegen stammt aus dem Maßnahmenkatalog: Es sind
+   dieselben Beträge, die auch eine Beteiligung für ihre Programme zahlt.  */
+export const HIST_ONEOFF_P = 0.35;
 
 /* Wirkung der Ereignisse auf Umsatz und Marge, direkt aus EVENTS abgelesen
    statt hier abgeschrieben: Jedes Ereignis wird einmal auf ein Musterunter-
@@ -127,9 +153,22 @@ function seedFrom(id: string): number {
   return h >>> 0;
 }
 
+/* Einmalaufwendungen, in Vielfachen des bereinigten EBITDA. Die Beträge sind
+   die des Maßnahmenkatalogs — ein Cost-out-Programm, eine ERP-Einführung, ein
+   abgebrochenes Projekt kosten ein Zielunternehmen dasselbe wie später eine
+   Beteiligung.                                                             */
+function oneOffTable(): number[] {
+  const out: number[] = [];
+  Object.values(INITS as Any).forEach((list: Any) => {
+    (list as Any[]).forEach((k) => { if (k.oneOff) out.push(k.oneOff); });
+  });
+  return out.length ? out : [0.1];
+}
+
 /* Abweichung eines Geschäftsjahres: zwei Halbjahresschritte, jeweils mit dem
    laufenden Rauschen der Engine und der Chance auf ein Sonderereignis.
-   Wachstum in Logarithmen, damit sich die Jahre sauber zur CAGR verketten. */
+   Wachstum in Logarithmen, damit sich die Jahre sauber zur CAGR verketten.
+   Der Einmalaufwand steht daneben — er gehört nicht in Umsatz oder Marge. */
 function yearDeviation(rng: Rng) {
   let g = 0, m = 0;
   const shocks = shockTable();
@@ -138,11 +177,13 @@ function yearDeviation(rng: Rng) {
     m += rng.nrm(MARGIN_NOISE);
     if (shocks.length && rng.rnd() < EVENT_P) {
       const sh = shocks[Math.floor(rng.rnd() * shocks.length)];
-      g += Math.log(sh.rev);
-      m += sh.mg;
+      g += Math.log(sh.rev) * HIST_SHOCK_DAMP;
+      m += sh.mg * HIST_SHOCK_DAMP;
     }
   }
-  return { g, m };
+  const offs = oneOffTable();
+  const oneOff = rng.rnd() < HIST_ONEOFF_P ? offs[Math.floor(rng.rnd() * offs.length)] : 0;
+  return { g, m, oneOff };
 }
 
 export interface FinPeriod {
@@ -300,15 +341,17 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
     const margin = Math.max(2, d.margin + shown[i].m - mLtm);
     const adjEbitda = (revenue * margin) / 100;
     const capex = (revenue * cxPct) / 100;
-    // Ohne Fremdkapital im Perimeter ist die Steuerbasis EBITDA − Capex,
-    // also exakt die Formel der Engine mit Zins null.
+    /* Die Steuer bemisst sich wie in der Engine auf dem Ergebnis vor
+       Einmalaufwendungen; ohne Fremdkapital im Perimeter ist die Basis also
+       bereinigtes EBITDA abzüglich Capex.                                 */
     const tax = TAX_RATE * Math.max(0, adjEbitda - capex);
     const nwc = (nwPct / 100) * revenue;
+    const oneOff = adjEbitda * shown[i].oneOff;
     periods.push(makePeriod({
       key: "y" + back, label: back === 0 ? "LTM" : `−${back}J`,
       sub: back === 0 ? "letzte 12M" : "12M", months: 12,
       levered: false,
-      revenue, adjEbitda, oneOff: 0, da: capex, interest: 0, tax,
+      revenue, adjEbitda, oneOff, da: capex, interest: 0, tax,
       dNwc: (nwPct / 100) * (revenue - revPrev), capex, acquisitions: 0, distributions: 0,
       ppe: PPE_YEARS * capex, goodwill: 0, nwc, netDebt: 0,
       equity: PPE_YEARS * capex + nwc, netDebtOpen: 0,

@@ -1311,7 +1311,7 @@ function StatementNotes({ st, view, hidden }) {
     <p className="finnote">
       <b>Adjusted gegen Reported EBITDA.</b> Das Modell führt das operative Ergebnis frei von
       Einmaleffekten — das ist das <b>Adjusted EBITDA</b>, und nur dieses steht auf der Karte,
-      im Multiple und im Covenant. Programmkosten aus Initiativen und Kosten eines
+      im Multiple und im Covenant. Programmkosten, Restrukturierung und die Kosten eines
       Managementwechsels sind Einmalaufwendungen: sie werden hier abgezogen und ergeben das
       <b> Reported EBITDA</b>. Investitionsnachholung, Cash Release, Zukäufe und Ausschüttungen
       sind keine Ergebnisgrößen und stehen unterhalb des EBITDA.
@@ -1347,13 +1347,16 @@ function StatementNotes({ st, view, hidden }) {
       )}
       {st.kind === "deal" && (
         <p className="finnote">
-          <b>Historie.</b> Die Jahre schwanken mit derselben Volatilität, die das Spiel für die
-          Zukunft unterstellt — laufendes Wachstums- und Margenrauschen plus die Sprünge aus dem
-          Ereigniskatalog (verlorener Schlüsselkunde, Großauftrag, Zukauf). Zwei Größen bleiben
-          dabei exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen
-          Basis liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei
-          gezeigten Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der
-          Datenraum nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
+          <b>Historie.</b> Umsatz und Marge zeigen die <b>unterliegende Entwicklung</b> und
+          schwanken mit derselben Volatilität, die das Spiel für die Zukunft unterstellt —
+          laufendes Wachstums- und Margenrauschen, dazu gedämpft die Sprünge aus dem
+          Ereigniskatalog. Was einmalig ist, steht nicht dort, sondern in den
+          Einmalaufwendungen: Restrukturierung, ein Managementwechsel, ein abgebrochenes
+          Programm drücken das berichtete Ergebnis, nicht das bereinigte. Zwei Größen bleiben
+          exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen Basis
+          liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei gezeigten
+          Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der Datenraum
+          nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
         </p>
       )}
       {st.anyEstimated && (
