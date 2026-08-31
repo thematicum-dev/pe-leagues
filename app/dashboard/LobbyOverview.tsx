@@ -20,8 +20,11 @@ export interface MySeasonSummary {
 }
 
 const RPC_ERROR_MESSAGES: Record<string, string> = {
-  already_in_active_season: "Du bist bereits in einer aktiven Partie.",
+  already_in_active_season: "Du bist in diesem Universum bereits in einer aktiven Partie.",
   profile_missing: "Bitte lege zuerst deinen Anzeigenamen fest.",
+  access_not_approved: "Dein Zugang ist noch nicht freigegeben.",
+  universe_not_granted: "Dir ist dieses Universum nicht zugeteilt.",
+  universe_inactive: "In diesem Universum werden keine neuen Partien mehr eröffnet.",
   season_not_joinable: "Diese Lobby ist nicht mehr offen — bitte versuch es erneut.",
   season_full: "Diese Lobby ist bereits voll.",
   season_not_found: "Diese Partie gibt es nicht mehr.",
@@ -59,9 +62,15 @@ function Countdown({ lobbyOpenedAt }: { lobbyOpenedAt: string }) {
 export default function LobbyOverview({
   initialMySeason,
   initialOpenLobbies,
+  universeId,
+  universeName,
+  universeActive,
 }: {
   initialMySeason: MySeasonSummary | null;
   initialOpenLobbies: LobbySummary[];
+  universeId: string;
+  universeName: string;
+  universeActive: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -111,8 +120,13 @@ export default function LobbyOverview({
         { event: "*", schema: "public", table: "seasons" },
         (payload) => {
           const row = payload.new as
-            | { id: string; status: string; lobby_opened_at: string }
+            | { id: string; status: string; lobby_opened_at: string; universe_id?: string }
             | undefined;
+
+          // Partien fremder Universen gehen diese Übersicht nichts an. Die
+          // Datenbank liefert sie ohnehin nicht aus (seasons_select), der
+          // Vergleich hier ist die zweite, sichtbare Grenze.
+          if (row?.universe_id && row.universe_id !== universeId) return;
 
           if (payload.eventType === "INSERT" && row?.status === "lobby") {
             setOpenLobbies((list) =>
@@ -137,7 +151,7 @@ export default function LobbyOverview({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [supabase, universeId]);
 
   async function handleJoin(seasonId: string) {
     setError(null);
@@ -154,7 +168,9 @@ export default function LobbyOverview({
   async function handleCreate() {
     setError(null);
     setPending(true);
-    const { data, error: rpcError } = await supabase.rpc("create_and_join_season");
+    const { data, error: rpcError } = await supabase.rpc("create_and_join_season", {
+      p_universe_id: universeId,
+    });
     setPending(false);
     if (rpcError) {
       setError(friendlyError(rpcError.message));
@@ -166,7 +182,7 @@ export default function LobbyOverview({
   if (mySeason) {
     return (
       <div className="dashcard">
-        <h2>Deine Partie</h2>
+        <h2>Deine Partie · {universeName}</h2>
         <div className="seasonrow">
           <span>Partie {mySeason.id.slice(0, 8)}</span>
           <span className="seasonstatus">
@@ -191,14 +207,20 @@ export default function LobbyOverview({
 
   return (
     <div className="dashcard">
-      <h2>Übersicht offener Partien</h2>
+      <h2>Offene Partien · {universeName}</h2>
       {error && <p className="autherror">{error}</p>}
       {openLobbies.length === 0 && (
         <>
-          <p className="dashsub">Aktuell ist keine Lobby offen.</p>
-          <button className="btn-primary" onClick={handleCreate} disabled={pending}>
-            {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
-          </button>
+          <p className="dashsub">
+            {universeActive
+              ? "Aktuell ist in diesem Universum keine Lobby offen."
+              : "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."}
+          </p>
+          {universeActive && (
+            <button className="btn-primary" onClick={handleCreate} disabled={pending}>
+              {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
+            </button>
+          )}
         </>
       )}
       {openLobbies.map((lobby) => (

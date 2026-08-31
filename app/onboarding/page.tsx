@@ -11,14 +11,12 @@ export default async function OnboardingPage() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data: profile } = await supabase.rpc("my_access").maybeSingle();
 
+  // Wer schon eine Anfrage gestellt hat, landet auf der Statusseite -- die
+  // schickt Freigegebene ihrerseits weiter aufs Dashboard.
   if (profile) {
-    redirect("/dashboard");
+    redirect("/access");
   }
 
   return <OnboardingForm />;

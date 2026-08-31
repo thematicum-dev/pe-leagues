@@ -1,34 +1,24 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/auth/actions";
+import { requireAccess } from "@/lib/access/context";
 import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
+import UniverseSwitcher from "./UniverseSwitcher";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile) {
-    redirect("/onboarding");
-  }
+  // Schranke für den gesamten Spielbereich: angemeldet, Profil vorhanden,
+  // vom Admin freigegeben, mindestens ein Universum zugeteilt.
+  const { supabase, user, profile, universes, activeUniverse } = await requireAccess("/dashboard");
 
   const { data: isAdmin } = await supabase.rpc("is_admin");
 
+  // Alles ab hier ist auf das aktive Universum beschränkt -- in der Abfrage
+  // wie auch in der Datenbank (siehe seasons_select in
+  // supabase/migrations/20260830100200_universe_seasons.sql).
   const { data: myRow } = await supabase
     .from("season_players")
-    .select("season_id, seasons!inner(id, status, lobby_opened_at)")
+    .select("season_id, seasons!inner(id, status, lobby_opened_at, universe_id)")
     .eq("profile_id", user.id)
     .in("seasons.status", ["lobby", "running"])
+    .eq("seasons.universe_id", activeUniverse.id)
     .maybeSingle();
 
   const myActiveSeason = myRow
@@ -55,6 +45,7 @@ export default async function DashboardPage() {
       .from("seasons")
       .select("id, lobby_opened_at")
       .eq("status", "lobby")
+      .eq("universe_id", activeUniverse.id)
       .order("lobby_opened_at", { ascending: true });
 
     const lobbyIds = (lobbies ?? []).map((l) => l.id);
@@ -82,8 +73,12 @@ export default async function DashboardPage() {
       <div className="dashinner">
         <div className="dashheader">
           <div>
-            <h1>Willkommen, {profile.display_name}</h1>
+            <h1>Willkommen, {profile.displayName}</h1>
             <div className="dashsub">{user.email}</div>
+            <div className="dashsub">
+              Universum: <strong>{activeUniverse.name}</strong>
+              {activeUniverse.description ? ` — ${activeUniverse.description}` : ""}
+            </div>
           </div>
           <div className="landingactions">
             <a href="/leaderboard" className="btn-secondary">
@@ -109,7 +104,15 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <LobbyOverview initialMySeason={mySeason} initialOpenLobbies={openLobbies} />
+        <UniverseSwitcher universes={universes} activeUniverseId={activeUniverse.id} />
+
+        <LobbyOverview
+          initialMySeason={mySeason}
+          initialOpenLobbies={openLobbies}
+          universeId={activeUniverse.id}
+          universeName={activeUniverse.name}
+          universeActive={activeUniverse.isActive}
+        />
       </div>
     </main>
   );

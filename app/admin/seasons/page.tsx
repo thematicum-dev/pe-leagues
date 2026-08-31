@@ -9,6 +9,7 @@ interface AdminSeasonRow {
   lobby_opened_at: string;
   started_at: string | null;
   created_by_name: string | null;
+  universe_name: string | null;
   human_count: number;
   ai_count: number;
   submitted_count: number;
@@ -46,7 +47,8 @@ export default async function AdminSeasonsPage() {
               Partie {s.id.slice(0, 8)} <span className="seasonstatus">{STATUS_LABEL[s.status] ?? s.status}</span>
             </div>
             <div className="dashsub">
-              {progressLabel(s)} · {s.ai_count} KI-Plätze · erstellt von {s.created_by_name ?? "—"}
+              {s.universe_name ?? "—"} · {progressLabel(s)} · {s.ai_count} KI-Plätze · erstellt von{" "}
+              {s.created_by_name ?? "—"}
             </div>
           </div>
           <ResetSeasonButton seasonId={s.id} />

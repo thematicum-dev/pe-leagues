@@ -16,6 +16,20 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   der ursprünglichen Datei `pe-leagues-mvp7.tsx` übernommen — an der Logik
   wurde nichts verändert.
 
+- **`app/access/page.tsx`, `app/onboarding/`, `lib/access/context.ts`**
+  Die Zugangskontrolle. Wer sich neu registriert, beantragt unter
+  `/onboarding` einen Zugang (Anzeigename + optionale Nachricht) und wartet
+  danach auf `/access`, bis ein Administrator ihn freigibt und ihm ein oder
+  mehrere Universen zuteilt. Erst dann führt die Anmeldung ins Spiel;
+  `lib/access/context.ts` ist die gemeinsame Schranke aller Spielseiten.
+  Ausführlich beschrieben ist das in `supabase/README.md`.
+
+- **`app/admin/`**
+  Der Admin-Bereich: Partien, Nutzer samt Freigaben und Universen. Universen
+  sind voneinander getrennte Spielwelten (zu Beginn Test und Live, beliebig
+  erweiterbar) — Partien und Ranglisten des einen sind im anderen
+  unsichtbar.
+
 - **`app/page.tsx`**
   Die Startseite. Sie macht nichts anderes, als das Spiel aus
   `components/PeLeagues.tsx` anzuzeigen. Wer die Webseite öffnet, landet
