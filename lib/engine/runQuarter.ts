@@ -25,13 +25,14 @@
 import type { Rng } from "./rng.ts";
 import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
+  COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, LTIP_SHARE, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
-  bookOff, periodFin, resetPeriod,
+  bookOff, periodFin, resetPeriod, eventPOf,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -505,18 +506,18 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         const slot = dim === "plat" ? "initP" : "initA";
         if (c[slot]) return;
         if (dim === "acc" && overstretch(c) > 0.3) return;
-        const cands = (plan[dim] || []).filter((x2: string) => initRuns(c, x2) < 4);
+        const cands = (plan[dim] || []).filter((x2: string) => initRuns(c, x2) < REPEAT_MAX);
         if (!cands.length) return;
         const id = cands.reduce((a: string, b: string) => (fitOf(b, c) * Math.pow(0.82, initRuns(c, b))
           > fitOf(a, c) * Math.pow(0.82, initRuns(c, a)) ? b : a));
         if (fitOf(id, c) * Math.pow(0.82, initRuns(c, id)) < 0.30 && id !== "ma") return;
         const B = buildInit(rng, c, dim, id, mk, q, compat);
         if (!B || B.blocked) return;
-        const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
+        const head = (c.covLimit ?? COV_DEFAULT) - c.netDebt / Math.max(0.5, ebitdaOf(c));
         /* Der Zukaufspreis steckt seit dem 30.08.2026 in B.debt. Die
            Finanzierbarkeit prüft für ihn aber addonCheck() pro forma, nicht
            dieser grobe Puffer — sonst blockierte er Zukäufe doppelt. */
-        if (B.debt > 0 && !B.spec.ma && head < 0.6) return;
+        if (B.debt > 0 && !B.spec.ma && head < ADDON_HEADROOM) return;
         c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
         c[slot] = B.init;
       });
@@ -527,7 +528,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
       stepCompany(rng, c, mk, f.attrs.operations, compat);
-      if (rng.rnd() < 0.15) {
+      if (rng.rnd() < eventPOf(compat)) {
         const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
         if (pool.length) {
           const e = rng.pick(pool);
@@ -612,7 +613,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       c.revenue *= 1 - 0.12 * stress;
       c.margin -= 1.5 * stress;
       c.drift = (c.drift || 0) - 1.0;
-      c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? 6.5) ? (c.breach || 0) + 1 : 0;
+      c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
     }));
     pushFeed(news, q, "📉", "neg", `Sektorabschwung in ${s}: Multiple-Kontraktion, Umsätze brechen ein.`);
   }

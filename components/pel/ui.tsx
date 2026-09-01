@@ -8,7 +8,7 @@ import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
-  CLS_LABEL, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
+  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
   ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
@@ -846,10 +846,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           </div>
           <div>
             <div className="eyebrow">Leverage<Info k="cov" /></div>
-            <div className="mono kv" style={{ color: lev > (c.covLimit ?? 6.5) ? "var(--ox)" : "var(--ink)" }}>
+            <div className="mono kv" style={{ color: lev > (c.covLimit ?? COV_DEFAULT) ? "var(--ox)" : "var(--ink)" }}>
               {x(lev)}
               <span style={{ display: "block", fontSize: 10, color: "var(--ink2)", fontWeight: 400, marginTop: 2 }}>
-                Cov {x(c.covLimit ?? 6.5)} · {pct(cf ? cf.rate : c.rate)}
+                Cov {x(c.covLimit ?? COV_DEFAULT)} · {pct(cf ? cf.rate : c.rate)}
               </span>
             </div>
           </div>
@@ -1101,7 +1101,17 @@ function plRows(st): FinRow[] {
   const rows: FinRow[] = [
     { k: "rev", l: "Umsatz", v: (p) => p.revenue },
     { k: "growth", memo: true, l: "Wachstum ggü. Vorperiode",
-      s: (p, i, P) => { const g = growthOf(p, P[i - 1] || null, "revenue"); return g == null ? "—" : fpct(g); } },
+      /* Für die erste Spalte eines Zielunternehmens ist die Vorperiode das
+         Basisjahr der Dreijahres-CAGR — sichtbar ist sie nicht, aber ihr
+         Umsatz ist bekannt, und ohne sie bliebe ausgerechnet die Zeile leer,
+         die die Schwankung zeigen soll. */
+      s: (p, i, P) => {
+        if (i === 0 && st.kind === "deal" && st.cagrBase > 0) {
+          return fpct((p.revenue / st.cagrBase - 1) * 100);
+        }
+        const g = growthOf(p, P[i - 1] || null, "revenue");
+        return g == null ? "—" : fpct(g);
+      } },
     { k: "adj", l: "Adjusted EBITDA", v: (p) => p.adjEbitda, sum: true },
     { k: "adjm", memo: true, l: "Adj. EBITDA-Marge", s: (p) => fpct(p.revenue > 0 ? (p.adjEbitda / p.revenue) * 100 : null) },
     { k: "off", l: "Einmalaufwendungen", v: (p) => -p.oneOff },
@@ -1301,7 +1311,7 @@ function StatementNotes({ st, view, hidden }) {
     <p className="finnote">
       <b>Adjusted gegen Reported EBITDA.</b> Das Modell führt das operative Ergebnis frei von
       Einmaleffekten — das ist das <b>Adjusted EBITDA</b>, und nur dieses steht auf der Karte,
-      im Multiple und im Covenant. Programmkosten aus Initiativen und Kosten eines
+      im Multiple und im Covenant. Programmkosten, Restrukturierung und die Kosten eines
       Managementwechsels sind Einmalaufwendungen: sie werden hier abgezogen und ergeben das
       <b> Reported EBITDA</b>. Investitionsnachholung, Cash Release, Zukäufe und Ausschüttungen
       sind keine Ergebnisgrößen und stehen unterhalb des EBITDA.
@@ -1337,9 +1347,16 @@ function StatementNotes({ st, view, hidden }) {
       )}
       {st.kind === "deal" && (
         <p className="finnote">
-          <b>Historie.</b> Die Umsatzreihe ist über das ausgewiesene Wachstum der letzten drei
-          Jahre zurückgerechnet. Marge, Investitions- und Kapitalbindungsquote weist der
-          Datenraum nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
+          <b>Historie.</b> Umsatz und Marge zeigen die <b>unterliegende Entwicklung</b> und
+          schwanken mit derselben Volatilität, die das Spiel für die Zukunft unterstellt —
+          laufendes Wachstums- und Margenrauschen, dazu gedämpft die Sprünge aus dem
+          Ereigniskatalog. Was einmalig ist, steht nicht dort, sondern in den
+          Einmalaufwendungen: Restrukturierung, ein Managementwechsel, ein abgebrochenes
+          Programm drücken das berichtete Ergebnis, nicht das bereinigte. Zwei Größen bleiben
+          exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen Basis
+          liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei gezeigten
+          Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der Datenraum
+          nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
         </p>
       )}
       {st.anyEstimated && (
@@ -2139,7 +2156,7 @@ export function InitPicker({ c, dim, market, start, close }) {
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
-                        {" "}(Covenant {x(c.covLimit ?? 6.5)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
+                        {" "}(Covenant {x(c.covLimit ?? COV_DEFAULT)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
                   <tr><td className="lab">Integrationswahrscheinlichkeit</td>
                     <td style={{ color: p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>

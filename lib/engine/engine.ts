@@ -204,6 +204,44 @@ export const targetMargin = (c) => (c.benchMargin ?? c.margin) + (c.plat - PLAT_
 export const DECAY = 0.08;
 export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
 
+/* ---------- Streuung eines Halbjahres ----------
+   Wie stark Wachstum und Marge einer Beteiligung um ihren Erwartungswert
+   schwanken. Beide stehen als benannte Konstanten, weil außer stepCompany()
+   auch die historischen Zahlen eines Zielunternehmens sie brauchen (siehe
+   lib/engine/financials.ts): Die Historie einer Deal-Karte soll mit genau der
+   Volatilität schwanken, mit der die Beteiligung später tatsächlich läuft.
+   Eine zweite, frei gewählte Zahl dort würde eine Schwankung behaupten, die
+   das Spiel gar nicht hat.
+
+   rng.nrm(x) summiert vier Gleichverteilungen und zentriert sie; die
+   Standardabweichung ist damit x·√(4/12) = 0,577·x.                       */
+export const GROWTH_NOISE = 6;      // Streubreite auf das annualisierte Wachstum, in pp
+export const MARGIN_NOISE = 0.6;    // Streubreite auf die Marge, in pp
+/* Wahrscheinlichkeit eines Sonderereignisses je Beteiligung und Halbjahr
+   (siehe EVENTS). Verlorener Schlüsselkunde, Großauftrag, abgesprungener CEO
+   — Dinge, auf die der Spieler reagieren, die er aber nicht steuern kann.
+
+   Bewusst niedrig gehalten: Bei 0,15 traf über eine Halteperiode von zehn
+   Halbjahren im Schnitt anderthalb Mal ein Ereignis, und nur jede fünfte
+   Beteiligung blieb ganz verschont. Das Ergebnis hing dadurch spürbarer am
+   Würfel als an den Entscheidungen. Bei 0,10 bleibt das Risiko real — gut ein
+   Drittel der Beteiligungen läuft ohne Zwischenfall —, ohne die Wertsteigerung
+   zu überlagern. Die Marktereignisse (Multiple-Expansion, Sektorabschwung in
+   runQuarter) sind davon unberührt: Sie treffen den ganzen Sektor und gehören
+   zum Zyklus, nicht zum Zufall einer einzelnen Beteiligung.                */
+export const EVENT_P = 0.10;
+/* Wie oft ein Geschäftsjahr Einmalaufwendungen ausweist — Restrukturierung,
+   ein Managementwechsel, ein abgebrochenes Programm. Betrifft die Historie
+   eines Zielunternehmens (lib/engine/financials.ts): Während der
+   Halteperiode entstehen Einmalaufwendungen nicht nach Wahrscheinlichkeit,
+   sondern weil der Spieler ein Programm auflegt oder eine Position neu
+   besetzt. Für die Zeit davor gibt es diese Entscheidung nicht, also steht
+   hier eine Quote — rund jedes vierte Jahr, wie sie ein Vendor-Due-
+   Diligence-Bericht typischerweise ausweist. Die Höhe stammt dagegen aus dem
+   Maßnahmenkatalog (INITS): dieselben Beträge, die auch eine Beteiligung für
+   ihre Programme zahlt.                                                    */
+export const ONEOFF_P = 0.25;
+
 /* ---------- Periodenerfassung für die Finanzberichte ----------
    Die Berichtsansicht (siehe lib/engine/financials.ts) rechnet nicht selbst,
    sie liest ab. Damit das geht, hält jede Beteiligung zwei Mitschriften:
@@ -242,8 +280,17 @@ export interface EngineCompat {
      Kapitalbindungsquote setzte deshalb nichts frei. Ersatzweise gab es beim
      NWC-Programm einen pauschalen Einmaleffekt (legacyRelease).            */
   nwcOnIncrementOnly?: boolean;
+  /* Bis 31.08.2026 traf ein Sonderereignis eine Beteiligung mit 15 % je
+     Halbjahr statt mit EVENT_P. Ob ein Ereignis eintritt, verschiebt den
+     ganzen weiteren Zufallsstrom — ohne diesen Schalter ließe sich kein
+     Halbjahr von davor mehr nachrechnen.                                   */
+  legacyEventP?: boolean;
 }
-export const LEGACY_COMPAT: EngineCompat = { addonWithoutDebt: true, nwcOnIncrementOnly: true };
+/* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
+export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
+export const LEGACY_COMPAT: EngineCompat = {
+  addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true,
+};
 
 export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
 /* Welche Einmaleffekte im berichteten EBITDA stehen und beim bereinigten
@@ -297,7 +344,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(6);
+  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(GROWTH_NOISE);
   const rev0 = c.revenue;
   c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
 
@@ -305,7 +352,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const target = targetMargin(c);
   c.vcRun = anyInit(c) ? (c.vcRun || 0) + 1 : 0;
   const pull = c.margin < target ? 0.30 * opsMult : 0.40;
-  c.margin = clamp(c.margin + (target - c.margin) * pull + rng.nrm(0.6), 3, 45);
+  c.margin = clamp(c.margin + (target - c.margin) * pull + rng.nrm(MARGIN_NOISE), 3, 45);
 
   const eb = ebitdaOf(c);
   // Capex und Working Capital relativ zum Branchenniveau verbessern
@@ -348,7 +395,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
 
   c.holdQ += 1;
   /* Assetqualität folgt der realisierten Umsatz-CAGR seit Einstieg, nicht dem
-     Wachstum einer einzelnen Periode. Vorher entschied das Rauschen von rng.nrm(6)
+     Wachstum einer einzelnen Periode. Vorher entschied das Wachstumsrauschen
      über das Vorzeichen, wodurch der Qualitätskanal für Growth praktisch tot war. */
   const relMargin = c.margin - (c.benchMargin ?? c.margin);
   const gPrem = cagrPrem(c);
@@ -361,7 +408,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
     5, 99
   );
   const covLev = c.netDebt / Math.max(0.5, eb);
-  c.breach = covLev > (c.covLimit ?? 6.5) ? (c.breach || 0) + 1 : 0;
+  c.breach = covLev > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
   // Für die Anzeige festhalten: die Karte zeigt die tatsächlichen Werte der Periode
   // Für die Anzeige auf Jahresbasis hochgerechnet, damit Karte und Dealflow
   // dieselbe Einheit sprechen wie EBITDA und Multiple.
@@ -382,7 +429,7 @@ export const EVENTS = [
   { t: "Wettbewerber senkt Preise", m: "operations", bad: 1,
     f: (c) => { c.margin -= 2.5; c.marginDrift = (c.marginDrift || 0) - 1.5; } },
   { t: "Add-on-Gelegenheit genutzt", m: null, bad: 0,
-    ok: (c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) < (c.covLimit ?? 6.5) - 1.5,
+    ok: (c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) < (c.covLimit ?? COV_DEFAULT) - 1.5,
     f: (c) => { c.revenue *= 1.25; const p = ebitdaOf(c) * 1.6; c.netDebt += p; bookOff(c, "addon", p); } },
   { t: "Investitionsstau aufgedeckt", m: "analysis", bad: 1,
     f: (c) => { const p = ebitdaOf(c) * 0.8; c.netDebt += p; bookOff(c, "capexOff", p); c.capexPct = (c.capexPct ?? 4) + 1.5; } },
@@ -424,6 +471,9 @@ export const driftBandOf = (analysis) => 1.3 * 0.577 * driftErrSd(analysis);
 export const MULT_CAP = 1.60;      // Obergrenze: Vielfaches des Sektormultiples
 
 export const CAPITAL = 500;
+/* Voreingestellte Punkteverteilung des menschlichen Fonds. Der Spieler darf
+   sie umverteilen; sie ist der Startwert, nicht die Obergrenze.          */
+export const DEFAULT_HUMAN_ATTRS = { sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 };
 export const PERIODS = 20;         // 10 Jahre in Halbjahresschritten
 export const MIN_HOLD = 6;         // Mindesthaltedauer: 3 Jahre
 /* Zielgrößen skalieren mit dem Fondsvolumen. Ein 500-Mio.-Fonds, der dieselben
@@ -437,6 +487,11 @@ export const COV_HEADROOM = 1.2;   // Covenant-Spielraum über der Einstiegsvers
 export const RESERVE_PROC = 0.85;  // Reservationspreis in der Auktion, Anteil der Preiserwartung
 export const RESERVE_PROP = 0.90;  // Reservationspreis des Gesellschafters beim Off-Market-Deal
 export const COV_FLOOR = 4.0;      // Untergrenze des Covenants
+/* Covenant einer Beteiligung, falls keiner gesetzt ist. Der Wert stand bis
+   jetzt als blanke 6,5 an dreizehn Stellen in vier Dateien — und traf sich
+   dort zufällig mit BASE_RATE, was den Eindruck erweckte, beide hingen
+   zusammen. Sie tun es nicht.                                            */
+export const COV_DEFAULT = 6.5;    // Covenant-Vorgabe ohne eigene Vereinbarung
 export const BASE_RATE = 6.5;      // Basismarge auf die Akquisitionsfinanzierung (Euribor + Marge)
 /* Ertragsteuersatz. Bemessungsgrundlage im Modell ist EBITDA abzüglich Zins und
    Capex — Capex steht dabei stellvertretend für die Abschreibung. Genau diese
@@ -687,7 +742,7 @@ export function addonCheck(c, market) {
      schiefgeht. ADDON_HEADROOM ist genau dieser Puffer. Vorher genügte formale
      Einhaltung, und die Plattform stand nach dem Zukauf regelmäßig mit 0,4×
      Restluft da: Ein einziger Nachfrageeinbruch reichte für den Breach.       */
-  const limit = (c.covLimit ?? 6.5) - ADDON_HEADROOM;
+  const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
   return { addEb, mult, price, lev, limit, ok: lev <= limit };
 }
 /* Integrationsrisiko. Vorher hing der Erfolg allein am Rating der Fachrolle —
@@ -1215,7 +1270,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
 export function healthOf(c, market) {
   const eb = ebitdaOf(c);
   const lev = c.netDebt / Math.max(0.5, eb);
-  const head = (c.covLimit ?? 6.5) - lev;
+  const head = (c.covLimit ?? COV_DEFAULT) - lev;
   const searching = (c.searches || []).length;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
   const moic = (navValueOf(c, market) + (c.cashOut || 0)) / Math.max(0.01, c.costTotal);

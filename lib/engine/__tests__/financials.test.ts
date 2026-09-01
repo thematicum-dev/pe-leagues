@@ -240,25 +240,91 @@ describe("Finanzberichte eines Zielunternehmens", () => {
   SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
   const deals = Array.from({ length: 40 }, () => newDeal(rng, "process", market));
 
-  it("rechnet den Umsatz exakt über das ausgewiesene Wachstum zurück", () => {
+  it("hält LTM-Umsatz und ausgewiesene Dreijahres-CAGR exakt ein", () => {
     deals.forEach((d: Any) => {
       const st = dealStatements(d);
       expect(st.periods).toHaveLength(3);
-      const [y2, y1, ltm] = st.periods;
+      const ltm = st.periods[2];
+      // Der Anker der Karte bleibt unangetastet ...
       expect(ltm.revenue).toBeCloseTo(d.revenue, 9);
-      expect(y1.revenue * (1 + d.growth / 100)).toBeCloseTo(ltm.revenue, 9);
-      expect(y2.revenue * (1 + d.growth / 100)).toBeCloseTo(y1.revenue, 9);
+      // ... und über drei Wachstumsschritte ergibt sich exakt die CAGR der
+      // Karte, egal wie stark die einzelnen Jahre davon abweichen.
+      const cagr = (Math.pow(ltm.revenue / st.cagrBase!, 1 / 3) - 1) * 100;
+      expect(cagr).toBeCloseTo(d.growth, 8);
     });
+  });
+
+  /* Der eigentliche Punkt: Drei exakt gleich wachsende Jahre mit exakt
+     derselben Marge gibt es nicht. Die Jahre müssen sich unterscheiden — und
+     zwar in der Größenordnung, die das Spiel auch für die Zukunft unterstellt. */
+  it("lässt die Jahre schwanken statt gleichförmig zu wachsen", () => {
+    const growthRates: number[] = [];
+    const marginGaps: number[] = [];
+    deals.forEach((d: Any) => {
+      const st = dealStatements(d);
+      for (let k = 1; k < st.periods.length; k++) {
+        growthRates.push((st.periods[k].revenue / st.periods[k - 1].revenue - 1) * 100 - d.growth);
+      }
+      st.periods.forEach((p) => marginGaps.push((p.adjEbitda / p.revenue) * 100 - d.margin));
+    });
+    const sd = (a: number[]) => {
+      const m = a.reduce((x, y) => x + y, 0) / a.length;
+      return Math.sqrt(a.reduce((s2, v) => s2 + (v - m) ** 2, 0) / a.length);
+    };
+    /* Gemessen rund 2,8 pp beim Wachstum und 0,6 pp bei der Marge. Die
+       Schranken fassen beides ein: Nach unten schlagen sie an, wenn die
+       Historie wieder glattgezogen wird, nach oben, wenn die Reihe zu
+       unruhig wird und nicht mehr die unterliegende Entwicklung zeigt.   */
+    expect(sd(growthRates)).toBeGreaterThan(1.5);
+    expect(sd(growthRates)).toBeLessThan(4.5);
+    expect(sd(marginGaps)).toBeGreaterThan(0.3);
+    expect(sd(marginGaps)).toBeLessThan(1.5);
+    expect(Math.max(...growthRates.map(Math.abs))).toBeLessThan(20);
+    expect(Math.max(...marginGaps.map(Math.abs))).toBeLessThan(5);
+  });
+
+  it("zeigt für dieselbe Karte immer dieselbe Historie", () => {
+    deals.slice(0, 10).forEach((d: Any) => {
+      const a = dealStatements(d), b = dealStatements(d);
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    });
+    // ... und für verschiedene Karten verschiedene
+    const paths = deals.map((d: Any) => dealStatements(d).periods.map((p) => p.revenue / d.revenue).join(","));
+    expect(new Set(paths).size).toBeGreaterThan(deals.length * 0.9);
   });
 
   it("weist EBITDA und Marge der Karte aus", () => {
     deals.forEach((d: Any) => {
       const ltm = dealStatements(d).periods[2];
+      // Die Karte zeigt das bereinigte Ergebnis — genau das steht hier
       expect(ltm.adjEbitda).toBeCloseTo(ebitdaOf(d), 9);
-      expect(ltm.adjEbitda / ltm.revenue * 100).toBeCloseTo(d.margin, 9);
-      // Ohne Halteperiode gibt es keine Einmaleffekte: beide EBITDA sind gleich
-      expect(ltm.repEbitda).toBeCloseTo(ltm.adjEbitda, 9);
+      expect((ltm.adjEbitda / ltm.revenue) * 100).toBeCloseTo(d.margin, 9);
     });
+  });
+
+  /* Der Kern der Unterscheidung: Umsatz und Marge zeigen die unterliegende
+     Entwicklung, Einmaliges steht daneben. Ein Restrukturierungsprogramm im
+     Jahr vor dem Verkauf drückt das berichtete Ergebnis, nicht das
+     bereinigte — dieselbe Regel wie während der Halteperiode.              */
+  it("hält Einmalaufwendungen aus dem bereinigten EBITDA heraus", () => {
+    let yearsWithOneOff = 0, years = 0;
+    deals.forEach((d: Any) => {
+      dealStatements(d).periods.forEach((p) => {
+        years++;
+        expect(p.oneOff).toBeGreaterThanOrEqual(0);
+        expect(p.repEbitda).toBeCloseTo(p.adjEbitda - p.oneOff, 9);
+        if (p.oneOff > 1e-9) {
+          yearsWithOneOff++;
+          // Normalisierungen in der Größenordnung des Maßnahmenkatalogs,
+          // nicht in beliebiger Höhe
+          expect(p.oneOff / p.adjEbitda).toBeLessThan(0.5);
+        }
+      });
+    });
+    /* Nicht jedes Jahr, aber regelmäßig — sonst wäre die Zeile totes Beiwerk.
+       Gemessen rund jedes vierte Jahr (ONEOFF_P), die Schranken lassen Luft. */
+    expect(yearsWithOneOff).toBeGreaterThan(years * 0.12);
+    expect(yearsWithOneOff).toBeLessThan(years * 0.45);
   });
 
   it("stellt cash-free/debt-free dar und lässt die Bilanz aufgehen", () => {
@@ -279,29 +345,24 @@ describe("Finanzberichte eines Zielunternehmens", () => {
     });
   });
 
-  /* Die Karte rechnet die Kapitalbindung auf dem heutigen Umsatz hoch
-     (nwcPct × Umsatz × Wachstum) — eine Vorausschau. Der Bericht zeigt die
-     tatsächliche Bewegung des abgelaufenen Jahres, also die Quote auf dem
-     Zuwachs gegenüber dem Vorjahr. Beide kommen aus denselben Feldern und
-     unterscheiden sich genau um den Faktor (1 + g).                         */
+  /* Die Kapitalbindung folgt der Quote der Karte — angewandt auf die
+     tatsächliche Umsatzbewegung des jeweiligen Jahres, nicht auf eine
+     hochgerechnete. Die Karte selbst zeigt daneben eine Vorausschau
+     (nwcPct × Umsatz × Wachstum); beide kommen aus derselben Quote.        */
   it("bindet Working Capital mit der Quote der Karte auf dem tatsächlichen Zuwachs", () => {
     deals.forEach((d: Any) => {
       const st = dealStatements(d);
       const [, y1, ltm] = st.periods;
       expect(ltm.dNwc).toBeCloseTo((d.nwcPct / 100) * (ltm.revenue - y1.revenue), 9);
-      const forward = (d.nwcPct / 100) * ((d.revenue * d.growth) / 100);
-      expect(ltm.dNwc * (1 + d.growth / 100)).toBeCloseTo(forward, 6);
+      expect(ltm.nwc).toBeCloseTo((d.nwcPct / 100) * d.revenue, 9);
     });
   });
 
-  it("gibt eine Cash Conversion in der Größenordnung der Deal-Karte", () => {
+  it("gibt für das LTM-Jahr die Capex-Quote der Karte", () => {
     deals.forEach((d: Any) => {
       const ltm = dealStatements(d).periods[2];
-      const eb = ebitdaOf(d);
-      const capexA = (d.revenue * d.capexPct) / 100;
-      const nwcA = (d.nwcPct / 100) * ((d.revenue * d.growth) / 100);
-      const cardConv = ((eb - capexA - nwcA) / eb) * 100;
-      expect(Math.abs(ratiosOf(ltm, false).conversion! - cardConv)).toBeLessThan(1.5);
+      expect(ltm.capex).toBeCloseTo((d.revenue * d.capexPct) / 100, 9);
+      expect(ltm.adjEbitda).toBeCloseTo(ebitdaOf(d), 9);
     });
   });
 });

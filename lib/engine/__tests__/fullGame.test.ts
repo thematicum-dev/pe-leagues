@@ -80,6 +80,11 @@ function runGoldenGame() {
 
     fund.holdings.forEach((c) => {
       stepCompany(rng, c, market, attrs.operations);
+      /* Eigene Ereignisquote dieses Szenarios, bewusst unabhängig von EVENT_P:
+         Der Test bewacht die Rechenfunktionen der Engine, nicht die
+         Spielbalance. Sonst erzwänge jede Feinjustierung der Quote ein neues
+         Sollergebnis, und der Test verlöre genau die Empfindlichkeit, für die
+         er da ist.                                                         */
       if (rng.rnd() < 0.15) {
         const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
         if (pool.length) {
