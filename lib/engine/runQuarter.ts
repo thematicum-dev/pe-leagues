@@ -31,7 +31,7 @@ import {
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
-  bookOff, periodFin, resetPeriod,
+  bookOff, periodFin, resetPeriod, eventPOf,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -527,7 +527,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
       stepCompany(rng, c, mk, f.attrs.operations, compat);
-      if (rng.rnd() < 0.15) {
+      if (rng.rnd() < eventPOf(compat)) {
         const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
         if (pool.length) {
           const e = rng.pick(pool);

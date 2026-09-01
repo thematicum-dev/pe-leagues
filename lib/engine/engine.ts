@@ -218,12 +218,19 @@ export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
 export const GROWTH_NOISE = 6;      // Streubreite auf das annualisierte Wachstum, in pp
 export const MARGIN_NOISE = 0.6;    // Streubreite auf die Marge, in pp
 export const NRM_SD = Math.sqrt(1 / 3);
-/* Wahrscheinlichkeit eines Sonderereignisses je Halbjahr (siehe EVENTS und
-   den Sektorabschwung in runQuarter). Die Ereignisse verschieben Umsatz und
-   Marge sprunghaft — der eigentliche Grund, warum ein Geschäftsjahr aus der
-   Reihe fallen kann. Ein Ereignis trifft ein Unternehmen im Mittel jedes
-   dritte Halbjahr; nicht jedes davon bewegt den Umsatz.                    */
-export const EVENT_P = 0.15;
+/* Wahrscheinlichkeit eines Sonderereignisses je Beteiligung und Halbjahr
+   (siehe EVENTS). Verlorener Schlüsselkunde, Großauftrag, abgesprungener CEO
+   — Dinge, auf die der Spieler reagieren, die er aber nicht steuern kann.
+
+   Bewusst niedrig gehalten: Bei 0,15 traf über eine Halteperiode von zehn
+   Halbjahren im Schnitt anderthalb Mal ein Ereignis, und nur jede fünfte
+   Beteiligung blieb ganz verschont. Das Ergebnis hing dadurch spürbarer am
+   Würfel als an den Entscheidungen. Bei 0,10 bleibt das Risiko real — gut ein
+   Drittel der Beteiligungen läuft ohne Zwischenfall —, ohne die Wertsteigerung
+   zu überlagern. Die Marktereignisse (Multiple-Expansion, Sektorabschwung in
+   runQuarter) sind davon unberührt: Sie treffen den ganzen Sektor und gehören
+   zum Zyklus, nicht zum Zufall einer einzelnen Beteiligung.                */
+export const EVENT_P = 0.10;
 /* Wie oft ein Geschäftsjahr Einmalaufwendungen ausweist — Restrukturierung,
    ein Managementwechsel, ein abgebrochenes Programm. Betrifft die Historie
    eines Zielunternehmens (lib/engine/financials.ts): Während der
@@ -274,8 +281,17 @@ export interface EngineCompat {
      Kapitalbindungsquote setzte deshalb nichts frei. Ersatzweise gab es beim
      NWC-Programm einen pauschalen Einmaleffekt (legacyRelease).            */
   nwcOnIncrementOnly?: boolean;
+  /* Bis 31.08.2026 traf ein Sonderereignis eine Beteiligung mit 15 % je
+     Halbjahr statt mit EVENT_P. Ob ein Ereignis eintritt, verschiebt den
+     ganzen weiteren Zufallsstrom — ohne diesen Schalter ließe sich kein
+     Halbjahr von davor mehr nachrechnen.                                   */
+  legacyEventP?: boolean;
 }
-export const LEGACY_COMPAT: EngineCompat = { addonWithoutDebt: true, nwcOnIncrementOnly: true };
+/* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
+export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
+export const LEGACY_COMPAT: EngineCompat = {
+  addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true,
+};
 
 export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
 /* Welche Einmaleffekte im berichteten EBITDA stehen und beim bereinigten

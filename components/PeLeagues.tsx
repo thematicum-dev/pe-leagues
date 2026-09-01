@@ -14,7 +14,7 @@ import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
   CLS_LABEL, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
+  ENTRY_FEE, EVENTS, EVENT_P, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
@@ -303,7 +303,7 @@ export default function PeLeagues() {
     F.forEach((f) => {
       f.holdings.forEach((c) => {
         stepCompany(rng, c, mk, f.attrs.operations);
-        if (rng.rnd() < 0.15) {
+        if (rng.rnd() < EVENT_P) {
           // Nur Ereignisse ziehen, die auf diese Beteiligung überhaupt anwendbar sind
           const pool = EVENTS.filter((e) => !e.ok || e.ok(c, rng));
           if (pool.length) {
@@ -1687,7 +1687,7 @@ function PracticeMode({ dark, setDark, back }) {
     const seedBefore = rng.seed;
     stepCompany(rng, n, market, PRAC_ATTRS.operations);
     let hitEvent = null;
-    if (rng.rnd() < 0.15) {
+    if (rng.rnd() < EVENT_P) {
       const pool = EVENTS.filter((e) => !e.ok || e.ok(n, rng));
       if (pool.length) {
         const e = rng.pick(pool);
@@ -1799,7 +1799,7 @@ function PracticeMode({ dark, setDark, back }) {
     const z = { ...n, ceo: { ...n.ceo }, cfo: { ...n.cfo }, r3: { ...n.r3 }, hist: [...n.hist] };
     for (let t = nq; t < PRAC_PERIODS; t++) {
       stepCompany(rng, z, market, PRAC_ATTRS.operations);
-      if (rng.rnd() < 0.15) {
+      if (rng.rnd() < EVENT_P) {
         const pool = EVENTS.filter((e) => !e.ok || e.ok(z, rng));
         if (pool.length) rng.pick(pool).f(z);
       }
