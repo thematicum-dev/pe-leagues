@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, fundBridge, tvpiOf } from "../engine";
+import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
+  fundBridge, tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
@@ -118,6 +119,34 @@ describe("Value Bridge des Fonds", () => {
         const b = fundBridge(f as Any, state.market, PERIODS);
         const tvpi = tvpiOf(f as Any, state.market, PERIODS);
         expect(Math.sign(Math.round(b.gain * 1e6))).toBe(Math.sign(Math.round((tvpi - 1) * 1e6)));
+      }
+    }
+  });
+
+  /* Derselbe Gewinn steckt im Barwert der Zahlungsreihe bei Zins null. Ein
+     Fonds über 1,00× hat damit zwingend einen positiven IRR. Vorher warf eine
+     kleine Schlusszahlung — die Management Fee des letzten Halbjahres — den
+     IRR auf den Boden, während TVPI und Brücke einen Gewinn auswiesen. */
+  it("trägt denselben Gewinn im Barwert der Zahlungsreihe", () => {
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const b = fundBridge(f as Any, state.market, PERIODS);
+        const cf = cashflowsOf(f as Any, state.market, PERIODS);
+        expect(cf.reduce((s2: number, p: Any) => s2 + p.v, 0)).toBeCloseTo(b.gain, 6);
+      }
+    }
+  });
+
+  it("weist keinen Fonds über 1,00× mit negativem IRR aus", () => {
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const tvpi = tvpiOf(f as Any, state.market, PERIODS);
+        const irr = irrOf(f as Any, state.market, PERIODS);
+        expect(Math.sign(irr), `${seed} ${f.name}: TVPI ${tvpi.toFixed(2)}`)
+          .toBe(Math.sign(Math.round((tvpi - 1) * 1e9)));
+        expect(irr, `${seed} ${f.name}`).toBeGreaterThan(IRR_FLOOR);
       }
     }
   });

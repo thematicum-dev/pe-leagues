@@ -1125,32 +1125,69 @@ export function dpiOf(f, market, quarter) {
 /* ---------- IRR ----------
    Zahlungsreihe aus Sicht der Investoren: Abrufe negativ zum Zeitpunkt des
    Abrufs, Ausschüttungen positiv, der verbleibende NAV plus nicht reinvestierte
-   Liquidität als Schlusszahlung zum Stichtag. Nullstelle über Bisektion, weil
-   die Reihe mehrere Vorzeichenwechsel haben kann und Newton dort abhaut.     */
+   Liquidität als Schlusszahlung zum Stichtag. Je Halbjahr saldiert, wie es auch
+   ein Reporting täte: Ein Kapitalabruf und eine Ausschüttung im selben Halbjahr
+   sind für den Investor eine Zahlung, nicht zwei.                             */
 export function cashflowsOf(f, market, quarter) {
-  const cf = [];
-  (f.calls || []).forEach((c) => cf.push({ t: c.q / 2, v: -c.amt }));
-  (f.dists || []).forEach((d) => cf.push({ t: d.q / 2, v: d.amt * (1 - carryDrag(f, market, quarter)) }));
-  const terminal = (navOf(f, market) + (f.recyc || 0)) * (1 - carryDrag(f, market, quarter));
-  if (terminal > 0) cf.push({ t: quarter / 2, v: terminal });
-  return cf;
+  const drag = 1 - carryDrag(f, market, quarter);
+  const byQ = new Map<number, number>();
+  const add = (q: number, v: number) => byQ.set(q, (byQ.get(q) || 0) + v);
+  (f.calls || []).forEach((c) => add(c.q, -c.amt));
+  (f.dists || []).forEach((d) => add(d.q, d.amt * drag));
+  const terminal = (navOf(f, market) + (f.recyc || 0)) * drag;
+  if (terminal > 0) add(quarter, terminal);
+  return [...byQ.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([q, v]) => ({ t: q / 2, v }));
 }
 export function carryDrag(f, market, quarter) {
   const tv = totalValueOf(f, market);
   return tv > 0 ? Math.min(0.5, carryOf(f, market, quarter) / tv) : 0;
 }
+
+export const IRR_FLOOR = -0.95, IRR_CAP = 3.0;
+const IRR_SCAN_STEPS = 240;
+
+/* Die Nullstelle wird von oben gesucht, nicht von unten. Der Grund ist der
+   Zahlungsverlauf eines Fonds: Abrufe und Ausschüttungen wechseln sich über
+   zehn Jahre ab, die Reihe hat also mehrere Vorzeichenwechsel und damit
+   mehrere mathematische Nullstellen. Nur eine davon ist die Rendite, die ein
+   Investor meint — die obere.
+
+   Vorher stand hier eine Bisektion mit der Abkürzung "npv(−0,95) < 0, also
+   liegt der Zins am Boden". Diese Abkürzung setzt voraus, dass der Barwert mit
+   steigendem Zins fällt. Nahe −100 % gilt das Gegenteil: Der Diskontfaktor
+   1/(1+r)^t explodiert, und der Barwert wird allein vom Vorzeichen der
+   SPÄTESTEN Zahlung bestimmt. Eine Management Fee im letzten Halbjahr, auf die
+   keine Ausschüttung mehr folgt, genügte deshalb, um einen Fonds mit 1,44×
+   Rückfluss auf −95 % IRR zu setzen — in Testpartien traf das jeden siebten
+   Fonds, und über scoreOf() kostete es je einen halben Wertungspunkt.
+
+   Es gilt npv(0) = drawn · (TVPI − 1). Ein Fonds über 1,00× hat damit zwingend
+   einen positiven IRR, einer darunter einen negativen; der Test hält das fest. */
 export function irrOf(f, market, quarter) {
   const cf = cashflowsOf(f, market, quarter);
   if (cf.length < 2 || quarter < 2) return 0;
   const npv = (r) => cf.reduce((s, p) => s + p.v / Math.pow(1 + r, p.t), 0);
-  let lo = -0.95, hi = 3.0;
-  if (npv(lo) < 0) return -0.95;
-  if (npv(hi) > 0) return 3.0;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    if (npv(mid) > 0) lo = mid; else hi = mid;
+  if (npv(IRR_CAP) > 0) return IRR_CAP;
+
+  const step = (IRR_CAP - IRR_FLOOR) / IRR_SCAN_STEPS;
+  let hi = IRR_CAP;
+  for (let i = 1; i <= IRR_SCAN_STEPS; i++) {
+    const r = IRR_CAP - i * step;
+    if (npv(r) > 0) {
+      // Vorzeichenwechsel gefunden: [r, hi] klammert die oberste Nullstelle
+      let lo = r;
+      for (let k = 0; k < 60; k++) {
+        const mid = (lo + hi) / 2;
+        if (npv(mid) > 0) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+    hi = r;
   }
-  return (lo + hi) / 2;
+  // Nirgends im Suchbereich positiv: Totalverlust, der Boden ist die Aussage
+  return IRR_FLOOR;
 }
 
 /* ---------- Wertung ----------
