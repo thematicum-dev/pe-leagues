@@ -13,9 +13,10 @@ import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
-  CLS_LABEL, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, EVENTS, EVENT_P, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
-  IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
+  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST,
+  DEFAULT_HUMAN_ATTRS, END_PRESSURE_FROM, ENTRY_FEE, EVENTS, EVENT_P, FAIL_SUNK, INITS,
+  INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE, IPO_PLACE, IRR_BENCH, LEV_FREE,
+  LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonRisk, anyInit, applyProceeds,
@@ -37,7 +38,7 @@ import {
 
 export default function PeLeagues() {
   const [phase, setPhase] = useState("brief");
-  const [attrs, setAttrs] = useState({ sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 });
+  const [attrs, setAttrs] = useState({ ...DEFAULT_HUMAN_ATTRS });
   const [tab, setTab] = useState("deals");
   const [quarter, setQuarter] = useState(0);
   const [market, setMarket] = useState(() => { const m = {}; SECNAMES.forEach((s) => (m[s] = SECTORS[s].m)); return m; });
@@ -291,9 +292,12 @@ export default function PeLeagues() {
           if (fitOf(id, c) * Math.pow(0.82, initRuns(c, id)) < 0.30 && id !== "ma") return;
           const B = buildInit(rng, c, dim, id, mk, q);
           if (!B || B.blocked) return;
-          const head = (c.covLimit ?? 6.5) - c.netDebt / Math.max(0.5, ebitdaOf(c));
-          if (B.debt > 0 && head < 0.6) return;
-          c.netDebt += B.debt; bookOff(c, "restr", B.debt);
+          const head = (c.covLimit ?? COV_DEFAULT) - c.netDebt / Math.max(0.5, ebitdaOf(c));
+          /* Der Zukaufspreis steckt seit dem 30.08.2026 in B.debt. Die
+             Finanzierbarkeit prüft für ihn aber addonCheck() pro forma, nicht
+             dieser grobe Puffer — sonst blockierte er Zukäufe doppelt. */
+          if (B.debt > 0 && !B.spec.ma && head < ADDON_HEADROOM) return;
+          c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
           c[slot] = B.init;
         });
       });
@@ -343,7 +347,7 @@ export default function PeLeagues() {
         }
         if (f.me && (c.breach || 0) === 1) news.push({
           q, e: "⚠️", tone: "neg",
-          t: `<b>${c.name}</b> reißt den Covenant von ${x(c.covLimit ?? 6.5)} bei ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}. Noch ein Halbjahr bis zum Enforcement.`,
+          t: `<b>${c.name}</b> reißt den Covenant von ${x(c.covLimit ?? COV_DEFAULT)} bei ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}. Noch ein Halbjahr bis zum Enforcement.`,
         });
         return true;
       });
@@ -397,7 +401,7 @@ export default function PeLeagues() {
         c.revenue *= 1 - 0.12 * stress;
         c.margin -= 1.5 * stress;
         c.drift = (c.drift || 0) - 1.0;
-        c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? 6.5) ? (c.breach || 0) + 1 : 0;
+        c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
         if (f.me) hit += 1;
       }));
       news.push({
@@ -592,7 +596,7 @@ export default function PeLeagues() {
 
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...chargeOff(h, "restr", debt), [B.slot]: B.init,
+        ...chargeOff(h, B.spec.ma ? "addon" : "restr", debt), [B.slot]: B.init,
       }),
     }));
     setFeed((p2) => [{ q: quarter, e: spec.ma ? "🏢" : "🛠️", tone: "neu",
@@ -1393,7 +1397,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
 const PRAC_PERIODS = 10;                                  // fünf Jahre Halteperiode
 const PRAC_SLOTS = 2;                                     // Performance und Growth parallel
 const PRAC_EXIT_FROM = 6;                                 // ab drei Jahren liegt ein Angebot vor
-const PRAC_ATTRS = { sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 };
+const PRAC_ATTRS = DEFAULT_HUMAN_ATTRS;
 
 function practiceMarket() {
   const m = {};
@@ -1489,7 +1493,7 @@ const COACH = [
     t: "<b>Operating Leverage</b>: der Umsatz wächst schneller als die Kostenbasis, die Zielmarge steigt mit. Wachstum und Marge sind keine Gegner — wachsende Unternehmen weiten ihre Marge häufiger aus als schrumpfende." },
   { id: "founder", when: (o) => o.news.some((n) => n.e === "👋"),
     t: "Der Gründer-CEO ist raus. Die Flagge <b>Nachfolgesituation</b> im Deal war genau dieses Risiko — sie drückt den Einstiegspreis, weil sie dich zu einer Besetzung zwingt, deren Ausgang du beim Kauf nicht kennst." },
-  { id: "lev", when: (o) => o.c.netDebt / Math.max(0.5, ebitdaOf(o.c)) > (o.c.covLimit ?? 6.5) - 0.5,
+  { id: "lev", when: (o) => o.c.netDebt / Math.max(0.5, ebitdaOf(o.c)) > (o.c.covLimit ?? COV_DEFAULT) - 0.5,
     t: "Der Leverage nähert sich dem <b>Covenant</b>. Zwei Perioden darüber und die Kreditgeber vollstrecken — das Eigenkapital wird ausgebucht, unabhängig davon, wie gut die operative Story ist. Entschuldung ist hier kein Nebeneffekt, sondern Risikomanagement." },
   { id: "ceil", when: (o) => o.c.plat > 3 || o.c.acc > 3,
     t: "Über Reifegrad 3 greift die <b>Sättigung</b>: jede weitere Maßnahme bringt weniger, der Verfall wird gleichzeitig steiler. Ab hier lohnt oft die andere Dimension mehr als die nächste Stufe auf derselben." },
@@ -1729,7 +1733,7 @@ function PracticeMode({ dark, setDark, back }) {
       news.push({ q: nq, e: "☠️", tone: "neg", t: `Covenant Breach bei <b>${n.name}</b>: Enforcement durch die Kreditgeber, das Eigenkapital wird ausgebucht.` });
       setOver({ net: 0, moic: 0, bridge: null });
     } else if ((n.breach || 0) === 1) {
-      news.push({ q: nq, e: "⚠️", tone: "neg", t: `<b>${n.name}</b> reißt den Covenant von ${x(n.covLimit ?? 6.5)} bei ${x(n.netDebt / Math.max(0.5, ebitdaOf(n)))}. Noch ein Halbjahr bis zum Enforcement.` });
+      news.push({ q: nq, e: "⚠️", tone: "neg", t: `<b>${n.name}</b> reißt den Covenant von ${x(n.covLimit ?? COV_DEFAULT)} bei ${x(n.netDebt / Math.max(0.5, ebitdaOf(n)))}. Noch ein Halbjahr bis zum Enforcement.` });
     }
     if (n.netDebt < -0.5) {
       const sweep = -n.netDebt;

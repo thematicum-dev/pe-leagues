@@ -8,7 +8,7 @@ import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
-  CLS_LABEL, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
+  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
   ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
@@ -846,10 +846,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           </div>
           <div>
             <div className="eyebrow">Leverage<Info k="cov" /></div>
-            <div className="mono kv" style={{ color: lev > (c.covLimit ?? 6.5) ? "var(--ox)" : "var(--ink)" }}>
+            <div className="mono kv" style={{ color: lev > (c.covLimit ?? COV_DEFAULT) ? "var(--ox)" : "var(--ink)" }}>
               {x(lev)}
               <span style={{ display: "block", fontSize: 10, color: "var(--ink2)", fontWeight: 400, marginTop: 2 }}>
-                Cov {x(c.covLimit ?? 6.5)} · {pct(cf ? cf.rate : c.rate)}
+                Cov {x(c.covLimit ?? COV_DEFAULT)} · {pct(cf ? cf.rate : c.rate)}
               </span>
             </div>
           </div>
@@ -2156,7 +2156,7 @@ export function InitPicker({ c, dim, market, start, close }) {
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
-                        {" "}(Covenant {x(c.covLimit ?? 6.5)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
+                        {" "}(Covenant {x(c.covLimit ?? COV_DEFAULT)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
                   <tr><td className="lab">Integrationswahrscheinlichkeit</td>
                     <td style={{ color: p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>

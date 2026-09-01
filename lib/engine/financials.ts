@@ -33,7 +33,7 @@
    zurückgerechnet. Die Darstellung ist cash-free/debt-free, also ohne die
    Finanzierung des Verkäufers — die ist nicht Teil der Transaktion.          */
 import {
-  BASE_RATE, LEV_FREE, LEV_STEP, TAX_RATE, OFF_KEYS, OFF_EBITDA_KEYS,
+  BASE_RATE, COV_DEFAULT, LEV_FREE, LEV_STEP, TAX_RATE, OFF_KEYS, OFF_EBITDA_KEYS,
   EVENTS, EVENT_P, GROWTH_NOISE, MARGIN_NOISE, INITS, ONEOFF_P,
 } from "./engine.ts";
 import { createRng, type Rng } from "./rng.ts";
@@ -113,7 +113,7 @@ function shockTable() {
   const out: { rev: number; mg: number }[] = [];
   (EVENTS as Any[]).forEach((e) => {
     const probe: Any = {
-      revenue: 100, margin: 20, quality: 60, netDebt: 30, rate: BASE_RATE, covLimit: 6.5,
+      revenue: 100, margin: 20, quality: 60, netDebt: 30, rate: BASE_RATE, covLimit: COV_DEFAULT,
       sector: "Industrials", drift: 0, marginDrift: 0, capexPct: 4, benchMargin: 20,
       ceo: { skill: 3 }, cfo: { skill: 3 }, r3: { skill: 3 }, plat: 2, acc: 2,
       initP: null, initA: null, holdQ: 4, hist: [{ rev: 100, eb: 20 }],
