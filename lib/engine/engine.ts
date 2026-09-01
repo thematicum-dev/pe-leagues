@@ -1289,14 +1289,20 @@ export function healthOf(c, market) {
 
 /* Value Bridge: eingesetztes Eigenkapital plus vier Effekte ergeben exakt den
    Nettoerlös. Wird vom Exit im Hauptspiel und vom Übungsmodus identisch genutzt. */
-export function makeBridge(c, gross, net) {
-  const st = c.st ?? 1;
+export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number; recap?: number } = {}) {
+  /* Ohne Angaben beschreibt die Brücke den vollständigen Verkauf des noch
+     gehaltenen Anteils. Ein Teilexit (Continuation Vehicle, Börsengang) gibt
+     den verkauften Anteil und die dabei freigesetzte Kostenbasis mit — sonst
+     ließe sich eine Zerlegung nur für den Schlussverkauf schreiben, und alles,
+     was vorher realisiert wurde, fiele aus der Brücke heraus.               */
+  const st = opts.stake ?? (c.st ?? 1);
   /* Rekapitalisierungen während der Halteperiode gehören in die Brücke — sonst
      zeigt sie beim Exit nur den letzten Erlös und unterschlägt jeden Euro, der
-     vorher schon an den Fonds zurückgeflossen ist. Erlöse aus Teilexits stehen
-     bewusst nicht hier: die sind im Track Record bereits eigenständig gebucht. */
-  const recap = c.recapOut || 0;
-  const base = c.costLeft ?? c.entryEquity;
+     vorher schon an den Fonds zurückgeflossen ist. Sie hängen an der Beteiligung
+     als Ganzes und werden deshalb nur einmal gebucht, beim Schlussverkauf; ein
+     Teilexit gibt recap: 0 mit.                                             */
+  const recap = opts.recap ?? (c.recapOut || 0);
+  const base = opts.cost ?? (c.costLeft ?? c.entryEquity);
   const exitMult = ebitdaOf(c) > 0 ? (gross / st + c.netDebt) / ebitdaOf(c) : c.entryMult;
   const bEbitda = (ebitdaOf(c) - c.entryEbitda) * c.entryMult * st;
   const bMult = ebitdaOf(c) * (exitMult - c.entryMult) * st;
@@ -1307,6 +1313,47 @@ export function makeBridge(c, gross, net) {
     exit: net + recap,
   };
 }
+/* ---------- Value Bridge des Fonds ----------
+   Die Zerlegungen aller realisierten Deals, zusammengezogen und an die Größe
+   angeschlossen, aus der auch TVPI und Wertung gerechnet werden:
+
+       gain = Gesamtwert − Carry − abgerufenes Kapital
+            = drawn · (TVPI − 1)
+
+   Damit hat die Aufstellung zwingend dasselbe Vorzeichen wie TVPI − 1. Bis zum
+   01.09.2026 summierte sie nur die Deals, deren Exitweg zufällig eine Zerlegung
+   mitgeschrieben hatte, und kannte die Kosten oberhalb der Beteiligungen gar
+   nicht — eine Partie mit einem guten Verkauf und drei Ausfällen stand dort mit
+   einem Gewinn, während TVPI und IRR im Minus waren.
+
+   `rest` ist bewusst ein Restposten und keine eigene Rechnung: Management Fee,
+   Due Diligence, Transaktionskosten, Carry — und die Deals aus älteren Partien,
+   die noch keine Zerlegung mitgeschrieben haben. Was die Summe nicht erklärt,
+   steht damit sichtbar dort, statt still zu verschwinden.                    */
+export function fundBridge(f, market, quarter) {
+  const realized = f.realized || [];
+  const sum = realized.filter((r) => r && r.bridge).reduce((a, r) => ({
+    ebitda: a.ebitda + (r.bridge.ebitda || 0),
+    mult: a.mult + (r.bridge.mult || 0),
+    delev: a.delev + (r.bridge.delev || 0),
+    dist: a.dist + (r.bridge.dist || 0),
+  }), { ebitda: 0, mult: 0, delev: 0, dist: 0 });
+
+  const holdings = f.holdings || [];
+  const openCost = holdings.reduce((s2, c) => s2 + (c.costLeft ?? c.entryEquity ?? 0), 0);
+  // Was im Portfolio steht, ist noch nicht realisiert — beim Laufzeitende null,
+  // weil dann alles verwertet ist (liquidateAll in runQuarter).
+  const unreal = navOf(f, market) - openCost;
+
+  const drawn = drawnOf(f);
+  const gain = totalValueOf(f, market) - carryOf(f, market, quarter) - drawn;
+  return {
+    ...sum, unreal, gain, drawn,
+    rest: gain - (sum.ebitda + sum.mult + sum.delev + sum.dist + unreal),
+    realizedCount: realized.length, openCount: holdings.length,
+  };
+}
+
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
 export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
 

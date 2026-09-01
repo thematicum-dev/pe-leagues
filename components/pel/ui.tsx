@@ -19,6 +19,7 @@ import {
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf,
+  fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
@@ -1568,48 +1569,56 @@ export function HalfYearDelta({ c }) {
    Fondslaufzeit. Deals aus Partien, die vor dieser Änderung gestartet sind,
    haben keine Bridge gespeichert und werden übersprungen — die Zahl der
    berücksichtigten Deals steht deshalb dabei. */
-export function SeasonDrivers({ realized, title = "Woher die Rendite kam" }) {
-  const withBridge = (realized || []).filter((r) => r && r.bridge);
-  if (!withBridge.length) return null;
-  const sum = withBridge.reduce((a, r) => ({
-    entry: a.entry + (r.bridge.entry || 0),
-    ebitda: a.ebitda + (r.bridge.ebitda || 0),
-    mult: a.mult + (r.bridge.mult || 0),
-    delev: a.delev + (r.bridge.delev || 0),
-    dist: a.dist + (r.bridge.dist || 0),
-    cost: a.cost + (r.bridge.cost || 0),
-    exit: a.exit + (r.bridge.exit || 0),
-  }), { entry: 0, ebitda: 0, mult: 0, delev: 0, dist: 0, cost: 0, exit: 0 });
-  const gain = sum.exit - sum.entry;
+/* Value Bridge des Fonds. Schließt bewusst auf dieselbe Größe, aus der auch
+   TVPI und Wertung gerechnet werden: Gesamtwert abzüglich Carry abzüglich
+   abgerufenem Kapital. Damit ist das Vorzeichen der Überschrift dasselbe wie
+   das von TVPI − 1 — vorher summierte die Aufstellung nur die Deals, deren
+   Exitweg zufällig eine Zerlegung mitgeschrieben hatte (Schlussverkauf und
+   Tail-End), und ließ Covenant Breaches, Börsengänge und Teilexits ebenso
+   heraus wie Management Fee und Due-Diligence-Kosten. Eine Partie mit einem
+   guten Exit und drei Ausfällen stand dann mit einem Gewinn da, während TVPI
+   und IRR im Minus waren.
+
+   Was keine eigene Zeile hat, landet in "Fondskosten & Sonstiges": die
+   Gebühren, die außerhalb der Beteiligungen anfallen, der Carry und die
+   Zerlegung der Deals, die aus einer Partie von vor dem 01.09.2026 stammen
+   und noch keine mitgeschrieben haben.                                     */
+export function SeasonDrivers({ fund, market, quarter, title = "Woher die Rendite kam" }) {
+  if (!fund || !market || !(fund.drawn > 0)) return null;
+  const b = fundBridge(fund, market, quarter);
 
   return (
     <div className="card">
       <h3 className="disp">
         {title}
         <Info t="Value Bridge des Fonds">
-          Der Weg vom eingesetzten Eigenkapital zum Rückfluss, aufgeteilt nach Ursache.
+          Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, aufgeteilt nach Ursache.
           <b> EBITDA</b> ist das, was die Unternehmen operativ mehr verdienen als beim Einstieg — deine
           Portfolioarbeit. <b>Multiple</b> ist Bewertungsveränderung am Markt: gekauft zu 8×, verkauft zu 10×
           bringt Geld, ohne dass sich im Unternehmen etwas geändert hätte. <b>Entschuldung</b> ist getilgte
-          Nettoverschuldung. Ein Fonds, dessen Rendite fast nur aus dem Multiple kommt, hatte Glück mit dem
-          Markt; einer, der aus EBITDA kommt, hat gearbeitet.
+          Nettoverschuldung. <b>Fondskosten &amp; Sonstiges</b> sind Management Fee, Due Diligence,
+          Transaktionskosten und Carry — alles, was zwischen den Beteiligungen und den Investoren liegt.
+          Die Summe ist derselbe Gewinn, aus dem TVPI und Wertung gerechnet werden: Ist sie negativ, steht
+          auch der TVPI unter 1,00×. Ein Fonds, dessen Rendite fast nur aus dem Multiple kommt, hatte Glück
+          mit dem Markt; einer, der aus EBITDA kommt, hat gearbeitet.
         </Info>
       </h3>
       <div className="pad" style={{ paddingTop: 6 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-          <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: gain >= 0 ? "var(--teal)" : "var(--ox)" }}>
-            {gain >= 0 ? "+" : "−"}{eur(Math.abs(gain))}
+          <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: b.gain >= 0 ? "var(--teal)" : "var(--ox)" }}>
+            {b.gain >= 0 ? "+" : "−"}{eur(Math.abs(b.gain))}
           </span>
           <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-            über {eur(sum.entry)} eingesetztes Eigenkapital · {withBridge.length} realisierte Beteiligungen
+            über {eur(b.drawn)} abgerufenes Kapital · {b.realizedCount} realisierte Beteiligungen
           </span>
         </div>
         <DriverBars rows={[
-          ["EBITDA", sum.ebitda, null],
-          ["Multiple", sum.mult, null],
-          ["Entschuldung", sum.delev, null],
-          ...(Math.abs(sum.dist) > 0.05 ? [["Rekapitalisierung", sum.dist, null]] : []),
-          ...(Math.abs(sum.cost) > 0.05 ? [["Kosten & Sonstiges", sum.cost, null]] : []),
+          ["EBITDA", b.ebitda, null],
+          ["Multiple", b.mult, null],
+          ["Entschuldung", b.delev, null],
+          ...(Math.abs(b.dist) > 0.05 ? [["Rekapitalisierung", b.dist, null]] : []),
+          ...(b.openCount ? [["Nicht realisiert", b.unreal, null]] : []),
+          ["Fondskosten & Sonstiges", b.rest, null],
         ]} />
       </div>
     </div>

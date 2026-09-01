@@ -87,21 +87,25 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  /* Endstand: die realisierten Deals des eigenen Fonds mit ihren Value
-     Bridges, damit der Abschlussbildschirm zeigen kann, woher die Rendite kam
-     (EBITDA, Multiple, Entschuldung). */
-  let myRealized: { name: string; moic: number; bridge?: Record<string, number> }[] = [];
+  /* Endstand: der eigene Fonds im Schlusszustand. Der Abschlussbildschirm
+     rechnet daraus die Value Bridge — sie braucht nicht nur die realisierten
+     Deals, sondern auch abgerufenes Kapital, Ausschüttungen und Markt, weil
+     sie auf dieselbe Größe schließt wie TVPI und Wertung. */
+  let myFund: RuntimeState["funds"][number] | null = null;
+  let finalMarket: RuntimeState["market"] | null = null;
+  let finalHalfYear = 0;
   if (season.status === "finished" && humanSlot != null) {
     const { data: finalRow } = await supabase
       .from("season_state")
-      .select("state")
+      .select("state, half_year")
       .eq("season_id", id)
       .order("half_year", { ascending: false })
       .limit(1)
       .maybeSingle();
     const fin = finalRow?.state as RuntimeState | undefined;
-    const mine = fin?.funds?.find((f) => f.slot === humanSlot);
-    myRealized = (mine?.realized ?? []) as typeof myRealized;
+    myFund = fin?.funds?.find((f) => f.slot === humanSlot) ?? null;
+    finalMarket = fin?.market ?? null;
+    finalHalfYear = finalRow?.half_year ?? 0;
   }
 
   return (
@@ -200,7 +204,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
                   ))}
                 </div>
               </div>
-              <SeasonDrivers realized={myRealized} title="Woher deine Rendite kam" />
+              <SeasonDrivers fund={myFund} market={finalMarket} quarter={finalHalfYear} title="Woher deine Rendite kam" />
               <div style={{ margin: "18px 16px 40px" }}>
                 <Link href="/dashboard" className="btn-primary" style={{ display: "block", textAlign: "center" }}>
                   Zum Dashboard

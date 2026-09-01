@@ -887,7 +887,7 @@ export default function MultiplayerGame({
               <h3 className="disp">Sektoren nach NAV</h3>
               <SectorSplit holdings={me.holdings} market={state.market} cash={me.cash} />
             </div>
-            <SeasonDrivers realized={me.realized} />
+            <SeasonDrivers fund={me} market={state.market} quarter={quarter} />
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
                 Noch keine Beteiligungen. Im Dealflow findest du strukturierte Prozesse und proprietäre Kontakte.
