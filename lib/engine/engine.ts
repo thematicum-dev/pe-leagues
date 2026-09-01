@@ -1350,6 +1350,41 @@ export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number;
     exit: net + recap,
   };
 }
+/* ---------- Value Bridge zwischen zwei Periodenständen ----------
+   Dieselbe Zerlegung wie makeBridge() beim Exit, nur zwischen zwei Einträgen
+   der hist-Reihe statt zwischen Einstieg und Verkauf. Damit lässt sich sie für
+   jeden Zeitraum einer Halteperiode bilden — das letzte Halbjahr ebenso wie
+   die Zeit seit Einstieg:
+
+     EBITDA       (EBITDA_neu − EBITDA_alt) × Multiple_alt × Anteil
+     Multiple     EBITDA_neu × (Multiple_neu − Multiple_alt) × Anteil
+     Entschuldung (Schulden_alt − Schulden_neu) × Anteil
+     Ausschüttung was im Zeitraum bereits entnommen wurde
+     Sonstiges    Restposten der Zerlegung (Anteilsänderungen, Zukäufe)
+
+   Die fünf Summanden ergeben exakt `total`, die Veränderung des Gesamtwerts
+   (hist.eq = NAV plus Entnahmen). Beteiligungen aus älteren Partien haben noch
+   kein mult/st im Periodenstand — dort wird das Multiple aus dem gespeicherten
+   Eigenkapitalwert zurückgerechnet, damit auch laufende Partien die Aufteilung
+   sehen.                                                                     */
+export function bridgeStep(prev, now) {
+  if (!prev || !now) return null;
+  const stP = prev.st ?? 1, stN = now.st ?? 1;
+  const outP = prev.out ?? 0, outN = now.out ?? 0;
+  // Nur der NAV-Teil trägt die Zerlegung; bereits ausgeschüttete
+  // Rekapitalisierungen stehen als eigene Position daneben.
+  const navP = prev.eq - outP, navN = now.eq - outN;
+  const mP = prev.mult ?? (prev.eb > 0 ? (navP / (stP || 1) + prev.nd) / prev.eb : null);
+  const mN = now.mult ?? (now.eb > 0 ? (navN / (stN || 1) + now.nd) / now.eb : null);
+  if (mP == null || mN == null) return null;
+  const ebitda = (now.eb - prev.eb) * mP * stN;
+  const mult = now.eb * (mN - mP) * stN;
+  const delev = (prev.nd - now.nd) * stN;
+  const dist = outN - outP;
+  const nav = navN - navP;
+  return { ebitda, mult, delev, dist, rest: nav - ebitda - mult - delev, nav, total: nav + dist };
+}
+
 /* ---------- Value Bridge des Fonds ----------
    Die Zerlegungen aller realisierten Deals, zusammengezogen und an die Größe
    angeschlossen, aus der auch TVPI und Wertung gerechnet werden:

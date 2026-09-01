@@ -472,7 +472,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       entryQ: q,
       // mult/out je Periode mitschreiben: nur damit lässt sich die
       // Wertveränderung eines Halbjahres später in ihre Treiber zerlegen
-      // (EBITDA, Multiple, Entschuldung) -- siehe HalfYearDelta in pel/ui.
+      // (EBITDA, Multiple, Entschuldung) -- siehe bridgeStep in lib/engine/engine.ts.
       hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
     };
     c.baseLoad = seatLoad(c);

@@ -18,7 +18,7 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
@@ -183,6 +183,15 @@ export const CSS = `
 .pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
   font-family:'Inter',system-ui,sans-serif;white-space:normal;}
 .pel table.cmp tr:last-child td{border-bottom:0;}
+/* Abschnittszeile und Summenzeile wie in der Berichtsansicht (table.fin):
+   Die Überschrift steht ohne Unterstrich über ihrem Abschnitt, die Summe wird
+   durch eine Linie darüber abgesetzt. Beide Tabellen zeigen Zahlen zur selben
+   Beteiligung und sollen sich deshalb gleich lesen. */
+.pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
+  padding-top:17px;padding-bottom:5px;border-bottom:0;}
+.pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
+  border-top:1px solid var(--rule);}
 
 /* ---------- Berichtsansicht: GuV, Bilanz, Kapitalflussrechnung ----------
    Ein Abschluss ist breiter als ein Telefon. Statt die Spalten zu stauchen,
@@ -869,7 +878,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)}</span>}</td></tr>
       </tbody></table>
       <Stages c={c} compact={quarter} />
-      <HalfYearDelta c={c} />
       <PerformanceCompare c={c} />
       <Track c={c} />
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
@@ -981,9 +989,20 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
 }
 
 /* Wie hat sich die Beteiligung entwickelt — im letzten Halbjahr und über die
-   ganze Halteperiode? Beides nebeneinander, weil erst der Vergleich die Frage
-   beantwortet, um die es im Portfolio-Review geht: Läuft das Asset gerade
-   besser oder schlechter als im Schnitt der bisherigen Haltezeit?
+   ganze Halteperiode? Eine Tabelle, zwei Spalten, zwei Abschnitte:
+
+   - oben die Finanzkennzahlen als Veränderung (Prozent, Prozentpunkte, Turns);
+   - unten dieselbe Entwicklung in Euro, aufgeteilt nach Ursache, mit dem
+     Gesamtwert als Summenzeile.
+
+   Vorher stand das nebeneinander: erst die Treiber des letzten Halbjahres als
+   Balken, darunter eine Tabelle mit den Kennzahlen beider Zeiträume. Die
+   beiden Blöcke überschnitten sich — die Wertveränderung stand zweimal da, in
+   der Balkenüberschrift ohne und in der Zeile "Gesamtwert" mit den bereits
+   entnommenen Beträgen — und ließen zugleich eine Lücke: Die Treiber gab es
+   nur für das letzte Halbjahr, nicht seit Einstieg. Jetzt ist beides eine
+   Aufteilung derselben Größe über dieselben zwei Zeiträume, und die Zeilen des
+   unteren Abschnitts addieren sich exakt auf den Gesamtwert.
 
    Alle Zahlen kommen aus der hist-Reihe, also aus denselben Periodenständen,
    die auch der Verlaufsgraph und die Berichtsansicht benutzen.             */
@@ -993,7 +1012,6 @@ function deltaSet(a, b) {
     eb: a.eb > 0 ? (b.eb / a.eb - 1) * 100 : null,
     mg: b.mg - a.mg,
     lev: b.nd / Math.max(0.5, b.eb) - a.nd / Math.max(0.5, a.eb),
-    eq: (b.eq ?? 0) - (a.eq ?? 0),
   };
 }
 
@@ -1006,53 +1024,75 @@ export function PerformanceCompare({ c }) {
       </div>
     );
   }
-  const last = deltaSet(h[h.length - 2], h[h.length - 1]);
-  const since = deltaSet(h[0], h[h.length - 1]);
+  const now = h[h.length - 1];
+  const kpi = [deltaSet(h[h.length - 2], now), deltaSet(h[0], now)];
+  const val = [bridgeStep(h[h.length - 2], now), bridgeStep(h[0], now)];
+
   const num = (v, dg, unit) => v == null ? "—"
     : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
+  const money = (v) => v == null ? "—" : (v >= 0 ? "+" : "−") + eur(Math.abs(v));
   /* Beim Leverage ist weniger besser, bei allem anderen mehr. */
-  const rows = [
-    { l: "Umsatz", k: "rev", dg: 1, unit: " %", good: (v) => v >= 0 },
-    { l: "Adj. EBITDA", k: "eb", dg: 1, unit: " %", good: (v) => v >= 0 },
-    { l: "Adj. EBITDA-Marge", k: "mg", dg: 1, unit: " pp", good: (v) => v >= 0 },
-    { l: "Leverage", k: "lev", dg: 2, unit: "×", good: (v) => v <= 0 },
-    { l: "Gesamtwert", k: "eq", dg: 1, unit: " Mio. €", good: (v) => v >= 0 },
+  const up = (v) => v >= 0, down = (v) => v <= 0;
+  const kpiRows = [
+    { l: "Umsatz", k: "rev", dg: 1, unit: " %", good: up },
+    { l: "Adj. EBITDA", k: "eb", dg: 1, unit: " %", good: up },
+    { l: "Adj. EBITDA-Marge", k: "mg", dg: 1, unit: " pp", good: up },
+    { l: "Leverage", k: "lev", dg: 2, unit: "×", good: down },
   ];
-  const cell = (set, r) => {
-    const v = set[r.k];
-    return (
-      <td style={{ color: v == null ? "var(--ink2)" : r.good(v) ? "var(--teal)" : "var(--ox)" }}>
-        {num(v, r.dg, r.unit)}
-      </td>
-    );
-  };
+  // Ausschüttung und Sonstiges nur, wenn sie in einer der Spalten etwas erklären
+  const has = (k) => val.some((v) => v && Math.abs(v[k]) > 0.05);
+  const valRows = [
+    { l: "EBITDA", k: "ebitda" },
+    { l: "Multiple", k: "mult" },
+    { l: "Entschuldung", k: "delev" },
+    ...(has("dist") ? [{ l: "Ausschüttung", k: "dist" }] : []),
+    ...(has("rest") ? [{ l: "Sonstiges", k: "rest" }] : []),
+  ];
+  const tone = (v, good) => ({ color: v == null ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)" });
+
   return (
     <>
       <div className="pad" style={{ paddingTop: 12, paddingBottom: 4 }}>
         <div className="eyebrow">
-          Performance im Vergleich
+          Performance
           <Info t="Letztes Halbjahr gegen Halteperiode">
             Links die Veränderung der letzten Periode, rechts die seit dem Vollzug. Der Vergleich
             beantwortet die Frage des Portfolio-Reviews: Läuft die Beteiligung <b>gerade</b> besser
             oder schlechter als im Schnitt der bisherigen Haltezeit? Ein starker Gesamtwert seit
             Einstieg bei schwachem letztem Halbjahr heißt, dass die Wertsteigerung hinter dir liegt
             — ein guter Zeitpunkt, über den Exit nachzudenken.
+            <br /><br />
+            Der <b>Wertbeitrag</b> zerlegt dieselbe Entwicklung in Euro nach Ursache.
+            <b> EBITDA</b> ist operative Arbeit — mehr Umsatz oder bessere Marge, bewertet zum alten
+            Multiple. <b>Multiple</b> ist der Markt: dieselbe Substanz wird höher oder niedriger
+            bewertet, dafür kannst du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung, die
+            eins zu eins ins Eigenkapital wandert. Die Zeilen addieren sich auf den Gesamtwert.
           </Info>
         </div>
       </div>
       <table className="cmp"><tbody>
         <tr>
-          <th>Veränderung</th>
+          <th>Kennzahl</th>
           <th>Letztes HJ</th>
           <th>Seit Einstieg</th>
         </tr>
-        {rows.map((r) => (
+        {kpiRows.map((r) => (
           <tr key={r.k}>
             <td>{r.l}</td>
-            {cell(last, r)}
-            {cell(since, r)}
+            {kpi.map((set, i) => <td key={i} style={tone(set[r.k], r.good)}>{num(set[r.k], r.dg, r.unit)}</td>)}
           </tr>
         ))}
+        <tr className="seg"><td colSpan={3}>Wertbeitrag</td></tr>
+        {valRows.map((r) => (
+          <tr key={r.k}>
+            <td>{r.l}</td>
+            {val.map((set, i) => <td key={i} style={tone(set && set[r.k], up)}>{money(set && set[r.k])}</td>)}
+          </tr>
+        ))}
+        <tr className="sum">
+          <td>Gesamtwert</td>
+          {val.map((set, i) => <td key={i} style={tone(set && set.total, up)}>{money(set && set.total)}</td>)}
+        </tr>
       </tbody></table>
     </>
   );
@@ -1455,35 +1495,6 @@ export function Stages({ c, compact }) {
   );
 }
 
-/* Wertveränderung eines einzelnen Halbjahres, zerlegt in ihre drei Treiber —
-   dieselbe Zerlegung wie die Value Bridge beim Exit (makeBridge), nur zwischen
-   zwei aufeinanderfolgenden Periodenständen statt zwischen Einstieg und Exit:
-
-     EBITDA      (EBITDA_neu − EBITDA_alt) × Multiple_alt × Anteil
-     Multiple    EBITDA_neu × (Multiple_neu − Multiple_alt) × Anteil
-     Entschuldung (Schulden_alt − Schulden_neu) × Anteil
-
-   Die drei Summanden ergeben zusammen exakt die Veränderung des
-   Eigenkapitalwerts. Beteiligungen aus älteren Partien haben noch kein
-   mult/st im Periodenstand — dort wird das Multiple aus dem gespeicherten
-   Eigenkapitalwert zurückgerechnet, damit auch laufende Partien die Aufteilung
-   sehen. */
-export function bridgeStep(prev, now) {
-  if (!prev || !now) return null;
-  const stP = prev.st ?? 1, stN = now.st ?? 1;
-  const outP = prev.out ?? 0, outN = now.out ?? 0;
-  // Nur der NAV-Teil zählt für die Zerlegung; bereits ausgeschüttete
-  // Rekapitalisierungen stehen als eigene Position daneben.
-  const navP = prev.eq - outP, navN = now.eq - outN;
-  const mP = prev.mult ?? (prev.eb > 0 ? (navP / (stP || 1) + prev.nd) / prev.eb : null);
-  const mN = now.mult ?? (now.eb > 0 ? (navN / (stN || 1) + now.nd) / now.eb : null);
-  if (mP == null || mN == null) return null;
-  const ebitda = (now.eb - prev.eb) * mP * stN;
-  const mult = now.eb * (mN - mP) * stN;
-  const delev = (prev.nd - now.nd) * stN;
-  const total = navN - navP;
-  return { ebitda, mult, delev, dist: outN - outP, rest: total - ebitda - mult - delev, total };
-}
 
 /* Balkenzeile für die drei Treiber. Positiv nach rechts, negativ nach links,
    gemeinsame Skala — so ist auf einen Blick zu sehen, welcher Treiber das
@@ -1514,61 +1525,6 @@ export function DriverBars({ rows }) {
   );
 }
 
-/* Was das letzte Halbjahr an dieser Beteiligung bewegt hat. Steht im
-   Portfolio-Tab über dem Verlauf: der Verlauf zeigt die ganze Halteperiode,
-   dieser Block beantwortet "was ist gerade passiert". */
-export function HalfYearDelta({ c }) {
-  const h = c.hist || [];
-  if (h.length < 2) {
-    return (
-      <div className="pad" style={{ paddingTop: 4, paddingBottom: 12, fontSize: 12, color: "var(--ink2)" }}>
-        Die Halbjahresveränderung erscheint nach dem ersten vollen Halbjahr im Portfolio.
-      </div>
-    );
-  }
-  const prev = h[h.length - 2], now = h[h.length - 1];
-  const b = bridgeStep(prev, now);
-  if (!b) return null;
-  const dRev = prev.rev > 0 ? (now.rev / prev.rev - 1) * 100 : 0;
-  const dMg = now.mg - prev.mg;
-
-  return (
-    <div className="pad" style={{ paddingTop: 12, paddingBottom: 14 }}>
-      <div className="eyebrow" style={{ marginBottom: 4 }}>
-        Letztes Halbjahr
-        <Info t="Halbjahresveränderung">
-          Die Veränderung des Eigenkapitalwerts seit dem letzten Halbjahr, zerlegt in ihre drei Treiber.
-          <b> EBITDA</b> ist operative Arbeit — mehr Umsatz oder bessere Marge, bewertet zum alten Multiple.
-          <b> Multiple</b> ist der Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
-          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung, die eins zu eins ins Eigenkapital
-          wandert. Die drei Beträge ergeben zusammen die Gesamtveränderung.
-        </Info>
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-        <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: b.total >= 0 ? "var(--teal)" : "var(--ox)" }}>
-          {b.total >= 0 ? "+" : "−"}{eur(Math.abs(b.total))}
-        </span>
-        <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-          Eigenkapitalwert · Umsatz {dRev >= 0 ? "+" : "−"}{Math.abs(dRev).toFixed(1).replace(".", ",")} %
-          {" "}· Marge {dMg >= 0 ? "+" : "−"}{Math.abs(dMg).toFixed(1).replace(".", ",")} pp
-        </span>
-      </div>
-      <DriverBars rows={[
-        ["EBITDA", b.ebitda, null],
-        ["Multiple", b.mult, null],
-        ["Entschuldung", b.delev, null],
-        ...(Math.abs(b.dist) > 0.05 ? [["Ausschüttung", b.dist, null]] : []),
-      ]} />
-    </div>
-  );
-}
-
-/* Woher die Rendite des ganzen Fonds kam. Summiert die Value Bridges aller
-   realisierten Deals (bei Exit in realized[].bridge mitgeschrieben) und zeigt
-   dieselben drei Treiber wie die Halbjahresansicht, nur über die gesamte
-   Fondslaufzeit. Deals aus Partien, die vor dieser Änderung gestartet sind,
-   haben keine Bridge gespeichert und werden übersprungen — die Zahl der
-   berücksichtigten Deals steht deshalb dabei. */
 /* Value Bridge des Fonds. Schließt bewusst auf dieselbe Größe, aus der auch
    TVPI und Wertung gerechnet werden: Gesamtwert abzüglich Carry abzüglich
    abgerufenem Kapital. Damit ist das Vorzeichen der Überschrift dasselbe wie

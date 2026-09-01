@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
-  fundBridge, tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
+  fundBridge, bridgeStep, tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
@@ -67,12 +67,12 @@ function decideForHuman(
   return decisions;
 }
 
-function playSeason(seed: number) {
+function playSeason(seed: number, until: number = PERIODS) {
   const rng = createRng(seed);
   let state = baseState();
   const { deals, landmark } = bootstrapInitialDeals(rng, state.market, state.funds);
   state = { ...state, deals, landmark };
-  for (let hy = 1; hy <= PERIODS; hy++) {
+  for (let hy = 1; hy <= until; hy++) {
     const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
     state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
   }
@@ -149,6 +149,33 @@ describe("Value Bridge des Fonds", () => {
         expect(irr, `${seed} ${f.name}`).toBeGreaterThan(IRR_FLOOR);
       }
     }
+  });
+
+  /* Die Portfolioansicht zeigt dieselbe Zerlegung über zwei Zeiträume, letztes
+     Halbjahr und seit Einstieg. Sie ist nur dann trennscharf, wenn ihre Zeilen
+     sich genau auf die Veränderung des Gesamtwerts addieren — vorher stand die
+     Wertveränderung zweimal da, einmal ohne und einmal mit den bereits
+     entnommenen Beträgen. */
+  it("zerlegt jeden Zeitraum einer Halteperiode vollständig", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      // Mitten in der Laufzeit: am Ende ist alles verwertet, das Portfolio leer
+      const state = playSeason(seed, 14);
+      for (const f of state.funds) {
+        for (const c of (f.holdings || []) as Any[]) {
+          const h = c.hist || [];
+          if (h.length < 2) continue;
+          for (const from of [h[h.length - 2], h[0]]) {
+            const b = bridgeStep(from, h[h.length - 1])!;
+            expect(b.ebitda + b.mult + b.delev + b.dist + b.rest).toBeCloseTo(b.total, 6);
+            // Der Gesamtwert ist NAV plus alles, was bereits entnommen wurde
+            expect(b.total).toBeCloseTo(h[h.length - 1].eq - from.eq, 6);
+            checked++;
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it("hat am Laufzeitende nichts Unrealisiertes mehr", () => {
