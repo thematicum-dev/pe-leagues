@@ -78,8 +78,13 @@ export function rngStepBack(seed: number, steps = 1): number {
 /* Die Mitschrift selbst gehört nicht zum Vergleich: Sie ist genau das, was der
    gespeicherte Zustand noch nicht hat und die Wiederholung hinzufügt. nwcBal
    gehört dazu — im Altverhalten ist der Bestand eine reine Fortschreibung und
-   fließt in keine Formel zurück, ein alter Spielstand kennt ihn deshalb nicht. */
-const RECORDING_KEYS = new Set(["fin", "per", "off", "nwcBal"]);
+   fließt in keine Formel zurück, ein alter Spielstand kennt ihn deshalb nicht.
+   bridge ebenso: Seit dem 01.09.2026 schreibt jeder Exitweg seine Zerlegung
+   mit, nicht mehr nur der Schlussverkauf. Ein Spielstand von vorher kennt sie
+   an einem Covenant Breach oder Teilexit nicht, und sie geht in keine Formel
+   ein — sie zu vergleichen hieße, alte Partien wegen einer Anzeige zu
+   verwerfen.                                                                */
+const RECORDING_KEYS = new Set(["fin", "per", "off", "nwcBal", "bridge"]);
 
 /* Tiefer Vergleich zweier Spielstände. Zahlen exakt, Schlüsselreihenfolge egal,
    fehlende und undefinierte Felder gleichwertig — ein Zustand aus der Datenbank

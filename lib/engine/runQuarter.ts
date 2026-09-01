@@ -251,13 +251,15 @@ function applyImmediateDecisions(
       const gross = fair * CV_STAKE * CV_DISC;
       const net = gross * (1 - CV_FEE);
       const costSold = c.entryEquity * CV_STAKE;
+      const stSold = (c.st ?? 1) * CV_STAKE;
+      const bridge = makeBridge(c, gross, net, { stake: stSold, cost: costSold, recap: 0 });
       c.st = (c.st ?? 1) * (1 - CV_STAKE);
       c.entryEquity = c.entryEquity * (1 - CV_STAKE);
       c.costLeft = Math.max(0.01, (c.costLeft ?? c.entryEquity) - costSold);
       c.cashOut = (c.cashOut || 0) + net;
       c.cv = true;
       c.proc = null;
-      f.realized = [...(f.realized as Any[]), { name: c.name + " (Teilexit)", moic: net / costSold }];
+      f.realized = [...(f.realized as Any[]), { name: c.name + " (Teilexit)", moic: net / costSold, bridge }];
       applyProceeds(f, net, costSold, quarter);
       pushFeed(news, quarter, "🔄", "neu", `${c.name}: Teilexit an ein Continuation Vehicle.`, f.slot);
       return;
@@ -267,13 +269,15 @@ function applyImmediateDecisions(
       const gross = fair * IPO_PLACE * IPO_DISC;
       const net = gross * (1 - IPO_FEE);
       const costSold = c.entryEquity * IPO_PLACE;
+      const stSold = (c.st ?? 1) * IPO_PLACE;
+      const bridge = makeBridge(c, gross, net, { stake: stSold, cost: costSold, recap: 0 });
       c.st = (c.st ?? 1) * (1 - IPO_PLACE);
       c.entryEquity = c.entryEquity * (1 - IPO_PLACE);
       c.costLeft = Math.max(0.01, (c.costLeft ?? c.entryEquity) - costSold);
       c.cashOut = (c.cashOut || 0) + net;
       c.lockUntil = quarter + 2;
       c.proc = null;
-      f.realized = [...(f.realized as Any[]), { name: c.name + " (IPO)", moic: net / costSold }];
+      f.realized = [...(f.realized as Any[]), { name: c.name + " (IPO)", moic: net / costSold, bridge }];
       applyProceeds(f, net, costSold, quarter);
       pushFeed(news, quarter, "🔔", "pos", `Börsengang ${c.name}: ${Math.round(IPO_PLACE * 100)} % platziert.`, f.slot);
     }
@@ -468,7 +472,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       entryQ: q,
       // mult/out je Periode mitschreiben: nur damit lässt sich die
       // Wertveränderung eines Halbjahres später in ihre Treiber zerlegen
-      // (EBITDA, Multiple, Entschuldung) -- siehe HalfYearDelta in pel/ui.
+      // (EBITDA, Multiple, Entschuldung) -- siehe bridgeStep in lib/engine/engine.ts.
       hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
     };
     c.baseLoad = seatLoad(c);
@@ -566,7 +570,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     f.holdings = (f.holdings as Any[]).filter((c) => {
       if ((c.breach || 0) >= 2) {
         if (!f.isAi) pushFeed(news, q, "☠️", "neg", `Covenant Breach bei ${c.name}: Enforcement durch die Kreditgeber.`, f.slot);
-        f.realized = [...(f.realized as Any[]), { name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0) }];
+        f.realized = [...(f.realized as Any[]),
+          { name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0), bridge: makeBridge(c, 0, 0) }];
         return false;
       }
       if (!f.isAi && (c.breach || 0) === 1) pushFeed(news, q, "⚠️", "neg", `${c.name} reißt den Covenant. Noch ein Halbjahr bis zum Enforcement.`, f.slot);
@@ -651,9 +656,11 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     if (resolved.length) exitQueueBySlot[key] = [...(exitQueueBySlot[key] || []), ...resolved];
     f.holdings = (f.holdings as Any[]).filter((c) => {
       if (c.lockUntil && q >= c.lockUntil) {
-        const val = fairOf(c, mk, f.attrs.negotiation, q) * (1 - BIL_FEE);
+        const grossVal = fairOf(c, mk, f.attrs.negotiation, q);
+        const val = grossVal * (1 - BIL_FEE);
         applyProceeds(f, val, c.entryEquity, q);
-        f.realized = [...(f.realized as Any[]), { name: c.name + " (Restbeteiligung)", moic: val / c.entryEquity }];
+        f.realized = [...(f.realized as Any[]),
+          { name: c.name + " (Restbeteiligung)", moic: val / c.entryEquity, bridge: makeBridge(c, grossVal, val) }];
         pushFeed(news, q, val >= c.entryEquity ? "🔔" : "📉", val >= c.entryEquity ? "pos" : "neg",
           `Lock-up bei ${c.name} ausgelaufen — Restbeteiligung platziert.`, f.slot);
         return false;
@@ -675,7 +682,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       if (c.holdQ >= 6 && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
         const net = val * (1 - PROC_FEE);
         applyProceeds(f, net, c.entryEquity, q);
-        f.realized = [...(f.realized as Any[]), { name: c.name, moic: net / c.entryEquity }];
+        f.realized = [...(f.realized as Any[]),
+          { name: c.name, moic: net / c.entryEquity, bridge: makeBridge(c, val, net) }];
         return false;
       }
       return true;

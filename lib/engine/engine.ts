@@ -1125,32 +1125,69 @@ export function dpiOf(f, market, quarter) {
 /* ---------- IRR ----------
    Zahlungsreihe aus Sicht der Investoren: Abrufe negativ zum Zeitpunkt des
    Abrufs, Ausschüttungen positiv, der verbleibende NAV plus nicht reinvestierte
-   Liquidität als Schlusszahlung zum Stichtag. Nullstelle über Bisektion, weil
-   die Reihe mehrere Vorzeichenwechsel haben kann und Newton dort abhaut.     */
+   Liquidität als Schlusszahlung zum Stichtag. Je Halbjahr saldiert, wie es auch
+   ein Reporting täte: Ein Kapitalabruf und eine Ausschüttung im selben Halbjahr
+   sind für den Investor eine Zahlung, nicht zwei.                             */
 export function cashflowsOf(f, market, quarter) {
-  const cf = [];
-  (f.calls || []).forEach((c) => cf.push({ t: c.q / 2, v: -c.amt }));
-  (f.dists || []).forEach((d) => cf.push({ t: d.q / 2, v: d.amt * (1 - carryDrag(f, market, quarter)) }));
-  const terminal = (navOf(f, market) + (f.recyc || 0)) * (1 - carryDrag(f, market, quarter));
-  if (terminal > 0) cf.push({ t: quarter / 2, v: terminal });
-  return cf;
+  const drag = 1 - carryDrag(f, market, quarter);
+  const byQ = new Map<number, number>();
+  const add = (q: number, v: number) => byQ.set(q, (byQ.get(q) || 0) + v);
+  (f.calls || []).forEach((c) => add(c.q, -c.amt));
+  (f.dists || []).forEach((d) => add(d.q, d.amt * drag));
+  const terminal = (navOf(f, market) + (f.recyc || 0)) * drag;
+  if (terminal > 0) add(quarter, terminal);
+  return [...byQ.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([q, v]) => ({ t: q / 2, v }));
 }
 export function carryDrag(f, market, quarter) {
   const tv = totalValueOf(f, market);
   return tv > 0 ? Math.min(0.5, carryOf(f, market, quarter) / tv) : 0;
 }
+
+export const IRR_FLOOR = -0.95, IRR_CAP = 3.0;
+const IRR_SCAN_STEPS = 240;
+
+/* Die Nullstelle wird von oben gesucht, nicht von unten. Der Grund ist der
+   Zahlungsverlauf eines Fonds: Abrufe und Ausschüttungen wechseln sich über
+   zehn Jahre ab, die Reihe hat also mehrere Vorzeichenwechsel und damit
+   mehrere mathematische Nullstellen. Nur eine davon ist die Rendite, die ein
+   Investor meint — die obere.
+
+   Vorher stand hier eine Bisektion mit der Abkürzung "npv(−0,95) < 0, also
+   liegt der Zins am Boden". Diese Abkürzung setzt voraus, dass der Barwert mit
+   steigendem Zins fällt. Nahe −100 % gilt das Gegenteil: Der Diskontfaktor
+   1/(1+r)^t explodiert, und der Barwert wird allein vom Vorzeichen der
+   SPÄTESTEN Zahlung bestimmt. Eine Management Fee im letzten Halbjahr, auf die
+   keine Ausschüttung mehr folgt, genügte deshalb, um einen Fonds mit 1,44×
+   Rückfluss auf −95 % IRR zu setzen — in Testpartien traf das jeden siebten
+   Fonds, und über scoreOf() kostete es je einen halben Wertungspunkt.
+
+   Es gilt npv(0) = drawn · (TVPI − 1). Ein Fonds über 1,00× hat damit zwingend
+   einen positiven IRR, einer darunter einen negativen; der Test hält das fest. */
 export function irrOf(f, market, quarter) {
   const cf = cashflowsOf(f, market, quarter);
   if (cf.length < 2 || quarter < 2) return 0;
   const npv = (r) => cf.reduce((s, p) => s + p.v / Math.pow(1 + r, p.t), 0);
-  let lo = -0.95, hi = 3.0;
-  if (npv(lo) < 0) return -0.95;
-  if (npv(hi) > 0) return 3.0;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    if (npv(mid) > 0) lo = mid; else hi = mid;
+  if (npv(IRR_CAP) > 0) return IRR_CAP;
+
+  const step = (IRR_CAP - IRR_FLOOR) / IRR_SCAN_STEPS;
+  let hi = IRR_CAP;
+  for (let i = 1; i <= IRR_SCAN_STEPS; i++) {
+    const r = IRR_CAP - i * step;
+    if (npv(r) > 0) {
+      // Vorzeichenwechsel gefunden: [r, hi] klammert die oberste Nullstelle
+      let lo = r;
+      for (let k = 0; k < 60; k++) {
+        const mid = (lo + hi) / 2;
+        if (npv(mid) > 0) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+    hi = r;
   }
-  return (lo + hi) / 2;
+  // Nirgends im Suchbereich positiv: Totalverlust, der Boden ist die Aussage
+  return IRR_FLOOR;
 }
 
 /* ---------- Wertung ----------
@@ -1289,14 +1326,20 @@ export function healthOf(c, market) {
 
 /* Value Bridge: eingesetztes Eigenkapital plus vier Effekte ergeben exakt den
    Nettoerlös. Wird vom Exit im Hauptspiel und vom Übungsmodus identisch genutzt. */
-export function makeBridge(c, gross, net) {
-  const st = c.st ?? 1;
+export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number; recap?: number } = {}) {
+  /* Ohne Angaben beschreibt die Brücke den vollständigen Verkauf des noch
+     gehaltenen Anteils. Ein Teilexit (Continuation Vehicle, Börsengang) gibt
+     den verkauften Anteil und die dabei freigesetzte Kostenbasis mit — sonst
+     ließe sich eine Zerlegung nur für den Schlussverkauf schreiben, und alles,
+     was vorher realisiert wurde, fiele aus der Brücke heraus.               */
+  const st = opts.stake ?? (c.st ?? 1);
   /* Rekapitalisierungen während der Halteperiode gehören in die Brücke — sonst
      zeigt sie beim Exit nur den letzten Erlös und unterschlägt jeden Euro, der
-     vorher schon an den Fonds zurückgeflossen ist. Erlöse aus Teilexits stehen
-     bewusst nicht hier: die sind im Track Record bereits eigenständig gebucht. */
-  const recap = c.recapOut || 0;
-  const base = c.costLeft ?? c.entryEquity;
+     vorher schon an den Fonds zurückgeflossen ist. Sie hängen an der Beteiligung
+     als Ganzes und werden deshalb nur einmal gebucht, beim Schlussverkauf; ein
+     Teilexit gibt recap: 0 mit.                                             */
+  const recap = opts.recap ?? (c.recapOut || 0);
+  const base = opts.cost ?? (c.costLeft ?? c.entryEquity);
   const exitMult = ebitdaOf(c) > 0 ? (gross / st + c.netDebt) / ebitdaOf(c) : c.entryMult;
   const bEbitda = (ebitdaOf(c) - c.entryEbitda) * c.entryMult * st;
   const bMult = ebitdaOf(c) * (exitMult - c.entryMult) * st;
@@ -1307,6 +1350,82 @@ export function makeBridge(c, gross, net) {
     exit: net + recap,
   };
 }
+/* ---------- Value Bridge zwischen zwei Periodenständen ----------
+   Dieselbe Zerlegung wie makeBridge() beim Exit, nur zwischen zwei Einträgen
+   der hist-Reihe statt zwischen Einstieg und Verkauf. Damit lässt sich sie für
+   jeden Zeitraum einer Halteperiode bilden — das letzte Halbjahr ebenso wie
+   die Zeit seit Einstieg:
+
+     EBITDA       (EBITDA_neu − EBITDA_alt) × Multiple_alt × Anteil
+     Multiple     EBITDA_neu × (Multiple_neu − Multiple_alt) × Anteil
+     Entschuldung (Schulden_alt − Schulden_neu) × Anteil
+     Ausschüttung was im Zeitraum bereits entnommen wurde
+     Sonstiges    Restposten der Zerlegung (Anteilsänderungen, Zukäufe)
+
+   Die fünf Summanden ergeben exakt `total`, die Veränderung des Gesamtwerts
+   (hist.eq = NAV plus Entnahmen). Beteiligungen aus älteren Partien haben noch
+   kein mult/st im Periodenstand — dort wird das Multiple aus dem gespeicherten
+   Eigenkapitalwert zurückgerechnet, damit auch laufende Partien die Aufteilung
+   sehen.                                                                     */
+export function bridgeStep(prev, now) {
+  if (!prev || !now) return null;
+  const stP = prev.st ?? 1, stN = now.st ?? 1;
+  const outP = prev.out ?? 0, outN = now.out ?? 0;
+  // Nur der NAV-Teil trägt die Zerlegung; bereits ausgeschüttete
+  // Rekapitalisierungen stehen als eigene Position daneben.
+  const navP = prev.eq - outP, navN = now.eq - outN;
+  const mP = prev.mult ?? (prev.eb > 0 ? (navP / (stP || 1) + prev.nd) / prev.eb : null);
+  const mN = now.mult ?? (now.eb > 0 ? (navN / (stN || 1) + now.nd) / now.eb : null);
+  if (mP == null || mN == null) return null;
+  const ebitda = (now.eb - prev.eb) * mP * stN;
+  const mult = now.eb * (mN - mP) * stN;
+  const delev = (prev.nd - now.nd) * stN;
+  const dist = outN - outP;
+  const nav = navN - navP;
+  return { ebitda, mult, delev, dist, rest: nav - ebitda - mult - delev, nav, total: nav + dist };
+}
+
+/* ---------- Value Bridge des Fonds ----------
+   Die Zerlegungen aller realisierten Deals, zusammengezogen und an die Größe
+   angeschlossen, aus der auch TVPI und Wertung gerechnet werden:
+
+       gain = Gesamtwert − Carry − abgerufenes Kapital
+            = drawn · (TVPI − 1)
+
+   Damit hat die Aufstellung zwingend dasselbe Vorzeichen wie TVPI − 1. Bis zum
+   01.09.2026 summierte sie nur die Deals, deren Exitweg zufällig eine Zerlegung
+   mitgeschrieben hatte, und kannte die Kosten oberhalb der Beteiligungen gar
+   nicht — eine Partie mit einem guten Verkauf und drei Ausfällen stand dort mit
+   einem Gewinn, während TVPI und IRR im Minus waren.
+
+   `rest` ist bewusst ein Restposten und keine eigene Rechnung: Management Fee,
+   Due Diligence, Transaktionskosten, Carry — und die Deals aus älteren Partien,
+   die noch keine Zerlegung mitgeschrieben haben. Was die Summe nicht erklärt,
+   steht damit sichtbar dort, statt still zu verschwinden.                    */
+export function fundBridge(f, market, quarter) {
+  const realized = f.realized || [];
+  const sum = realized.filter((r) => r && r.bridge).reduce((a, r) => ({
+    ebitda: a.ebitda + (r.bridge.ebitda || 0),
+    mult: a.mult + (r.bridge.mult || 0),
+    delev: a.delev + (r.bridge.delev || 0),
+    dist: a.dist + (r.bridge.dist || 0),
+  }), { ebitda: 0, mult: 0, delev: 0, dist: 0 });
+
+  const holdings = f.holdings || [];
+  const openCost = holdings.reduce((s2, c) => s2 + (c.costLeft ?? c.entryEquity ?? 0), 0);
+  // Was im Portfolio steht, ist noch nicht realisiert — beim Laufzeitende null,
+  // weil dann alles verwertet ist (liquidateAll in runQuarter).
+  const unreal = navOf(f, market) - openCost;
+
+  const drawn = drawnOf(f);
+  const gain = totalValueOf(f, market) - carryOf(f, market, quarter) - drawn;
+  return {
+    ...sum, unreal, gain, drawn,
+    rest: gain - (sum.ebitda + sum.mult + sum.delev + sum.dist + unreal),
+    realizedCount: realized.length, openCount: holdings.length,
+  };
+}
+
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
 export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
 
