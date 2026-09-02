@@ -165,9 +165,13 @@ export const CSS = `
    Halteperiode. Drei Spalten, damit sich beide Zahlen direkt vergleichen
    lassen statt in zwei getrennten Blöcken zu stehen. */
 .pel table.cmp{width:100%;border-collapse:collapse;}
-.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 16px;text-align:right;
+.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 10px;text-align:right;
   border-bottom:1px solid var(--rule);white-space:nowrap;
   font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+/* Aussen bündig zur Karte, innen enger — sonst passen drei Spalten auf einem
+   schmalen Gerät nicht nebeneinander. */
+.pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:16px;}
+.pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:16px;}
 .pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
 .pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
@@ -177,6 +181,8 @@ export const CSS = `
    Die Überschrift steht ohne Unterstrich über ihrem Abschnitt, die Summe wird
    durch eine Linie darüber abgesetzt. Beide Tabellen zeigen Zahlen zur selben
    Beteiligung und sollen sich deshalb gleich lesen. */
+.pel table.cmp th small{display:block;font-weight:500;font-size:8.5px;letter-spacing:.08em;
+  text-transform:none;color:var(--ink2);opacity:.7;margin-top:2px;}
 .pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
   padding-top:17px;padding-bottom:5px;border-bottom:0;}
@@ -1020,7 +1026,12 @@ export function PerformanceCompare({ c }) {
 
   const num = (v, dg, unit) => v == null ? "—"
     : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
-  const money = (v) => v == null ? "—" : (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  /* Die Kennzahlen tragen ihre Einheit je Zeile (Prozent, Prozentpunkte,
+     Turns), der Wertbeitrag hat für alle Zeilen dieselbe — die steht deshalb
+     in der Abschnittszeile und nicht hinter jeder Zahl. Sonst passt die
+     Tabelle auf einem schmalen Gerät nicht in ihre Karte. */
+  const money = (v) => v == null || Math.abs(v) < 0.05 ? "—"
+    : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 1 });
   /* Beim Leverage ist weniger besser, bei allem anderen mehr. */
   const up = (v) => v >= 0, down = (v) => v <= 0;
   const kpiRows = [
@@ -1036,9 +1047,12 @@ export function PerformanceCompare({ c }) {
     { l: "Multiple", k: "mult" },
     { l: "Entschuldung", k: "delev" },
     ...(has("dist") ? [{ l: "Ausschüttung", k: "dist" }] : []),
-    ...(has("rest") ? [{ l: "Sonstiges", k: "rest" }] : []),
+    ...(has("rest") ? [{ l: "Übriges", k: "rest" }] : []),
   ];
-  const tone = (v, good) => ({ color: v == null ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)" });
+  // Was als Strich erscheint, wird auch neutral eingefärbt
+  const tone = (v, good, eps = 0) => ({
+    color: v == null || Math.abs(v) < eps ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)",
+  });
 
   return (
     <>
@@ -1056,7 +1070,9 @@ export function PerformanceCompare({ c }) {
             <b> EBITDA</b> ist operative Arbeit — mehr Umsatz oder bessere Marge, bewertet zum alten
             Multiple. <b>Multiple</b> ist der Markt: dieselbe Substanz wird höher oder niedriger
             bewertet, dafür kannst du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung, die
-            eins zu eins ins Eigenkapital wandert. Die Zeilen addieren sich auf den Gesamtwert.
+            eins zu eins ins Eigenkapital wandert. <b>Übriges</b> ist der Rest der Zerlegung — was ein
+            Zukauf oder ein Teilverkauf verschiebt, ohne einem der drei Treiber zuzugehören. Die Zeilen
+            addieren sich auf den Gesamtwert.
           </Info>
         </div>
       </div>
@@ -1072,16 +1088,16 @@ export function PerformanceCompare({ c }) {
             {kpi.map((set, i) => <td key={i} style={tone(set[r.k], r.good)}>{num(set[r.k], r.dg, r.unit)}</td>)}
           </tr>
         ))}
-        <tr className="seg"><td colSpan={3}>Wertbeitrag</td></tr>
+        <tr className="seg"><td colSpan={3}>Wertbeitrag · Mio. €</td></tr>
         {valRows.map((r) => (
           <tr key={r.k}>
             <td>{r.l}</td>
-            {val.map((set, i) => <td key={i} style={tone(set && set[r.k], up)}>{money(set && set[r.k])}</td>)}
+            {val.map((set, i) => <td key={i} style={tone(set && set[r.k], up, 0.05)}>{money(set && set[r.k])}</td>)}
           </tr>
         ))}
         <tr className="sum">
           <td>Gesamtwert</td>
-          {val.map((set, i) => <td key={i} style={tone(set && set.total, up)}>{money(set && set.total)}</td>)}
+          {val.map((set, i) => <td key={i} style={tone(set && set.total, up, 0.05)}>{money(set && set.total)}</td>)}
         </tr>
       </tbody></table>
     </>
@@ -1511,23 +1527,35 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
   /* Eine Null wird als Strich gezeigt, nicht als "+0 Mio. €": Vor dem ersten
      Exit sind EBITDA, Multiple und Entschuldung leer, und eine gerundete Null
      mit Vorzeichen behauptet dort eine Genauigkeit, die es nicht gibt. */
-  const money = (v) => v == null || Math.abs(v) < 0.05 ? "—" : (v >= 0 ? "+" : "−") + eur(Math.abs(v));
-  const flat = (v) => v == null ? "—" : eur(v);
+  /* Die Einheit steht im Spaltenkopf, nicht in jeder Zelle: "Mio. €" hinter
+     jeder Zahl kostet rund 55 px je Spalte, und damit passte die Tabelle auf
+     einem 390 px breiten Gerät nicht mehr in ihre Karte. */
+  const num = (v) => Math.abs(v).toLocaleString("de-DE", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 1 });
+  const money = (v) => v == null || Math.abs(v) < 0.05 ? "—" : (v >= 0 ? "+" : "−") + num(v);
+  const flat = (v) => v == null ? "—" : num(v);
   // TVPI wie im Kopf der Ansicht mit zwei Nachkommastellen, nicht wie ein Multiple
   const mult = (v, sign) => v == null || (sign && Math.abs(v) < 0.005) ? "—"
     : (sign ? (v >= 0 ? "+" : "−") : "") + Math.abs(v).toFixed(2).replace(".", ",") + "×";
   const up = (v) => v >= 0;
   // Posten nur zeigen, wenn sie in einer der Spalten etwas erklären
   const has = (k) => cols.some((c) => c && Math.abs(c[k]) > 0.05);
-  const rows = [
-    { l: "EBITDA", k: "ebitda" },
-    { l: "Multiple", k: "mult" },
-    { l: "Entschuldung", k: "delev" },
-    ...(has("dist") ? [{ l: "Rekapitalisierung", k: "dist" }] : []),
-    ...(has("unreal") || now.openCount ? [{ l: "Nicht realisiert", k: "unreal" }] : []),
-    { l: "Management Fee", k: "fees" },
-    ...(has("carry") ? [{ l: "Carry", k: "carry" }] : []),
-    ...(has("rest") ? [{ l: "Sonstiges", k: "rest" }] : []),
+  /* Weiche Trennstellen: "Kapitalrückführungen" und "Transaktionskosten" sind
+     als ein Wort breiter als die Bezeichnungsspalte auf einem schmalen Gerät. */
+  const groups = [
+    { head: null, rows: [
+      { l: "Exits", k: "exits" },
+      { l: "Kapital­rückführungen", k: "recaps" },
+    ] },
+    { head: "Unrealisiert", rows: [
+      { l: "EBITDA", k: "ebitda" },
+      { l: "Multiple", k: "mult" },
+      { l: "Entschuldung", k: "delev" },
+    ] },
+    { head: "Kosten", rows: [
+      { l: "Management Fee", k: "fees" },
+      { l: "Transaktions­kosten", k: "txCost" },
+      ...(has("carry") ? [{ l: "Carry", k: "carry" }] : []),
+    ] },
   ];
   /* Was als Strich erscheint, wird auch neutral eingefärbt — eine Null ist
      weder gut noch schlecht. Die Schwelle ist dieselbe wie bei der Ausgabe. */
@@ -1540,14 +1568,25 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
       <h3 className="disp">
         {title}
         <Info t="Value Bridge des Fonds">
-          Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, aufgeteilt nach Ursache.
-          <b> EBITDA</b> ist das, was die verkauften Unternehmen operativ mehr verdienten als beim Einstieg
-          — deine Portfolioarbeit. <b>Multiple</b> ist Bewertungsveränderung am Markt: gekauft zu 8×,
-          verkauft zu 10× bringt Geld, ohne dass sich im Unternehmen etwas geändert hätte.
-          <b> Entschuldung</b> ist getilgte Nettoverschuldung. <b>Nicht realisiert</b> ist die Wertänderung
-          dessen, was noch im Portfolio steht. <b>Management Fee</b> und <b>Carry</b> liegen zwischen den
-          Beteiligungen und den Investoren; früh in einer Partie sind sie der größte Posten, weil die Fee
-          auf dem ganzen Commitment läuft, lange bevor der erste Exit kommt.
+          Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, in drei Gruppen.
+          <br /><br />
+          <b>Realisiert</b> ist Geld, das zurückgeflossen ist. <b>Exits</b> ist der Verkaufserlös abzüglich
+          dessen, was die verkauften Anteile gekostet haben. <b>Kapitalrückführungen</b> sind Erlöse, die
+          eine Beteiligung während der Halteperiode ausgeschüttet hat — auch aus Unternehmen, die du noch
+          hältst.
+          <br /><br />
+          <b>Unrealisiert</b> ist der Gegenpart: was die Beteiligungen im Portfolio heute wert sind,
+          gegenüber ihrem Einstiegswert. Auf dem Papier, nicht auf dem Konto. <b>EBITDA</b> ist das, was sie
+          operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
+          Bewertungsveränderung am Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
+          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung. Beim Laufzeitende ist die ganze
+          Gruppe null, weil dann alles verwertet ist.
+          <br /><br />
+          <b>Kosten</b> liegen zwischen den Beteiligungen und den Investoren. Die <b>Management Fee</b> ist
+          früh in einer Partie der größte Posten, weil sie auf dem ganzen Commitment läuft, lange bevor der
+          erste Exit kommt. <b>Transaktionskosten</b> sind Gebühren bei Kauf und Verkauf, Due Diligence und
+          die Managementbeteiligung — dort steht auch, was die Zerlegung sonst nicht erklärt, damit die
+          Summe stimmt, statt still zu verschwinden.
           <br /><br />
           Die Posten addieren sich auf den <b>Gewinn</b>, und die Überleitung darunter führt ihn zum TVPI:
           abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je abgerufenem Euro ist der TVPI.
@@ -1556,15 +1595,20 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
       </h3>
       <table className="cmp"><tbody>
         <tr>
-          <th>Wertbeitrag</th>
-          <th>Letztes HJ</th>
-          <th>Seit Auflage</th>
+          <th>Realisiert</th>
+          <th>Letztes HJ<small>Mio. €</small></th>
+          <th>Seit Auflage<small>Mio. €</small></th>
         </tr>
-        {rows.map((r) => (
-          <tr key={r.k}>
-            <td>{r.l}</td>
-            {cols.map((c, i) => <td key={i} style={tone(c && c[r.k], up)}>{money(c && c[r.k])}</td>)}
-          </tr>
+        {groups.map((g) => (
+          <React.Fragment key={g.head ?? "realisiert"}>
+            {g.head && <tr className="seg"><td colSpan={3}>{g.head}</td></tr>}
+            {g.rows.map((r) => (
+              <tr key={r.k}>
+                <td>{r.l}</td>
+                {cols.map((c, i) => <td key={i} style={tone(c && c[r.k], up)}>{money(c && c[r.k])}</td>)}
+              </tr>
+            ))}
+          </React.Fragment>
         ))}
         <tr className="sum">
           <td>Gewinn</td>

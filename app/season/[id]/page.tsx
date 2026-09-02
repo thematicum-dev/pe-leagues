@@ -265,14 +265,20 @@ const FINISHED_CSS = `
    Ausschnitt aus dem vollen Stylesheet in components/pel/ui.tsx. Ändert sich
    dort table.cmp, muss dieser Ausschnitt mitgezogen werden. */
 .pel table.cmp{width:100%;border-collapse:collapse;}
-.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 16px;text-align:right;
+.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 10px;text-align:right;
   border-bottom:1px solid var(--rule);white-space:nowrap;
   font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+/* Aussen bündig zur Karte, innen enger — sonst passen drei Spalten auf einem
+   schmalen Gerät nicht nebeneinander. */
+.pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:16px;}
+.pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:16px;}
 .pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
 .pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
   font-family:'Inter',system-ui,sans-serif;white-space:normal;}
 .pel table.cmp tr:last-child td{border-bottom:0;}
+.pel table.cmp th small{display:block;font-weight:500;font-size:8.5px;letter-spacing:.08em;
+  text-transform:none;color:var(--ink2);opacity:.7;margin-top:2px;}
 .pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
   padding-top:17px;padding-bottom:5px;border-bottom:0;}

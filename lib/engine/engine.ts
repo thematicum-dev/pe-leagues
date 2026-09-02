@@ -1386,44 +1386,62 @@ export function bridgeStep(prev, now) {
 }
 
 /* ---------- Value Bridge des Fonds ----------
-   Die Zerlegungen aller realisierten Deals, zusammengezogen und an die Größe
-   angeschlossen, aus der auch TVPI und Wertung gerechnet werden:
+   Drei Gruppen, die eine andere Frage beantworten als die Treiber einer
+   einzelnen Beteiligung — nämlich die des Investors: Was ist schon Geld, was
+   steht noch auf dem Papier, und was hat der Fonds gekostet?
 
-       gain = Gesamtwert − Carry − abgerufenes Kapital
-            = drawn · (TVPI − 1)
+     Realisiert     Exits und Kapitalrückführungen. Zurückgeflossenes Geld,
+                    gemessen gegen die dabei freigesetzte Kostenbasis.
+     Unrealisiert   Die Beteiligungen, die noch gehalten werden, zerlegt in
+                    EBITDA, Multiple und Entschuldung — gegen ihren anteilig
+                    fortgeschriebenen Einstiegswert.
+     Kosten         Management Fee, Transaktionskosten, Carry.
 
-   Damit hat die Aufstellung zwingend dasselbe Vorzeichen wie TVPI − 1. Bis zum
-   01.09.2026 summierte sie nur die Deals, deren Exitweg zufällig eine Zerlegung
-   mitgeschrieben hatte, und kannte die Kosten oberhalb der Beteiligungen gar
-   nicht — eine Partie mit einem guten Verkauf und drei Ausfällen stand dort mit
-   einem Gewinn, während TVPI und IRR im Minus waren.
+   Zusammen ergeben sie den Gewinn, und der führt über
 
-   Management Fee und Carry stehen als eigene Posten, weil sie mitgeschrieben
-   werden und früh in einer Partie der größte Einzelposten sind — vor dem ersten
-   Exit besteht der Verlust eines Fonds fast nur aus ihnen. `rest` bleibt der
-   Restposten und keine eigene Rechnung: Due-Diligence-Kosten,
-   Transaktionskosten, und die Deals aus älteren Partien, die noch keine
-   Zerlegung mitgeschrieben haben. Was die Summe nicht erklärt, steht damit
-   sichtbar dort, statt still zu verschwinden.
+       gain = Gesamtwert − Carry − abgerufenes Kapital = drawn · (TVPI − 1)
 
-   `value` und `tvpi` schließen die Überleitung: value = drawn + gain ist der
-   Gesamtwert in den Händen der Investoren nach Carry, und value / drawn ist
-   exakt tvpiOf(). Die Aufstellung endet damit auf der Kennzahl, nach der
-   gewertet wird, statt neben ihr zu stehen.                                 */
+   auf die Kennzahl, nach der gewertet wird.
+
+   Bis zum 02.09.2026 war die Aufstellung anders geschnitten: EBITDA, Multiple
+   und Entschuldung kamen ausschließlich aus verkauften Beteiligungen, während
+   alles noch Gehaltene als ein einziger Posten danebenstand. Zwei Schnitte in
+   einer Spalte, und keiner davon vollständig. Kapitalrückführungen aus
+   Beteiligungen, die noch im Portfolio stehen, hatten dabei gar keinen Platz —
+   sie fielen in den Restposten, obwohl sie längst als Geld beim Investor
+   angekommen waren.
+
+   `txCost` bleibt der Restposten: Gebühren beim Kauf und Verkauf, Due
+   Diligence, die Managementbeteiligung, und was die Zerlegung sonst nicht
+   erklärt (Zukäufe, Anteilsänderungen). Was die Summe nicht erklärt, steht
+   damit sichtbar dort, statt still zu verschwinden.                        */
+export const FUND_BRIDGE_PARTS = ["exits", "recaps", "ebitda", "mult", "delev", "fees", "carry", "txCost"];
+
 export function fundBridge(f, market, quarter) {
-  const realized = f.realized || [];
-  const sum = realized.filter((r) => r && r.bridge).reduce((a, r) => ({
-    ebitda: a.ebitda + (r.bridge.ebitda || 0),
-    mult: a.mult + (r.bridge.mult || 0),
-    delev: a.delev + (r.bridge.delev || 0),
-    dist: a.dist + (r.bridge.dist || 0),
-  }), { ebitda: 0, mult: 0, delev: 0, dist: 0 });
+  const realized = (f.realized || []).filter((r) => r && r.bridge);
+  /* Verkaufserlös gegen die dabei freigesetzte Kostenbasis. Die
+     Rekapitalisierungen der Beteiligung stehen in bridge.dist und gehören in
+     die eigene Zeile, nicht in den Exiterlös.                              */
+  let exits = 0, recaps = 0;
+  realized.forEach((r) => {
+    exits += (r.bridge.exit || 0) - (r.bridge.dist || 0) - (r.bridge.entry || 0);
+    recaps += r.bridge.dist || 0;
+  });
 
   const holdings = f.holdings || [];
-  const openCost = holdings.reduce((s2, c) => s2 + (c.costLeft ?? c.entryEquity ?? 0), 0);
-  // Was im Portfolio steht, ist noch nicht realisiert — beim Laufzeitende null,
-  // weil dann alles verwertet ist (liquidateAll in runQuarter).
-  const unreal = navOf(f, market) - openCost;
+  let ebitda = 0, mult = 0, delev = 0;
+  holdings.forEach((c) => {
+    // Auch aus einer gehaltenen Beteiligung kann schon Geld zurückgeflossen sein
+    recaps += c.recapOut || 0;
+    const h = c.hist || [];
+    if (h.length < 2) return;
+    const st = bridgeStep(h[0], h[h.length - 1]);
+    if (!st) return;
+    /* Die drei Treiber sind auf den heute gehaltenen Anteil gerechnet und
+       ergeben zusammen genau NAV − Anteil · Einstiegswert. Was ein Teilexit
+       an Kostenbasis freigesetzt hat, steht bereits unter "Exits".        */
+    ebitda += st.ebitda; mult += st.mult; delev += st.delev;
+  });
 
   const drawn = drawnOf(f);
   const fees = -(f.fees || 0);                       // Management Fee, mitgeschrieben
@@ -1431,20 +1449,19 @@ export function fundBridge(f, market, quarter) {
   const value = totalValueOf(f, market) + carry;     // Gesamtwert nach Carry
   const gain = value - drawn;
   return {
-    ...sum, unreal, fees, carry, gain, drawn, value,
-    rest: gain - (sum.ebitda + sum.mult + sum.delev + sum.dist + unreal + fees + carry),
+    exits, recaps, ebitda, mult, delev, fees, carry, gain, drawn, value,
+    txCost: gain - (exits + recaps + ebitda + mult + delev + fees + carry),
     tvpi: value / drawn,
-    realizedCount: realized.length, openCount: holdings.length,
+    realizedCount: (f.realized || []).length, openCount: holdings.length,
   };
 }
 
 /* Dieselbe Aufstellung für ein einzelnes Halbjahr: die Differenz zweier
-   Ständen. Jeder Posten von fundBridge() ist auf den Stichtag kumuliert, die
+   Stände. Jeder Posten von fundBridge() ist auf den Stichtag kumuliert, die
    Differenz also der Beitrag genau dieses Halbjahres — und weil die Posten an
    beiden Stichtagen exakt auf `gain` aufgehen, tun es ihre Differenzen auch.
    Der TVPI ist ein Verhältnis und wird deshalb als Veränderung geführt, nicht
    als Differenz von Summanden.                                              */
-export const FUND_BRIDGE_PARTS = ["ebitda", "mult", "delev", "dist", "unreal", "fees", "carry", "rest"];
 export function fundBridgeStep(now, was) {
   if (!now || !was) return null;
   const out: Record<string, number> = { tvpi: now.tvpi - was.tvpi };

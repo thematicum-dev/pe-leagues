@@ -46,6 +46,7 @@ const HUMAN_SLOT = 0;
    Restplatzierung, dass jeder Zweig der Buchung wirklich vorkommt. */
 function decideForHuman(
   state: RuntimeState, halfYear: number, myExitQueue: RuntimeState["exitQueue"][string],
+  lev?: number,
 ): TurnDecisions {
   const me = state.funds[HUMAN_SLOT];
   const holdings = me.holdings as Any[];
@@ -53,7 +54,7 @@ function decideForHuman(
 
   if (holdings.length < 6 && state.deals.length) {
     const d = state.deals[0] as Any;
-    decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.02, leverage: d.levCap }];
+    decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.02, leverage: lev ?? d.levCap }];
   }
   const free = holdings.find((h) => !h.initP);
   if (free) decisions.initiatives = [{ holdingUid: free.uid, dim: "plat", id: "opex" }];
@@ -68,13 +69,13 @@ function decideForHuman(
   return decisions;
 }
 
-function playSeason(seed: number, until: number = PERIODS) {
+function playSeason(seed: number, until: number = PERIODS, lev?: number) {
   const rng = createRng(seed);
   let state = baseState();
   const { deals, landmark } = bootstrapInitialDeals(rng, state.market, state.funds);
   state = { ...state, deals, landmark };
   for (let hy = 1; hy <= until; hy++) {
-    const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+    const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)], lev);
     state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
   }
   return state;
@@ -154,6 +155,23 @@ describe("Value Bridge des Fonds", () => {
         expect(irr, `${seed} ${f.name}`).toBeGreaterThan(IRR_FLOOR);
       }
     }
+  });
+
+  /* Kapitalrückführungen aus Beteiligungen, die noch gehalten werden, hatten
+     in der alten Aufstellung keinen Platz und fielen in den Restposten. */
+  it("weist Kapitalrückführungen aus, auch aus dem laufenden Portfolio", () => {
+    let openRecaps = 0, seenInBridge = 0;
+    for (const seed of SEEDS) {
+      const state = playSeason(seed, 16, 1.2);
+      for (const f of state.funds) {
+        const held = ((f.holdings || []) as Any[]).reduce((s2, c) => s2 + (c.recapOut || 0), 0);
+        if (held <= 0.05) continue;
+        openRecaps += held;
+        seenInBridge += fundBridge(f as Any, state.market, 16).recaps;
+      }
+    }
+    expect(openRecaps).toBeGreaterThan(0);
+    expect(seenInBridge).toBeGreaterThanOrEqual(openRecaps - 1e-6);
   });
 
   /* Die Portfolioansicht zeigt dieselbe Zerlegung über zwei Zeiträume, letztes
