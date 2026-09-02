@@ -1398,10 +1398,18 @@ export function bridgeStep(prev, now) {
    nicht — eine Partie mit einem guten Verkauf und drei Ausfällen stand dort mit
    einem Gewinn, während TVPI und IRR im Minus waren.
 
-   `rest` ist bewusst ein Restposten und keine eigene Rechnung: Management Fee,
-   Due Diligence, Transaktionskosten, Carry — und die Deals aus älteren Partien,
-   die noch keine Zerlegung mitgeschrieben haben. Was die Summe nicht erklärt,
-   steht damit sichtbar dort, statt still zu verschwinden.                    */
+   Management Fee und Carry stehen als eigene Posten, weil sie mitgeschrieben
+   werden und früh in einer Partie der größte Einzelposten sind — vor dem ersten
+   Exit besteht der Verlust eines Fonds fast nur aus ihnen. `rest` bleibt der
+   Restposten und keine eigene Rechnung: Due-Diligence-Kosten,
+   Transaktionskosten, und die Deals aus älteren Partien, die noch keine
+   Zerlegung mitgeschrieben haben. Was die Summe nicht erklärt, steht damit
+   sichtbar dort, statt still zu verschwinden.
+
+   `value` und `tvpi` schließen die Überleitung: value = drawn + gain ist der
+   Gesamtwert in den Händen der Investoren nach Carry, und value / drawn ist
+   exakt tvpiOf(). Die Aufstellung endet damit auf der Kennzahl, nach der
+   gewertet wird, statt neben ihr zu stehen.                                 */
 export function fundBridge(f, market, quarter) {
   const realized = f.realized || [];
   const sum = realized.filter((r) => r && r.bridge).reduce((a, r) => ({
@@ -1418,12 +1426,30 @@ export function fundBridge(f, market, quarter) {
   const unreal = navOf(f, market) - openCost;
 
   const drawn = drawnOf(f);
-  const gain = totalValueOf(f, market) - carryOf(f, market, quarter) - drawn;
+  const fees = -(f.fees || 0);                       // Management Fee, mitgeschrieben
+  const carry = -carryOf(f, market, quarter);
+  const value = totalValueOf(f, market) + carry;     // Gesamtwert nach Carry
+  const gain = value - drawn;
   return {
-    ...sum, unreal, gain, drawn,
-    rest: gain - (sum.ebitda + sum.mult + sum.delev + sum.dist + unreal),
+    ...sum, unreal, fees, carry, gain, drawn, value,
+    rest: gain - (sum.ebitda + sum.mult + sum.delev + sum.dist + unreal + fees + carry),
+    tvpi: value / drawn,
     realizedCount: realized.length, openCount: holdings.length,
   };
+}
+
+/* Dieselbe Aufstellung für ein einzelnes Halbjahr: die Differenz zweier
+   Ständen. Jeder Posten von fundBridge() ist auf den Stichtag kumuliert, die
+   Differenz also der Beitrag genau dieses Halbjahres — und weil die Posten an
+   beiden Stichtagen exakt auf `gain` aufgehen, tun es ihre Differenzen auch.
+   Der TVPI ist ein Verhältnis und wird deshalb als Veränderung geführt, nicht
+   als Differenz von Summanden.                                              */
+export const FUND_BRIDGE_PARTS = ["ebitda", "mult", "delev", "dist", "unreal", "fees", "carry", "rest"];
+export function fundBridgeStep(now, was) {
+  if (!now || !was) return null;
+  const out: Record<string, number> = { tvpi: now.tvpi - was.tvpi };
+  [...FUND_BRIDGE_PARTS, "gain", "drawn", "value"].forEach((k) => { out[k] = now[k] - was[k]; });
+  return out;
 }
 
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
-  fundBridge, bridgeStep, tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
+  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, bridgeStep,
+  tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
@@ -81,6 +82,10 @@ function playSeason(seed: number, until: number = PERIODS) {
 
 const SEEDS = [20260817, 7, 4242, 99991];
 
+// Summiert über die ausgewiesene Postenliste, nicht über eine zweite Abschrift
+// davon — kommt ein Posten dazu, fällt er hier auf statt still zu verschwinden.
+const sumParts = (b: Any) => FUND_BRIDGE_PARTS.reduce((s: number, k: string) => s + b[k], 0);
+
 describe("Value Bridge des Fonds", () => {
   it("zerlegt jeden realisierten Deal, unabhängig vom Ausstiegsweg", () => {
     const seen = new Set<string>();
@@ -103,8 +108,8 @@ describe("Value Bridge des Fonds", () => {
       const state = playSeason(seed);
       for (const f of state.funds) {
         const b = fundBridge(f as Any, state.market, PERIODS);
-        // Die Balken erklären die Überschrift vollständig
-        expect(b.ebitda + b.mult + b.delev + b.dist + b.unreal + b.rest).toBeCloseTo(b.gain, 6);
+        // Die Posten erklären den Gewinn vollständig
+        expect(sumParts(b)).toBeCloseTo(b.gain, 6);
         // …und die Überschrift ist der Gewinn hinter dem TVPI
         const tvpi = tvpiOf(f as Any, state.market, PERIODS);
         expect(b.gain / b.drawn).toBeCloseTo(tvpi - 1, 9);
@@ -176,6 +181,43 @@ describe("Value Bridge des Fonds", () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  /* Die Aufstellung endet auf der Kennzahl, nach der gewertet wird:
+     abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je
+     abgerufenem Euro ist der TVPI. */
+  it("leitet auf den TVPI über", () => {
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const b = fundBridge(f as Any, state.market, PERIODS);
+        expect(b.drawn + b.gain).toBeCloseTo(b.value, 6);
+        expect(b.tvpi).toBeCloseTo(tvpiOf(f as Any, state.market, PERIODS), 9);
+      }
+    }
+  });
+
+  /* Die Halbjahresspalte ist die Differenz zweier Stände. Weil die Posten an
+     beiden Stichtagen exakt aufgehen, tun es ihre Differenzen auch — und der
+     Gewinn eines Halbjahres ist die Veränderung des Gesamtwerts abzüglich des
+     in dieser Zeit neu abgerufenen Kapitals. */
+  it("zerlegt auch ein einzelnes Halbjahr vollständig", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      const was = playSeason(seed, 13);
+      const now = playSeason(seed, 14);
+      for (const f of now.funds) {
+        const before = was.funds.find((z) => z.slot === f.slot)!;
+        const step = fundBridgeStep(
+          fundBridge(f as Any, now.market, 14),
+          fundBridge(before as Any, was.market, 13),
+        )!;
+        expect(sumParts(step)).toBeCloseTo(step.gain, 6);
+        expect(step.drawn + step.gain).toBeCloseTo(step.value, 6);
+        checked++;
+      }
+    }
+    expect(checked).toBe(SEEDS.length * 5);
   });
 
   it("hat am Laufzeitende nichts Unrealisiertes mehr", () => {

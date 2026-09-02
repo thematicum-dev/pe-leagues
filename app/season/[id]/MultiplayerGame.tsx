@@ -640,6 +640,13 @@ export default function MultiplayerGame({
     [state.funds, state.market, quarter, humanSlot],
   );
 
+  /* Vorstand für die Halbjahresspalte der Value Bridge: der Zustand vor dem
+     zuletzt ausgewerteten Halbjahr. history endet auf dem aktuellen Stand. */
+  const prevRow = history[history.length - 2];
+  const prevFund = prevRow?.funds?.find((z: Any) => z.slot === humanSlot);
+  const prevBridgeState = prevFund
+    ? { fund: prevFund, market: prevRow.market, quarter: prevRow.halfYear }
+    : null;
   const marketHist = history.map((h) => h.market);
   const tvpiHist = history.map((h) =>
     [...h.funds].sort((a, b) => a.slot - b.slot).map((f) => scoreOf(f, h.market, h.halfYear)),
@@ -887,7 +894,8 @@ export default function MultiplayerGame({
               <h3 className="disp">Sektoren nach NAV</h3>
               <SectorSplit holdings={me.holdings} market={state.market} cash={me.cash} />
             </div>
-            <SeasonDrivers fund={me} market={state.market} quarter={quarter} />
+            <SeasonDrivers fund={me} market={state.market} quarter={quarter}
+              prev={prevBridgeState} />
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
                 Noch keine Beteiligungen. Im Dealflow findest du strukturierte Prozesse und proprietäre Kontakte.

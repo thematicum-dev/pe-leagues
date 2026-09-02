@@ -94,18 +94,25 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   let myFund: RuntimeState["funds"][number] | null = null;
   let finalMarket: RuntimeState["market"] | null = null;
   let finalHalfYear = 0;
+  let prevBridgeState: { fund: RuntimeState["funds"][number]; market: RuntimeState["market"]; quarter: number } | null = null;
   if (season.status === "finished" && humanSlot != null) {
-    const { data: finalRow } = await supabase
+    // Zwei Stände: der Schlussstand und der davor, damit die Value Bridge auch
+    // die Spalte für das letzte Halbjahr bilden kann.
+    const { data: finalRows } = await supabase
       .from("season_state")
       .select("state, half_year")
       .eq("season_id", id)
       .order("half_year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const fin = finalRow?.state as RuntimeState | undefined;
+      .limit(2);
+    const fin = finalRows?.[0]?.state as RuntimeState | undefined;
     myFund = fin?.funds?.find((f) => f.slot === humanSlot) ?? null;
     finalMarket = fin?.market ?? null;
-    finalHalfYear = finalRow?.half_year ?? 0;
+    finalHalfYear = (finalRows?.[0]?.half_year as number) ?? 0;
+    const before = finalRows?.[1]?.state as RuntimeState | undefined;
+    const beforeFund = before?.funds?.find((f) => f.slot === humanSlot);
+    if (beforeFund && before) {
+      prevBridgeState = { fund: beforeFund, market: before.market, quarter: (finalRows?.[1]?.half_year as number) ?? 0 };
+    }
   }
 
   return (
@@ -204,7 +211,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
                   ))}
                 </div>
               </div>
-              <SeasonDrivers fund={myFund} market={finalMarket} quarter={finalHalfYear} title="Woher deine Rendite kam" />
+              <SeasonDrivers fund={myFund} market={finalMarket} quarter={finalHalfYear}
+                prev={prevBridgeState} title="Woher deine Rendite kam" />
               <div style={{ margin: "18px 16px 40px" }}>
                 <Link href="/dashboard" className="btn-primary" style={{ display: "block", textAlign: "center" }}>
                   Zum Dashboard
@@ -253,17 +261,24 @@ const FINISHED_CSS = `
 .pel .btn-primary{display:inline-block;text-decoration:none;}
 .pel .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
 .pel .eyebrow{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600;}
-/* Treiberbalken und Erklär-Punkte für die Value Bridge auf dem Endstand —
-   Ausschnitt aus dem vollen Stylesheet in components/pel/ui.tsx. */
-.pel .drv{display:flex;flex-direction:column;gap:7px;}
-.pel .drvrow{display:flex;align-items:center;gap:8px;}
-.pel .drvlab{font-size:11.5px;color:var(--ink2);width:88px;flex:none;}
-.pel .drvtrack{position:relative;flex:1;height:12px;min-width:0;background:#1C282B;}
-.pel .drvzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--rule);}
-.pel .drvbar{position:absolute;top:1px;bottom:1px;min-width:1px;}
-.pel .drvbar.pos{background:var(--teal);}
-.pel .drvbar.neg{background:var(--ox);}
-.pel .drvval{font-size:11.5px;width:78px;flex:none;text-align:right;}
+/* Vergleichstabelle und Erklär-Punkte für die Value Bridge auf dem Endstand —
+   Ausschnitt aus dem vollen Stylesheet in components/pel/ui.tsx. Ändert sich
+   dort table.cmp, muss dieser Ausschnitt mitgezogen werden. */
+.pel table.cmp{width:100%;border-collapse:collapse;}
+.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 16px;text-align:right;
+  border-bottom:1px solid var(--rule);white-space:nowrap;
+  font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+.pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
+.pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
+  font-family:'Inter',system-ui,sans-serif;white-space:normal;}
+.pel table.cmp tr:last-child td{border-bottom:0;}
+.pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
+  padding-top:17px;padding-bottom:5px;border-bottom:0;}
+.pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
+  border-top:1px solid var(--rule);}
+.pel .finnote{font-size:11px;line-height:1.6;color:var(--ink2);margin:0;padding:12px 16px 0;}
 .pel .infb{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
   border-radius:50%;border:1px solid var(--rule);background:transparent;color:var(--ink2);
   font-size:9.5px;font-weight:700;font-family:inherit;line-height:1;padding:0;margin-left:5px;
