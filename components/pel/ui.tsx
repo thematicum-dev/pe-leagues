@@ -18,7 +18,7 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
@@ -887,7 +887,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)}</span>}</td></tr>
       </tbody></table>
       <Stages c={c} compact={quarter} />
-      <PerformanceCompare c={c} />
+      <PerformanceCompare c={c} market={market} />
       <Track c={c} />
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
         <StatementsButton statements={statements}
@@ -1024,7 +1024,7 @@ function deltaSet(a, b) {
   };
 }
 
-export function PerformanceCompare({ c }) {
+export function PerformanceCompare({ c, market }) {
   const h = c.hist || [];
   if (h.length < 2) {
     return (
@@ -1033,7 +1033,12 @@ export function PerformanceCompare({ c }) {
       </div>
     );
   }
-  const now = h[h.length - 1];
+  /* Der heutige Stand statt des zuletzt mitgeschriebenen: Letzterer hinkt dem
+     tatsächlichen Wert um eine Periode hinterher (siehe liveHist), und die
+     Tabelle stünde damit unter einem "Total Value", den sie nicht erklärt. */
+  const now = liveHist(c, market);
+  /* Der letzte mitgeschriebene Eintrag beschreibt denselben Zeitpunkt wie
+     `now`; das letzte Halbjahr beginnt also beim vorletzten. */
   const kpi = [deltaSet(h[h.length - 2], now), deltaSet(h[0], now)];
   const val = [bridgeStep(h[h.length - 2], now), bridgeStep(h[0], now)];
 

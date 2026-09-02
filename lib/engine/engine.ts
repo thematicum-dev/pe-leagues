@@ -1136,7 +1136,12 @@ export function cashflowsOf(f, market, quarter) {
   (f.dists || []).forEach((d) => add(d.q, d.amt * drag));
   const terminal = (navOf(f, market) + (f.recyc || 0)) * drag;
   if (terminal > 0) add(quarter, terminal);
+  /* Ein Halbjahr, in dem sich Abruf und Ausschüttung genau aufheben, ist keine
+     Zahlung und gehört nicht in die Reihe — sonst bestünde die Reihe eines
+     Fonds, der genau sein Kapital zurückbekommen hat, aus einer einzigen Null,
+     und die Nullstellensuche fände nirgends einen Vorzeichenwechsel. */
   return [...byQ.entries()]
+    .filter(([, v]) => Math.abs(v) > 1e-9)
     .sort((a, b) => a[0] - b[0])
     .map(([q, v]) => ({ t: q / 2, v }));
 }
@@ -1167,7 +1172,12 @@ const IRR_SCAN_STEPS = 240;
    einen positiven IRR, einer darunter einen negativen; der Test hält das fest. */
 export function irrOf(f, market, quarter) {
   const cf = cashflowsOf(f, market, quarter);
-  if (cf.length < 2 || quarter < 2) return 0;
+  /* Ohne jede Zahlung und im ersten Halbjahr gibt es keine Rendite. Eine
+     einzelne Zahlung ist dagegen sehr wohl eine Aussage: Ein Fonds, der
+     abgerufen und nie etwas zurückgezahlt hat, steht am Boden und nicht bei
+     null — vorher lieferte genau dieser Fall 0 % und damit einen Totalverlust
+     als Nullrendite. */
+  if (!cf.length || quarter < 2) return 0;
   const npv = (r) => cf.reduce((s, p) => s + p.v / Math.pow(1 + r, p.t), 0);
   if (npv(IRR_CAP) > 0) return IRR_CAP;
 
@@ -1350,6 +1360,26 @@ export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number;
     exit: net + recap,
   };
 }
+/* Der heutige Stand einer Beteiligung in der Form eines Periodenstands.
+   Gebraucht, weil der zuletzt mitgeschriebene Eintrag dem tatsächlichen Wert
+   um eine Periode hinterherhinkt: runQuarter schreibt ihn, bevor er selbst zur
+   Historie zählt, und markMultiple() bezieht über growthPrem() eine
+   Wachstumsprämie ein, die erst ab drei Einträgen greift. Beim Übergang von
+   zwei auf drei Einträge springt das Multiple deshalb, ohne dass der
+   gespeicherte Stand es sähe — in einer Testpartie um bis zu 29 %.
+
+   Für die Aufstellung zählt der Wert, mit dem das Spiel tatsächlich rechnet
+   (navOf, Exiterlöse, TVPI). Sonst liefe die Zerlegung gegen einen anderen
+   Wert als die Summe, die sie erklären soll, und die Differenz verschwände
+   still im Restposten.                                                      */
+export function liveHist(c, market) {
+  return {
+    rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+    eq: navValueOf(c, market) + (c.cashOut || 0), mult: markMultiple(c, market),
+    st: c.st ?? 1, out: c.cashOut || 0,
+  };
+}
+
 /* ---------- Value Bridge zwischen zwei Periodenständen ----------
    Dieselbe Zerlegung wie makeBridge() beim Exit, nur zwischen zwei Einträgen
    der hist-Reihe statt zwischen Einstieg und Verkauf. Damit lässt sich sie für
@@ -1451,13 +1481,17 @@ export function fundBridge(f, market, quarter) {
     // Auch aus einer gehaltenen Beteiligung kann schon Geld zurückgeflossen sein
     recaps += c.recapOut || 0;
     const h = c.hist || [];
-    if (h.length < 2) return;
-    const st = bridgeStep(h[0], h[h.length - 1]);
+    if (!h.length) return;
+    const st = bridgeStep(h[0], liveHist(c, market));
     if (!st) return;
     uEbitda += st.ebitda; uMult += st.mult; uDelev += st.delev;
   });
 
-  const drawn = drawnOf(f);
+  /* Für den Gewinn zählt das tatsächlich abgerufene Kapital, nicht die
+     Untergrenze von drawnOf() — die steht dort nur, damit der TVPI keine
+     Division durch null wird. Ein Fonds, der noch nichts abgerufen hat, hat
+     nichts verloren; mit drawnOf() wies die Brücke ihm 1 Mio. € Verlust aus. */
+  const drawn = f.drawn || 0;
   const fees = -(f.fees || 0);                       // Management Fee, mitgeschrieben
   const carry = -carryOf(f, market, quarter);
   const value = totalValueOf(f, market) + carry;     // Gesamtwert nach Carry
@@ -1465,7 +1499,7 @@ export function fundBridge(f, market, quarter) {
   const named = rEbitda + rMult + rDelev + recaps + uEbitda + uMult + uDelev + fees + carry;
   return {
     rEbitda, rMult, rDelev, recaps, uEbitda, uMult, uDelev, fees, carry,
-    gain, drawn, value, tvpi: value / drawn,
+    gain, drawn, value, tvpi: value / drawnOf(f),
     txCost: gain - named,
     realizedCount: (f.realized || []).length, openCount: holdings.length,
   };

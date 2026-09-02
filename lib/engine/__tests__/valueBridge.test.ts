@@ -178,18 +178,24 @@ describe("Value Bridge des Fonds", () => {
   /* Kapitalrückführungen aus Beteiligungen, die noch gehalten werden, hatten
      in der alten Aufstellung keinen Platz und fielen in den Restposten. */
   it("weist Kapitalrückführungen aus, auch aus dem laufenden Portfolio", () => {
-    let openRecaps = 0, seenInBridge = 0;
+    let checked = 0;
     for (const seed of SEEDS) {
+      // Gering verschuldet, damit Beteiligungen in Nettoliquidität laufen und
+      // der Cash Sweep überhaupt greift
       const state = playSeason(seed, 16, 1.2);
       for (const f of state.funds) {
         const held = ((f.holdings || []) as Any[]).reduce((s2, c) => s2 + (c.recapOut || 0), 0);
-        if (held <= 0.05) continue;
-        openRecaps += held;
-        seenInBridge += fundBridge(f as Any, state.market, 16).recaps;
+        const sold = ((f.realized || []) as Any[])
+          .reduce((s2, r) => s2 + (r.bridge ? r.bridge.dist || 0 : 0), 0);
+        // Exakt, nicht "mindestens": Fiele der Anteil aus dem laufenden
+        // Portfolio weg, verschöbe er sich still in den Restposten und die
+        // Summe stimmte weiter.
+        expect(fundBridge(f as Any, state.market, 16).recaps,
+          `${seed}/${f.name}`).toBeCloseTo(held + sold, 9);
+        if (held > 0.05) checked++;
       }
     }
-    expect(openRecaps).toBeGreaterThan(0);
-    expect(seenInBridge).toBeGreaterThanOrEqual(openRecaps - 1e-6);
+    expect(checked, "keine Rückführung aus dem laufenden Portfolio getroffen").toBeGreaterThan(0);
   });
 
   /* Die Portfolioansicht zeigt dieselbe Zerlegung über zwei Zeiträume, letztes
