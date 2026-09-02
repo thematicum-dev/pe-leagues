@@ -1390,12 +1390,15 @@ export function bridgeStep(prev, now) {
    einzelnen Beteiligung — nämlich die des Investors: Was ist schon Geld, was
    steht noch auf dem Papier, und was hat der Fonds gekostet?
 
-     Realisiert     Exits und Kapitalrückführungen. Zurückgeflossenes Geld,
-                    gemessen gegen die dabei freigesetzte Kostenbasis.
-     Unrealisiert   Die Beteiligungen, die noch gehalten werden, zerlegt in
-                    EBITDA, Multiple und Entschuldung — gegen ihren anteilig
-                    fortgeschriebenen Einstiegswert.
-     Kosten         Management Fee, Transaktionskosten, Carry.
+     Realisiert     Was die verkauften Beteiligungen erwirtschaftet haben,
+                    zerlegt in EBITDA, Multiple und Entschuldung, dazu die
+                    Kapitalrückführungen aus der Halteperiode.
+     Unrealisiert   Derselbe Schnitt für die Beteiligungen, die noch stehen —
+                    gegen ihren anteilig fortgeschriebenen Einstiegswert.
+     Kosten         Management Fee, Transaktionskosten, Carry. Jede Gebühr
+                    steht hier und in keinem der beiden Blöcke darüber, damit
+                    "Realisiert" und "Unrealisiert" reine Wertentwicklung
+                    zeigen und vergleichbar bleiben.
 
    Zusammen ergeben sie den Gewinn, und der führt über
 
@@ -1415,21 +1418,35 @@ export function bridgeStep(prev, now) {
    Diligence, die Managementbeteiligung, und was die Zerlegung sonst nicht
    erklärt (Zukäufe, Anteilsänderungen). Was die Summe nicht erklärt, steht
    damit sichtbar dort, statt still zu verschwinden.                        */
-export const FUND_BRIDGE_PARTS = ["exits", "recaps", "ebitda", "mult", "delev", "fees", "carry", "txCost"];
+/* Die Gliederung der Aufstellung steht hier und nicht in der Ansicht: Die
+   Ansicht klappt die Gruppen auf und zu und zeigt zugeklappt deren Summe —
+   fehlte dort ein Posten, wäre die Summe still falsch. Die Beschriftungen
+   bleiben in der Ansicht, die Zugehörigkeit steht hier.                    */
+export const FUND_BRIDGE_GROUPS = [
+  { key: "r", parts: ["rEbitda", "rMult", "rDelev", "recaps"] },
+  { key: "u", parts: ["uEbitda", "uMult", "uDelev"] },
+  { key: "k", parts: ["fees", "txCost", "carry"] },
+];
+export const FUND_BRIDGE_PARTS = FUND_BRIDGE_GROUPS.flatMap((g) => g.parts);
 
 export function fundBridge(f, market, quarter) {
-  const realized = (f.realized || []).filter((r) => r && r.bridge);
-  /* Verkaufserlös gegen die dabei freigesetzte Kostenbasis. Die
-     Rekapitalisierungen der Beteiligung stehen in bridge.dist und gehören in
-     die eigene Zeile, nicht in den Exiterlös.                              */
-  let exits = 0, recaps = 0;
-  realized.forEach((r) => {
-    exits += (r.bridge.exit || 0) - (r.bridge.dist || 0) - (r.bridge.entry || 0);
+  /* Realisiert: die Zerlegungen der verkauften Beteiligungen, aufaddiert.
+     Rekapitalisierungen stehen daneben — sie sind zurückgeflossenes Geld,
+     aber keine Wertsteigerung eines der drei Treiber.                     */
+  let rEbitda = 0, rMult = 0, rDelev = 0, recaps = 0;
+  (f.realized || []).filter((r) => r && r.bridge).forEach((r) => {
+    rEbitda += r.bridge.ebitda || 0;
+    rMult += r.bridge.mult || 0;
+    rDelev += r.bridge.delev || 0;
     recaps += r.bridge.dist || 0;
   });
 
+  /* Unrealisiert: derselbe Schnitt für die Beteiligungen, die noch stehen.
+     Die drei Treiber sind auf den heute gehaltenen Anteil gerechnet und
+     ergeben zusammen genau NAV − Anteil · Einstiegswert; was ein Teilexit an
+     Kostenbasis freigesetzt hat, steckt bereits im realisierten Block.     */
   const holdings = f.holdings || [];
-  let ebitda = 0, mult = 0, delev = 0;
+  let uEbitda = 0, uMult = 0, uDelev = 0;
   holdings.forEach((c) => {
     // Auch aus einer gehaltenen Beteiligung kann schon Geld zurückgeflossen sein
     recaps += c.recapOut || 0;
@@ -1437,10 +1454,7 @@ export function fundBridge(f, market, quarter) {
     if (h.length < 2) return;
     const st = bridgeStep(h[0], h[h.length - 1]);
     if (!st) return;
-    /* Die drei Treiber sind auf den heute gehaltenen Anteil gerechnet und
-       ergeben zusammen genau NAV − Anteil · Einstiegswert. Was ein Teilexit
-       an Kostenbasis freigesetzt hat, steht bereits unter "Exits".        */
-    ebitda += st.ebitda; mult += st.mult; delev += st.delev;
+    uEbitda += st.ebitda; uMult += st.mult; uDelev += st.delev;
   });
 
   const drawn = drawnOf(f);
@@ -1448,10 +1462,11 @@ export function fundBridge(f, market, quarter) {
   const carry = -carryOf(f, market, quarter);
   const value = totalValueOf(f, market) + carry;     // Gesamtwert nach Carry
   const gain = value - drawn;
+  const named = rEbitda + rMult + rDelev + recaps + uEbitda + uMult + uDelev + fees + carry;
   return {
-    exits, recaps, ebitda, mult, delev, fees, carry, gain, drawn, value,
-    txCost: gain - (exits + recaps + ebitda + mult + delev + fees + carry),
-    tvpi: value / drawn,
+    rEbitda, rMult, rDelev, recaps, uEbitda, uMult, uDelev, fees, carry,
+    gain, drawn, value, tvpi: value / drawn,
+    txCost: gain - named,
     realizedCount: (f.realized || []).length, openCount: holdings.length,
   };
 }

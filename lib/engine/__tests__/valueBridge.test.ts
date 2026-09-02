@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
-  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, bridgeStep,
+  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
   tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -153,6 +153,24 @@ describe("Value Bridge des Fonds", () => {
         expect(Math.sign(irr), `${seed} ${f.name}: TVPI ${tvpi.toFixed(2)}`)
           .toBe(Math.sign(Math.round((tvpi - 1) * 1e9)));
         expect(irr, `${seed} ${f.name}`).toBeGreaterThan(IRR_FLOOR);
+      }
+    }
+  });
+
+  /* Die Ansicht zeigt die Gruppen zugeklappt mit ihrer Summe. Fehlte dort ein
+     Posten, wäre diese Summe still falsch — die Gruppen müssen die Postenliste
+     also lückenlos und überschneidungsfrei abdecken. */
+  it("teilt jeden Posten genau einer Gruppe zu", () => {
+    const inGroups = FUND_BRIDGE_GROUPS.flatMap((g) => g.parts);
+    expect([...inGroups].sort()).toEqual([...FUND_BRIDGE_PARTS].sort());
+    expect(new Set(inGroups).size).toBe(inGroups.length);
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const b = fundBridge(f as Any, state.market, PERIODS);
+        const byGroup = FUND_BRIDGE_GROUPS.reduce(
+          (s2, g) => s2 + g.parts.reduce((a: number, k: string) => a + b[k], 0), 0);
+        expect(byGroup).toBeCloseTo(b.gain, 6);
       }
     }
   });

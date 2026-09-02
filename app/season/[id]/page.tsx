@@ -284,6 +284,19 @@ const FINISHED_CSS = `
   padding-top:17px;padding-bottom:5px;border-bottom:0;}
 .pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
   border-top:1px solid var(--rule);}
+/* Aufklappbare Gruppe: Die Kopfzeile trägt die Summe, damit die Aufstellung
+   auch zugeklappt vollständig ist; die Einzelposten begründen sie. */
+.pel table.cmp tr.grp td{padding-top:13px;padding-bottom:11px;}
+.pel table.cmp tr.grp td:first-child{padding:0;}
+.pel table.cmp tr.grp button{display:flex;align-items:center;gap:6px;width:100%;
+  padding:13px 10px 11px 16px;background:none;border:0;cursor:pointer;text-align:left;
+  font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink2);font-weight:600;}
+.pel table.cmp tr.grp .grpcar{display:inline-block;font-size:13px;line-height:1;
+  transition:transform .15s;transform:rotate(0deg);opacity:.7;}
+.pel table.cmp tr.grp.on .grpcar{transform:rotate(90deg);}
+.pel table.cmp tr.det td{font-size:12px;}
+.pel table.cmp tr.det td:first-child{padding-left:28px;}
 .pel .finnote{font-size:11px;line-height:1.6;color:var(--ink2);margin:0;padding:12px 16px 0;}
 .pel .infb{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
   border-radius:50%;border:1px solid var(--rule);background:transparent;color:var(--ink2);

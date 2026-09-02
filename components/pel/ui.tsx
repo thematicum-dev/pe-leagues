@@ -19,7 +19,7 @@ import {
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep,
-  fundBridgeStep,
+  fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
@@ -188,6 +188,19 @@ export const CSS = `
   padding-top:17px;padding-bottom:5px;border-bottom:0;}
 .pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
   border-top:1px solid var(--rule);}
+/* Aufklappbare Gruppe: Die Kopfzeile trägt die Summe, damit die Aufstellung
+   auch zugeklappt vollständig ist; die Einzelposten begründen sie. */
+.pel table.cmp tr.grp td{padding-top:13px;padding-bottom:11px;}
+.pel table.cmp tr.grp td:first-child{padding:0;}
+.pel table.cmp tr.grp button{display:flex;align-items:center;gap:6px;width:100%;
+  padding:13px 10px 11px 16px;background:none;border:0;cursor:pointer;text-align:left;
+  font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink2);font-weight:600;}
+.pel table.cmp tr.grp .grpcar{display:inline-block;font-size:13px;line-height:1;
+  transition:transform .15s;transform:rotate(0deg);opacity:.7;}
+.pel table.cmp tr.grp.on .grpcar{transform:rotate(90deg);}
+.pel table.cmp tr.det td{font-size:12px;}
+.pel table.cmp tr.det td:first-child{padding-left:28px;}
 
 /* ---------- Berichtsansicht: GuV, Bilanz, Kapitalflussrechnung ----------
    Ein Abschluss ist breiter als ein Telefon. Statt die Spalten zu stauchen,
@@ -1517,6 +1530,10 @@ export function Stages({ c, compact }) {
    ersten ausgewerteten Halbjahr —, bleibt die Spalte leer, statt den
    Anfangsstand als Veränderung auszugeben.                                  */
 export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die Rendite kam" }) {
+  /* Zugeklappt ist die Vorgabe: Die drei Gruppensummen und der Gewinn sind die
+     Antwort, die Einzelposten die Begründung. Der Hook steht vor dem frühen
+     Ausstieg, sonst hinge seine Reihenfolge am Zustand des Fonds. */
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   if (!fund || !market || !(fund.drawn > 0)) return null;
   const now = fundBridge(fund, market, quarter);
   const step = prev && prev.fund
@@ -1541,22 +1558,21 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
   const has = (k) => cols.some((c) => c && Math.abs(c[k]) > 0.05);
   /* Weiche Trennstellen: "Kapitalrückführungen" und "Transaktionskosten" sind
      als ein Wort breiter als die Bezeichnungsspalte auf einem schmalen Gerät. */
-  const groups = [
-    { head: null, rows: [
-      { l: "Exits", k: "exits" },
-      { l: "Kapital­rückführungen", k: "recaps" },
-    ] },
-    { head: "Unrealisiert", rows: [
-      { l: "EBITDA", k: "ebitda" },
-      { l: "Multiple", k: "mult" },
-      { l: "Entschuldung", k: "delev" },
-    ] },
-    { head: "Kosten", rows: [
-      { l: "Management Fee", k: "fees" },
-      { l: "Transaktions­kosten", k: "txCost" },
-      ...(has("carry") ? [{ l: "Carry", k: "carry" }] : []),
-    ] },
-  ];
+  const HEAD = { r: "Realisiert", u: "Unrealisiert", k: "Kosten" };
+  const LABEL = {
+    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung",
+    recaps: "Kapital­rückführungen",
+    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung",
+    fees: "Management Fee", txCost: "Transaktions­kosten", carry: "Carry",
+  };
+  const groups = FUND_BRIDGE_GROUPS.map((g) => ({
+    key: g.key, head: HEAD[g.key],
+    // Carry ist bis weit in die Partie hinein null und bekommt dann keine Zeile
+    rows: g.parts.filter((k) => k !== "carry" || has("carry")).map((k) => ({ l: LABEL[k], k })),
+  }));
+  // Summe einer Gruppe je Spalte — die Kopfzeile trägt sie, damit die
+  // Aufstellung auch zugeklappt vollständig bleibt.
+  const groupSum = (g, c) => c ? g.rows.reduce((a, r) => a + (c[r.k] || 0), 0) : null;
   /* Was als Strich erscheint, wird auch neutral eingefärbt — eine Null ist
      weder gut noch schlecht. Die Schwelle ist dieselbe wie bei der Ausgabe. */
   const tone = (v, good, eps = 0.05) => ({
@@ -1570,19 +1586,18 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
         <Info t="Value Bridge des Fonds">
           Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, in drei Gruppen.
           <br /><br />
-          <b>Realisiert</b> ist Geld, das zurückgeflossen ist. <b>Exits</b> ist der Verkaufserlös abzüglich
-          dessen, was die verkauften Anteile gekostet haben. <b>Kapitalrückführungen</b> sind Erlöse, die
-          eine Beteiligung während der Halteperiode ausgeschüttet hat — auch aus Unternehmen, die du noch
-          hältst.
-          <br /><br />
-          <b>Unrealisiert</b> ist der Gegenpart: was die Beteiligungen im Portfolio heute wert sind,
-          gegenüber ihrem Einstiegswert. Auf dem Papier, nicht auf dem Konto. <b>EBITDA</b> ist das, was sie
-          operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
+          <b>Realisiert</b> ist, was die verkauften Beteiligungen erwirtschaftet haben.
+          <b>Unrealisiert</b> ist derselbe Schnitt für die, die du noch hältst — auf dem Papier, nicht auf
+          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Beide sind in
+          dieselben drei Treiber zerlegt, damit sie vergleichbar sind: <b>EBITDA</b> ist das, was die
+          Unternehmen operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
           Bewertungsveränderung am Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
-          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung. Beim Laufzeitende ist die ganze
-          Gruppe null, weil dann alles verwertet ist.
+          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung. <b>Kapitalrückführungen</b> sind
+          Erlöse, die eine Beteiligung während der Halteperiode ausgeschüttet hat — auch aus Unternehmen,
+          die noch im Portfolio stehen.
           <br /><br />
-          <b>Kosten</b> liegen zwischen den Beteiligungen und den Investoren. Die <b>Management Fee</b> ist
+          <b>Kosten</b> liegen zwischen den Beteiligungen und den Investoren — jede Gebühr steht hier und
+          in keiner der beiden Gruppen darüber. Die <b>Management Fee</b> ist
           früh in einer Partie der größte Posten, weil sie auf dem ganzen Commitment läuft, lange bevor der
           erste Exit kommt. <b>Transaktionskosten</b> sind Gebühren bei Kauf und Verkauf, Due Diligence und
           die Managementbeteiligung — dort steht auch, was die Zerlegung sonst nicht erklärt, damit die
@@ -1595,15 +1610,25 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
       </h3>
       <table className="cmp"><tbody>
         <tr>
-          <th>Realisiert</th>
+          <th>Wertbeitrag</th>
           <th>Letztes HJ<small>Mio. €</small></th>
           <th>Seit Auflage<small>Mio. €</small></th>
         </tr>
         {groups.map((g) => (
-          <React.Fragment key={g.head ?? "realisiert"}>
-            {g.head && <tr className="seg"><td colSpan={3}>{g.head}</td></tr>}
-            {g.rows.map((r) => (
-              <tr key={r.k}>
+          <React.Fragment key={g.key}>
+            <tr className={"grp" + (open[g.key] ? " on" : "")}>
+              <td>
+                <button type="button" aria-expanded={!!open[g.key]}
+                  onClick={() => { haptic(6); setOpen((o) => ({ ...o, [g.key]: !o[g.key] })); }}>
+                  <span className="grpcar" aria-hidden="true">›</span>{g.head}
+                </button>
+              </td>
+              {cols.map((c, i) => (
+                <td key={i} style={tone(groupSum(g, c), up)}>{money(groupSum(g, c))}</td>
+              ))}
+            </tr>
+            {open[g.key] && g.rows.map((r) => (
+              <tr className="det" key={r.k}>
                 <td>{r.l}</td>
                 {cols.map((c, i) => <td key={i} style={tone(c && c[r.k], up)}>{money(c && c[r.k])}</td>)}
               </tr>
