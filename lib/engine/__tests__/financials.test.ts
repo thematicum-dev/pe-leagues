@@ -126,10 +126,13 @@ describe("Finanzberichte einer Beteiligung", () => {
   it("schließt die Nettoverschuldung lückenlos von Periode zu Periode an", () => {
     holdings.forEach((c) => {
       const st = holdingStatements(c)!;
-      st.periods.forEach((p, i) => {
+      // Nur die Zeitreihe: Die Vergleichsspalten am Ende (laufendes Halbjahr,
+      // Vorjahreshalbjahr, LTM) setzen die Reihe nicht fort.
+      const chain = st.periods.filter((p) => !p.compare);
+      chain.forEach((p, i) => {
         if (i === 0) return;
-        expect(Math.abs(p.netDebtOpen - st.periods[i - 1].netDebt),
-          `${c.name} ${p.label}: Eröffnung ${p.netDebtOpen} vs. Vorspalte ${st.periods[i - 1].netDebt}`).toBeLessThan(1e-6);
+        expect(Math.abs(p.netDebtOpen - chain[i - 1].netDebt),
+          `${c.name} ${p.label}: Eröffnung ${p.netDebtOpen} vs. Vorspalte ${chain[i - 1].netDebt}`).toBeLessThan(1e-6);
       });
     });
   });
@@ -170,16 +173,53 @@ describe("Finanzberichte einer Beteiligung", () => {
     });
   });
 
-  it("verdichtet Halbjahre zu Geschäftsjahren und weist angebrochene Jahre als solche aus", () => {
+  /* Die Zeitreihe kennt nur volle Geschäftsjahre; ein übriges Halbjahr steht
+     nicht mehr als halbe Spalte zwischen Jahreszahlen, sondern in den
+     Vergleichsspalten am Ende — laufendes Halbjahr, Vorjahreshalbjahr, LTM. */
+  it("verdichtet Halbjahre zu vollen Geschäftsjahren", () => {
     holdings.forEach((c) => {
       const st = holdingStatements(c)!;
-      const halves = (c.hist.length - 1);
-      expect(st.periods.length).toBe(1 + Math.ceil(halves / 2));
-      st.periods.slice(1).forEach((p, i) => {
-        const full = (i + 1) * 2 <= halves;
-        expect(p.months).toBe(full ? 12 : 6);
-      });
+      const halves = c.hist.length - 1;
+      const chain = st.periods.filter((p) => !p.compare);
+      expect(chain.length, c.name).toBe(1 + Math.floor(halves / 2));
+      chain.forEach((p) => expect(p.months, `${c.name} ${p.label}`).toBe(12));
     });
+  });
+
+  it("stellt dem laufenden Halbjahr das Vorjahreshalbjahr und die LTM-Periode zur Seite", () => {
+    let sawLtmColumn = 0, sawLtmYear = 0;
+    holdings.forEach((c) => {
+      const st = holdingStatements(c)!;
+      const halves = c.hist.length - 1;
+      const cmp = st.periods.filter((p) => p.compare);
+      const labels = cmp.map((p) => p.label);
+
+      expect(labels, c.name).toContain("HJ " + halves);
+      if (halves >= 3) expect(labels, c.name).toContain("HJ " + (halves - 2));
+
+      // Die LTM-Periode ist immer da: als eigene Spalte, wenn sie quer zu den
+      // Geschäftsjahren liegt, sonst als das jüngste Geschäftsjahr selbst.
+      const ltm = cmp.find((p) => p.label === "LTM");
+      if (halves % 2 === 1) {
+        expect(ltm, c.name).toBeTruthy();
+        sawLtmColumn++;
+      } else {
+        expect(ltm, c.name).toBeUndefined();
+        const chain = st.periods.filter((p) => !p.compare);
+        expect(chain[chain.length - 1].sub, c.name).toMatch(/LTM/);
+        sawLtmYear++;
+      }
+
+      const current = cmp.find((p) => p.label === "HJ " + halves)!;
+      expect(current.months, c.name).toBe(6);
+      if (ltm) {
+        // Zwölf Monate, und mehr Umsatz als das laufende Halbjahr allein
+        expect(ltm.months, c.name).toBe(12);
+        expect(ltm.revenue, c.name).toBeGreaterThan(current.revenue);
+        expect(ltm.netDebt, c.name).toBeCloseTo(current.netDebt, 9);
+      }
+    });
+    expect(sawLtmColumn + sawLtmYear).toBeGreaterThan(0);
   });
 
   it("liefert Kennzahlen, die auf die Kennzahlen der Karte passen", () => {

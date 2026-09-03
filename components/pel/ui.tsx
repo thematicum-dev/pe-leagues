@@ -18,7 +18,7 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep, liveHist,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
@@ -223,6 +223,10 @@ export const CSS = `
 .pel table.fin tr.sum td.rl{color:var(--ink);}
 .pel table.fin tr.memo td{font-size:10.5px;color:var(--ink2);padding-top:0;padding-bottom:8px;border-bottom:0;}
 .pel table.fin tr.memo + tr td{border-top:1px solid var(--rule);}
+/* Die Vergleichsspalten am Ende — laufendes Halbjahr, Vorjahreshalbjahr, LTM —
+   setzen die Zeitreihe nicht fort. Eine Linie trennt sie von den
+   Geschäftsjahren, sonst liest man sie als deren Fortsetzung. */
+.pel table.fin th.cmpstart,.pel table.fin td.cmpstart{border-left:1px solid var(--rule);}
 .pel table.fin tr.head td{padding-top:16px;border-bottom:0;}
 .pel table.fin tr.head td.rl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink2);font-weight:600;}
@@ -1038,9 +1042,12 @@ export function PerformanceCompare({ c, market }) {
      Tabelle stünde damit unter einem "Total Value", den sie nicht erklärt. */
   const now = liveHist(c, market);
   /* Der letzte mitgeschriebene Eintrag beschreibt denselben Zeitpunkt wie
-     `now`; das letzte Halbjahr beginnt also beim vorletzten. */
+     `now`; das letzte Halbjahr beginnt also beim vorletzten. Beide Spalten
+     rechnen als Kette der Einzelperioden — dieselbe Rechnung wie in der
+     Fondsansicht, damit ein Portfolio aus einer Beteiligung dort dieselben
+     Zahlen zeigt wie hier. */
   const kpi = [deltaSet(h[h.length - 2], now), deltaSet(h[0], now)];
-  const val = [bridgeStep(h[h.length - 2], now), bridgeStep(h[0], now)];
+  const val = [bridgeChain(h.slice(-2), now), bridgeChain(h, now)];
 
   const num = (v, dg, unit) => v == null ? "—"
     : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
@@ -1165,10 +1172,15 @@ interface FinRow {
 function plRows(st): FinRow[] {
   const rows: FinRow[] = [
     { k: "rev", l: "Umsatz", v: (p) => p.revenue },
-    { k: "growth", memo: true, l: "Wachstum ggü. Vorperiode",
-      /* Für die erste Spalte eines Zielunternehmens ist die Vorperiode das
-         Basisjahr der Dreijahres-CAGR — sichtbar ist sie nicht, aber ihr
-         Umsatz ist bekannt, und ohne sie bliebe ausgerechnet die Zeile leer,
+    { k: "growth", memo: true, l: "Wachstum ggü. Vorjahr",
+      /* Durchweg ein Jahresvergleich: Geschäftsjahr gegen Vorjahr, laufendes
+         Halbjahr gegen dasselbe Halbjahr des Vorjahres, LTM gegen die zwölf
+         Monate davor. Welche Spalte womit verglichen wird, entscheidet
+         growthOf() anhand der Vergleichsbasis, die die Periode mitbringt.
+
+         Für die erste Spalte eines Zielunternehmens ist das Vorjahr das
+         Basisjahr der Dreijahres-CAGR — sichtbar ist es nicht, aber sein
+         Umsatz ist bekannt, und ohne ihn bliebe ausgerechnet die Zeile leer,
          die die Schwankung zeigen soll. */
       s: (p, i, P) => {
         if (i === 0 && st.kind === "deal" && st.cagrBase > 0) {
@@ -1312,8 +1324,10 @@ function StatementsSheet({ st, hidden, close }) {
               <thead>
                 <tr>
                   <th className="rl">Mio. €</th>
-                  {P.map((p) => (
-                    <th key={p.key}>{p.label}<small>{p.estimated ? "geschätzt" : p.sub}</small></th>
+                  {P.map((p, i) => (
+                    <th key={p.key} className={p.compare && !P[i - 1]?.compare ? "cmpstart" : undefined}>
+                      {p.label}<small>{p.estimated ? "geschätzt" : p.sub}</small>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1326,7 +1340,9 @@ function StatementsSheet({ st, hidden, close }) {
                     return (
                       <tr className="head" key={r.k}>
                         <td className="rl">{r.l}</td>
-                        {P.map((p) => <td key={p.key} />)}
+                        {P.map((p, i) => (
+                          <td key={p.key} className={p.compare && !P[i - 1]?.compare ? "cmpstart" : undefined} />
+                        ))}
                       </tr>
                     );
                   }
@@ -1337,7 +1353,8 @@ function StatementsSheet({ st, hidden, close }) {
                     <tr className={(r.sum ? "sum" : "") + (r.memo ? " memo" : "")} key={r.k}>
                       <td className="rl">{r.l}</td>
                       {P.map((p, i) => (
-                        <td key={p.key} className={p.estimated ? "est" : ""}>
+                        <td key={p.key} className={(p.estimated ? "est" : "")
+                          + (p.compare && !P[i - 1]?.compare ? " cmpstart" : "")}>
                           {veiled ? "—" : r.memo ? r.s!(p, i, P) : fnum(r.v!(p, i, P))}
                         </td>
                       ))}

@@ -632,9 +632,22 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
          Eigentümer, ihre Abschlüsse sieht also niemand — und der Zustand einer
          Partie wird jede Runde als JSON gespeichert. Zurückgesetzt wird
          trotzdem überall, sonst liefen die Einmaleffekte endlos auf. */
-      c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
-        eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0,
-        ...(f.isAi ? {} : { fin: periodFin(c) }) }];
+      /* Bewertet wird, NACHDEM der Eintrag zur Historie gehört. markMultiple()
+         zieht über growthPrem() eine Wachstumsprämie, die erst ab drei
+         Einträgen greift — vorher wurde der Stand bewertet, bevor er selbst
+         zählte, und beim Übergang von zwei auf drei Einträge sprang das
+         Multiple um bis zu 29 %, ohne dass der gespeicherte Stand es sah. Der
+         Eintrag wich damit von dem Wert ab, mit dem das Spiel überall sonst
+         rechnet (navOf, TVPI, Exiterlöse). Alte Halbjahre werden unter
+         legacyHistMark weiterhin nach der alten Reihenfolge bewertet, sonst
+         ließe sich eine laufende Partie nicht mehr wiederholen. */
+      const before = compat.legacyHistMark
+        ? { mult: markMultiple(c, mk), eq: navValueOf(c, mk) + (c.cashOut || 0) } : null;
+      const entry: Any = { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
+        st: c.st ?? 1, out: c.cashOut || 0, ...(f.isAi ? {} : { fin: periodFin(c) }) };
+      c.hist = [...(c.hist || []), entry];
+      entry.mult = before ? before.mult : markMultiple(c, mk);
+      entry.eq = before ? before.eq : navValueOf(c, mk) + (c.cashOut || 0);
       resetPeriod(c);
     });
   });

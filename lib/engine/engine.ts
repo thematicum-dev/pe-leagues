@@ -285,11 +285,12 @@ export interface EngineCompat {
      ganzen weiteren Zufallsstrom — ohne diesen Schalter ließe sich kein
      Halbjahr von davor mehr nachrechnen.                                   */
   legacyEventP?: boolean;
+  legacyHistMark?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
-  addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true,
+  addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
 };
 
 export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
@@ -1360,6 +1361,30 @@ export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number;
     exit: net + recap,
   };
 }
+/* Zerlegung über mehrere Perioden: die Kette der einzelnen Halbjahre statt
+   einer Spanne von Einstieg bis heute.
+
+   Der Unterschied ist nicht kosmetisch. Eine Spanne bewertet das gesamte
+   EBITDA-Wachstum mit dem Einstiegsmultiple, eine Kette jedes Halbjahr mit dem
+   Multiple, das zu Beginn dieses Halbjahres galt — Letzteres ist die übliche
+   Mehrperiodenzerlegung, und nur sie hat die Eigenschaft, die man von einer
+   Aufstellung erwartet: Die Halbjahre addieren sich auf die Gesamtperiode.
+   Vorher rechnete die Fondsansicht ihre Halbjahresspalte als Differenz zweier
+   Spannen (Basis: Einstiegsmultiple), die Beteiligungsansicht dagegen als
+   echte Periode (Basis: Multiple des Vorhalbjahres) — bei einer einzigen
+   Beteiligung hätten beide gleich sein müssen und waren es nicht.          */
+export function bridgeChain(hist, last) {
+  const pts = [...(hist || []), last].filter(Boolean);
+  const out = { ebitda: 0, mult: 0, delev: 0, dist: 0, rest: 0, nav: 0, total: 0 };
+  for (let i = 1; i < pts.length; i++) {
+    const s = bridgeStep(pts[i - 1], pts[i]);
+    if (!s) continue;
+    out.ebitda += s.ebitda; out.mult += s.mult; out.delev += s.delev;
+    out.dist += s.dist; out.rest += s.rest; out.nav += s.nav; out.total += s.total;
+  }
+  return out;
+}
+
 /* Der heutige Stand einer Beteiligung in der Form eines Periodenstands.
    Gebraucht, weil der zuletzt mitgeschriebene Eintrag dem tatsächlichen Wert
    um eine Periode hinterherhinkt: runQuarter schreibt ihn, bevor er selbst zur
@@ -1482,8 +1507,7 @@ export function fundBridge(f, market, quarter) {
     recaps += c.recapOut || 0;
     const h = c.hist || [];
     if (!h.length) return;
-    const st = bridgeStep(h[0], liveHist(c, market));
-    if (!st) return;
+    const st = bridgeChain(h, liveHist(c, market));
     uEbitda += st.ebitda; uMult += st.mult; uDelev += st.delev;
   });
 
