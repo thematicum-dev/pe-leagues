@@ -18,7 +18,8 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep, liveHist,
+  fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
@@ -90,17 +91,6 @@ export const CSS = `
 .pel .infsheet .ib b{color:var(--ink);font-weight:600;}
 .pel .infsheet .ic{width:100%;margin-top:18px;}
 .pel .infgrip{width:34px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;}
-/* Treiberbalken: positiv nach rechts, negativ nach links, gemeinsame Skala. */
-.pel .drv{display:flex;flex-direction:column;gap:7px;}
-.pel .drvrow{display:flex;align-items:center;gap:8px;}
-.pel .drvlab{font-size:11.5px;color:var(--ink2);width:88px;flex:none;}
-.pel .drvtrack{position:relative;flex:1;height:12px;min-width:0;background:var(--shade);}
-.pel .drvzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--rule);}
-.pel .drvbar{position:absolute;top:1px;bottom:1px;min-width:1px;}
-.pel .drvbar.pos{background:var(--teal);}
-.pel .drvbar.neg{background:var(--ox);}
-.pel .drvval{font-size:11.5px;width:78px;flex:none;text-align:right;}
-.pel .drvhint{font-size:10.5px;color:var(--ink2);}
 .pel .hdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px;}
 .pel .shelfmeta{font-size:11.5px;line-height:1.4;color:var(--ink2);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .stat{font-size:9px;letter-spacing:.13em;text-transform:uppercase;opacity:.55;white-space:nowrap;}
@@ -175,9 +165,13 @@ export const CSS = `
    Halteperiode. Drei Spalten, damit sich beide Zahlen direkt vergleichen
    lassen statt in zwei getrennten Blöcken zu stehen. */
 .pel table.cmp{width:100%;border-collapse:collapse;}
-.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 16px;text-align:right;
+.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 10px;text-align:right;
   border-bottom:1px solid var(--rule);white-space:nowrap;
   font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+/* Aussen bündig zur Karte, innen enger — sonst passen drei Spalten auf einem
+   schmalen Gerät nicht nebeneinander. */
+.pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:16px;}
+.pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:16px;}
 .pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
 .pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
@@ -187,11 +181,26 @@ export const CSS = `
    Die Überschrift steht ohne Unterstrich über ihrem Abschnitt, die Summe wird
    durch eine Linie darüber abgesetzt. Beide Tabellen zeigen Zahlen zur selben
    Beteiligung und sollen sich deshalb gleich lesen. */
+.pel table.cmp th small{display:block;font-weight:500;font-size:8.5px;letter-spacing:.08em;
+  text-transform:none;color:var(--ink2);opacity:.7;margin-top:2px;}
 .pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
   padding-top:17px;padding-bottom:5px;border-bottom:0;}
 .pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
   border-top:1px solid var(--rule);}
+/* Aufklappbare Gruppe: Die Kopfzeile trägt die Summe, damit die Aufstellung
+   auch zugeklappt vollständig ist; die Einzelposten begründen sie. */
+.pel table.cmp tr.grp td{padding-top:13px;padding-bottom:11px;}
+.pel table.cmp tr.grp td:first-child{padding:0;}
+.pel table.cmp tr.grp button{display:flex;align-items:center;gap:6px;width:100%;
+  padding:13px 10px 11px 16px;background:none;border:0;cursor:pointer;text-align:left;
+  font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink2);font-weight:600;}
+.pel table.cmp tr.grp .grpcar{display:inline-block;font-size:13px;line-height:1;
+  transition:transform .15s;transform:rotate(0deg);opacity:.7;}
+.pel table.cmp tr.grp.on .grpcar{transform:rotate(90deg);}
+.pel table.cmp tr.det td{font-size:12px;}
+.pel table.cmp tr.det td:first-child{padding-left:28px;}
 
 /* ---------- Berichtsansicht: GuV, Bilanz, Kapitalflussrechnung ----------
    Ein Abschluss ist breiter als ein Telefon. Statt die Spalten zu stauchen,
@@ -878,7 +887,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)}</span>}</td></tr>
       </tbody></table>
       <Stages c={c} compact={quarter} />
-      <PerformanceCompare c={c} />
+      <PerformanceCompare c={c} market={market} />
       <Track c={c} />
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
         <StatementsButton statements={statements}
@@ -1015,7 +1024,7 @@ function deltaSet(a, b) {
   };
 }
 
-export function PerformanceCompare({ c }) {
+export function PerformanceCompare({ c, market }) {
   const h = c.hist || [];
   if (h.length < 2) {
     return (
@@ -1024,13 +1033,23 @@ export function PerformanceCompare({ c }) {
       </div>
     );
   }
-  const now = h[h.length - 1];
+  /* Der heutige Stand statt des zuletzt mitgeschriebenen: Letzterer hinkt dem
+     tatsächlichen Wert um eine Periode hinterher (siehe liveHist), und die
+     Tabelle stünde damit unter einem "Total Value", den sie nicht erklärt. */
+  const now = liveHist(c, market);
+  /* Der letzte mitgeschriebene Eintrag beschreibt denselben Zeitpunkt wie
+     `now`; das letzte Halbjahr beginnt also beim vorletzten. */
   const kpi = [deltaSet(h[h.length - 2], now), deltaSet(h[0], now)];
   const val = [bridgeStep(h[h.length - 2], now), bridgeStep(h[0], now)];
 
   const num = (v, dg, unit) => v == null ? "—"
     : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
-  const money = (v) => v == null ? "—" : (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  /* Die Kennzahlen tragen ihre Einheit je Zeile (Prozent, Prozentpunkte,
+     Turns), der Wertbeitrag hat für alle Zeilen dieselbe — die steht deshalb
+     in der Abschnittszeile und nicht hinter jeder Zahl. Sonst passt die
+     Tabelle auf einem schmalen Gerät nicht in ihre Karte. */
+  const money = (v) => v == null || Math.abs(v) < 0.05 ? "—"
+    : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 1 });
   /* Beim Leverage ist weniger besser, bei allem anderen mehr. */
   const up = (v) => v >= 0, down = (v) => v <= 0;
   const kpiRows = [
@@ -1046,9 +1065,12 @@ export function PerformanceCompare({ c }) {
     { l: "Multiple", k: "mult" },
     { l: "Entschuldung", k: "delev" },
     ...(has("dist") ? [{ l: "Ausschüttung", k: "dist" }] : []),
-    ...(has("rest") ? [{ l: "Sonstiges", k: "rest" }] : []),
+    ...(has("rest") ? [{ l: "Übriges", k: "rest" }] : []),
   ];
-  const tone = (v, good) => ({ color: v == null ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)" });
+  // Was als Strich erscheint, wird auch neutral eingefärbt
+  const tone = (v, good, eps = 0) => ({
+    color: v == null || Math.abs(v) < eps ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)",
+  });
 
   return (
     <>
@@ -1066,7 +1088,9 @@ export function PerformanceCompare({ c }) {
             <b> EBITDA</b> ist operative Arbeit — mehr Umsatz oder bessere Marge, bewertet zum alten
             Multiple. <b>Multiple</b> ist der Markt: dieselbe Substanz wird höher oder niedriger
             bewertet, dafür kannst du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung, die
-            eins zu eins ins Eigenkapital wandert. Die Zeilen addieren sich auf den Gesamtwert.
+            eins zu eins ins Eigenkapital wandert. <b>Übriges</b> ist der Rest der Zerlegung — was ein
+            Zukauf oder ein Teilverkauf verschiebt, ohne einem der drei Treiber zuzugehören. Die Zeilen
+            addieren sich auf den Gesamtwert.
           </Info>
         </div>
       </div>
@@ -1082,16 +1106,16 @@ export function PerformanceCompare({ c }) {
             {kpi.map((set, i) => <td key={i} style={tone(set[r.k], r.good)}>{num(set[r.k], r.dg, r.unit)}</td>)}
           </tr>
         ))}
-        <tr className="seg"><td colSpan={3}>Wertbeitrag</td></tr>
+        <tr className="seg"><td colSpan={3}>Wertbeitrag · Mio. €</td></tr>
         {valRows.map((r) => (
           <tr key={r.k}>
             <td>{r.l}</td>
-            {val.map((set, i) => <td key={i} style={tone(set && set[r.k], up)}>{money(set && set[r.k])}</td>)}
+            {val.map((set, i) => <td key={i} style={tone(set && set[r.k], up, 0.05)}>{money(set && set[r.k])}</td>)}
           </tr>
         ))}
         <tr className="sum">
           <td>Gesamtwert</td>
-          {val.map((set, i) => <td key={i} style={tone(set && set.total, up)}>{money(set && set.total)}</td>)}
+          {val.map((set, i) => <td key={i} style={tone(set && set.total, up, 0.05)}>{money(set && set.total)}</td>)}
         </tr>
       </tbody></table>
     </>
@@ -1496,87 +1520,152 @@ export function Stages({ c, compact }) {
 }
 
 
-/* Balkenzeile für die drei Treiber. Positiv nach rechts, negativ nach links,
-   gemeinsame Skala — so ist auf einen Blick zu sehen, welcher Treiber das
-   Halbjahr gemacht hat und welcher dagegen lief. */
-export function DriverBars({ rows }) {
-  const scale = Math.max(...rows.map(([, v]) => Math.abs(v)), 0.01);
-  return (
-    <div className="drv">
-      {rows.map(([label, v, hint]) => (
-        <div className="drvrow" key={label}>
-          <span className="drvlab">{label}</span>
-          <span className="drvtrack">
-            <i className="drvzero" />
-            <i
-              className={"drvbar" + (v >= 0 ? " pos" : " neg")}
-              style={v >= 0
-                ? { left: "50%", width: `${(Math.abs(v) / scale) * 50}%` }
-                : { right: "50%", width: `${(Math.abs(v) / scale) * 50}%` }}
-            />
-          </span>
-          <span className="mono drvval" style={{ color: v >= 0 ? "var(--teal)" : "var(--ox)" }}>
-            {v >= 0 ? "+" : "−"}{eur(Math.abs(v))}
-          </span>
-          {hint && <span className="drvhint">{hint}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
 
-/* Value Bridge des Fonds. Schließt bewusst auf dieselbe Größe, aus der auch
-   TVPI und Wertung gerechnet werden: Gesamtwert abzüglich Carry abzüglich
-   abgerufenem Kapital. Damit ist das Vorzeichen der Überschrift dasselbe wie
-   das von TVPI − 1 — vorher summierte die Aufstellung nur die Deals, deren
-   Exitweg zufällig eine Zerlegung mitgeschrieben hatte (Schlussverkauf und
-   Tail-End), und ließ Covenant Breaches, Börsengänge und Teilexits ebenso
-   heraus wie Management Fee und Due-Diligence-Kosten. Eine Partie mit einem
-   guten Exit und drei Ausfällen stand dann mit einem Gewinn da, während TVPI
-   und IRR im Minus waren.
+/* Value Bridge des Fonds — dieselbe Tabellenform wie bei einer Beteiligung
+   (PerformanceCompare): zwei Spalten, letztes Halbjahr und seit Auflage, und
+   eine Überleitung, die auf der Kennzahl endet, nach der gewertet wird.
 
-   Was keine eigene Zeile hat, landet in "Fondskosten & Sonstiges": die
-   Gebühren, die außerhalb der Beteiligungen anfallen, der Carry und die
-   Zerlegung der Deals, die aus einer Partie von vor dem 01.09.2026 stammen
-   und noch keine mitgeschrieben haben.                                     */
-export function SeasonDrivers({ fund, market, quarter, title = "Woher die Rendite kam" }) {
+   Oben die Treiber, aufgeteilt nach Ursache und mit dem Gewinn als Summe.
+   Darunter die Überleitung: abgerufenes Kapital plus Gewinn ist der Gesamtwert,
+   Gesamtwert je abgerufenem Euro ist der TVPI. Damit steht die Aufstellung
+   nicht mehr neben der Wertung, sondern führt zu ihr hin.
+
+   Die Halbjahresspalte ist die Differenz zweier Stände (fundBridgeStep) und
+   braucht deshalb den Fonds und den Markt des Vorhalbjahres. Fehlt der — im
+   ersten ausgewerteten Halbjahr —, bleibt die Spalte leer, statt den
+   Anfangsstand als Veränderung auszugeben.                                  */
+export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die Rendite kam" }) {
+  /* Zugeklappt ist die Vorgabe: Die drei Gruppensummen und der Gewinn sind die
+     Antwort, die Einzelposten die Begründung. Der Hook steht vor dem frühen
+     Ausstieg, sonst hinge seine Reihenfolge am Zustand des Fonds. */
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   if (!fund || !market || !(fund.drawn > 0)) return null;
-  const b = fundBridge(fund, market, quarter);
+  const now = fundBridge(fund, market, quarter);
+  const step = prev && prev.fund
+    ? fundBridgeStep(now, fundBridge(prev.fund, prev.market, prev.quarter))
+    : null;
+  const cols = [step, now];
+
+  /* Eine Null wird als Strich gezeigt, nicht als "+0 Mio. €": Vor dem ersten
+     Exit sind EBITDA, Multiple und Entschuldung leer, und eine gerundete Null
+     mit Vorzeichen behauptet dort eine Genauigkeit, die es nicht gibt. */
+  /* Die Einheit steht im Spaltenkopf, nicht in jeder Zelle: "Mio. €" hinter
+     jeder Zahl kostet rund 55 px je Spalte, und damit passte die Tabelle auf
+     einem 390 px breiten Gerät nicht mehr in ihre Karte. */
+  const num = (v) => Math.abs(v).toLocaleString("de-DE", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 1 });
+  const money = (v) => v == null || Math.abs(v) < 0.05 ? "—" : (v >= 0 ? "+" : "−") + num(v);
+  const flat = (v) => v == null ? "—" : num(v);
+  // TVPI wie im Kopf der Ansicht mit zwei Nachkommastellen, nicht wie ein Multiple
+  const mult = (v, sign) => v == null || (sign && Math.abs(v) < 0.005) ? "—"
+    : (sign ? (v >= 0 ? "+" : "−") : "") + Math.abs(v).toFixed(2).replace(".", ",") + "×";
+  const up = (v) => v >= 0;
+  // Posten nur zeigen, wenn sie in einer der Spalten etwas erklären
+  const has = (k) => cols.some((c) => c && Math.abs(c[k]) > 0.05);
+  /* Weiche Trennstellen: "Kapitalrückführungen" und "Transaktionskosten" sind
+     als ein Wort breiter als die Bezeichnungsspalte auf einem schmalen Gerät. */
+  const HEAD = { r: "Realisiert", u: "Unrealisiert", k: "Kosten" };
+  const LABEL = {
+    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung",
+    recaps: "Kapital­rückführungen",
+    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung",
+    fees: "Management Fee", txCost: "Transaktions­kosten", carry: "Carry",
+  };
+  const groups = FUND_BRIDGE_GROUPS.map((g) => ({
+    key: g.key, head: HEAD[g.key],
+    // Carry ist bis weit in die Partie hinein null und bekommt dann keine Zeile
+    rows: g.parts.filter((k) => k !== "carry" || has("carry")).map((k) => ({ l: LABEL[k], k })),
+  }));
+  // Summe einer Gruppe je Spalte — die Kopfzeile trägt sie, damit die
+  // Aufstellung auch zugeklappt vollständig bleibt.
+  const groupSum = (g, c) => c ? g.rows.reduce((a, r) => a + (c[r.k] || 0), 0) : null;
+  /* Was als Strich erscheint, wird auch neutral eingefärbt — eine Null ist
+     weder gut noch schlecht. Die Schwelle ist dieselbe wie bei der Ausgabe. */
+  const tone = (v, good, eps = 0.05) => ({
+    color: v == null || Math.abs(v) < eps ? "var(--ink2)" : good(v) ? "var(--teal)" : "var(--ox)",
+  });
 
   return (
     <div className="card">
       <h3 className="disp">
         {title}
         <Info t="Value Bridge des Fonds">
-          Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, aufgeteilt nach Ursache.
-          <b> EBITDA</b> ist das, was die Unternehmen operativ mehr verdienen als beim Einstieg — deine
-          Portfolioarbeit. <b>Multiple</b> ist Bewertungsveränderung am Markt: gekauft zu 8×, verkauft zu 10×
-          bringt Geld, ohne dass sich im Unternehmen etwas geändert hätte. <b>Entschuldung</b> ist getilgte
-          Nettoverschuldung. <b>Fondskosten &amp; Sonstiges</b> sind Management Fee, Due Diligence,
-          Transaktionskosten und Carry — alles, was zwischen den Beteiligungen und den Investoren liegt.
-          Die Summe ist derselbe Gewinn, aus dem TVPI und Wertung gerechnet werden: Ist sie negativ, steht
-          auch der TVPI unter 1,00×. Ein Fonds, dessen Rendite fast nur aus dem Multiple kommt, hatte Glück
-          mit dem Markt; einer, der aus EBITDA kommt, hat gearbeitet.
+          Der Weg vom abgerufenen Kapital zum Wert in den Händen der Investoren, in drei Gruppen.
+          <br /><br />
+          <b>Realisiert</b> ist, was die verkauften Beteiligungen erwirtschaftet haben.
+          <b>Unrealisiert</b> ist derselbe Schnitt für die, die du noch hältst — auf dem Papier, nicht auf
+          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Beide sind in
+          dieselben drei Treiber zerlegt, damit sie vergleichbar sind: <b>EBITDA</b> ist das, was die
+          Unternehmen operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
+          Bewertungsveränderung am Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
+          du wenig. <b>Entschuldung</b> ist getilgte Nettoverschuldung. <b>Kapitalrückführungen</b> sind
+          Erlöse, die eine Beteiligung während der Halteperiode ausgeschüttet hat — auch aus Unternehmen,
+          die noch im Portfolio stehen.
+          <br /><br />
+          <b>Kosten</b> liegen zwischen den Beteiligungen und den Investoren — jede Gebühr steht hier und
+          in keiner der beiden Gruppen darüber. Die <b>Management Fee</b> ist
+          früh in einer Partie der größte Posten, weil sie auf dem ganzen Commitment läuft, lange bevor der
+          erste Exit kommt. <b>Transaktionskosten</b> sind Gebühren bei Kauf und Verkauf, Due Diligence und
+          die Managementbeteiligung — dort steht auch, was die Zerlegung sonst nicht erklärt, damit die
+          Summe stimmt, statt still zu verschwinden.
+          <br /><br />
+          Die Posten addieren sich auf den <b>Gewinn</b>, und die Überleitung darunter führt ihn zum TVPI:
+          abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je abgerufenem Euro ist der TVPI.
+          Ein negativer Gewinn heißt deshalb zwingend TVPI unter 1,00×.
         </Info>
       </h3>
-      <div className="pad" style={{ paddingTop: 6 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-          <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: b.gain >= 0 ? "var(--teal)" : "var(--ox)" }}>
-            {b.gain >= 0 ? "+" : "−"}{eur(Math.abs(b.gain))}
-          </span>
-          <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-            über {eur(b.drawn)} abgerufenes Kapital · {b.realizedCount} realisierte Beteiligungen
-          </span>
-        </div>
-        <DriverBars rows={[
-          ["EBITDA", b.ebitda, null],
-          ["Multiple", b.mult, null],
-          ["Entschuldung", b.delev, null],
-          ...(Math.abs(b.dist) > 0.05 ? [["Rekapitalisierung", b.dist, null]] : []),
-          ...(b.openCount ? [["Nicht realisiert", b.unreal, null]] : []),
-          ["Fondskosten & Sonstiges", b.rest, null],
-        ]} />
-      </div>
+      <table className="cmp"><tbody>
+        <tr>
+          <th>Wertbeitrag</th>
+          <th>Letztes HJ<small>Mio. €</small></th>
+          <th>Seit Auflage<small>Mio. €</small></th>
+        </tr>
+        {groups.map((g) => (
+          <React.Fragment key={g.key}>
+            <tr className={"grp" + (open[g.key] ? " on" : "")}>
+              <td>
+                <button type="button" aria-expanded={!!open[g.key]}
+                  onClick={() => { haptic(6); setOpen((o) => ({ ...o, [g.key]: !o[g.key] })); }}>
+                  <span className="grpcar" aria-hidden="true">›</span>{g.head}
+                </button>
+              </td>
+              {cols.map((c, i) => (
+                <td key={i} style={tone(groupSum(g, c), up)}>{money(groupSum(g, c))}</td>
+              ))}
+            </tr>
+            {open[g.key] && g.rows.map((r) => (
+              <tr className="det" key={r.k}>
+                <td>{r.l}</td>
+                {cols.map((c, i) => <td key={i} style={tone(c && c[r.k], up)}>{money(c && c[r.k])}</td>)}
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+        <tr className="sum">
+          <td>Gewinn</td>
+          {cols.map((c, i) => <td key={i} style={tone(c && c.gain, up)}>{money(c && c.gain)}</td>)}
+        </tr>
+
+        <tr className="seg"><td colSpan={3}>Überleitung auf den TVPI</td></tr>
+        <tr>
+          <td>Abgerufenes Kapital</td>
+          <td>{step ? money(step.drawn) : "—"}</td>
+          <td>{flat(now.drawn)}</td>
+        </tr>
+        <tr>
+          <td>Gesamtwert</td>
+          <td style={tone(step && step.value, up)}>{step ? money(step.value) : "—"}</td>
+          <td>{flat(now.value)}</td>
+        </tr>
+        <tr className="sum">
+          <td>TVPI</td>
+          <td style={tone(step && step.tvpi, up, 0.005)}>{mult(step && step.tvpi, true)}</td>
+          <td style={tone(now.tvpi - 1, up, 0)}>{mult(now.tvpi, false)}</td>
+        </tr>
+      </tbody></table>
+      <p className="finnote" style={{ paddingBottom: 14 }}>
+        {now.realizedCount} realisierte {now.realizedCount === 1 ? "Beteiligung" : "Beteiligungen"}
+        {now.openCount > 0 && ` · ${now.openCount} noch im Portfolio`}
+      </p>
     </div>
   );
 }

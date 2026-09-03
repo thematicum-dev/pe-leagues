@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
-  fundBridge, bridgeStep, tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
+  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
+  tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
 
@@ -45,6 +46,7 @@ const HUMAN_SLOT = 0;
    Restplatzierung, dass jeder Zweig der Buchung wirklich vorkommt. */
 function decideForHuman(
   state: RuntimeState, halfYear: number, myExitQueue: RuntimeState["exitQueue"][string],
+  lev?: number,
 ): TurnDecisions {
   const me = state.funds[HUMAN_SLOT];
   const holdings = me.holdings as Any[];
@@ -52,7 +54,7 @@ function decideForHuman(
 
   if (holdings.length < 6 && state.deals.length) {
     const d = state.deals[0] as Any;
-    decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.02, leverage: d.levCap }];
+    decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.02, leverage: lev ?? d.levCap }];
   }
   const free = holdings.find((h) => !h.initP);
   if (free) decisions.initiatives = [{ holdingUid: free.uid, dim: "plat", id: "opex" }];
@@ -67,19 +69,23 @@ function decideForHuman(
   return decisions;
 }
 
-function playSeason(seed: number, until: number = PERIODS) {
+function playSeason(seed: number, until: number = PERIODS, lev?: number) {
   const rng = createRng(seed);
   let state = baseState();
   const { deals, landmark } = bootstrapInitialDeals(rng, state.market, state.funds);
   state = { ...state, deals, landmark };
   for (let hy = 1; hy <= until; hy++) {
-    const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+    const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)], lev);
     state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
   }
   return state;
 }
 
 const SEEDS = [20260817, 7, 4242, 99991];
+
+// Summiert über die ausgewiesene Postenliste, nicht über eine zweite Abschrift
+// davon — kommt ein Posten dazu, fällt er hier auf statt still zu verschwinden.
+const sumParts = (b: Any) => FUND_BRIDGE_PARTS.reduce((s: number, k: string) => s + b[k], 0);
 
 describe("Value Bridge des Fonds", () => {
   it("zerlegt jeden realisierten Deal, unabhängig vom Ausstiegsweg", () => {
@@ -103,8 +109,8 @@ describe("Value Bridge des Fonds", () => {
       const state = playSeason(seed);
       for (const f of state.funds) {
         const b = fundBridge(f as Any, state.market, PERIODS);
-        // Die Balken erklären die Überschrift vollständig
-        expect(b.ebitda + b.mult + b.delev + b.dist + b.unreal + b.rest).toBeCloseTo(b.gain, 6);
+        // Die Posten erklären den Gewinn vollständig
+        expect(sumParts(b)).toBeCloseTo(b.gain, 6);
         // …und die Überschrift ist der Gewinn hinter dem TVPI
         const tvpi = tvpiOf(f as Any, state.market, PERIODS);
         expect(b.gain / b.drawn).toBeCloseTo(tvpi - 1, 9);
@@ -151,6 +157,47 @@ describe("Value Bridge des Fonds", () => {
     }
   });
 
+  /* Die Ansicht zeigt die Gruppen zugeklappt mit ihrer Summe. Fehlte dort ein
+     Posten, wäre diese Summe still falsch — die Gruppen müssen die Postenliste
+     also lückenlos und überschneidungsfrei abdecken. */
+  it("teilt jeden Posten genau einer Gruppe zu", () => {
+    const inGroups = FUND_BRIDGE_GROUPS.flatMap((g) => g.parts);
+    expect([...inGroups].sort()).toEqual([...FUND_BRIDGE_PARTS].sort());
+    expect(new Set(inGroups).size).toBe(inGroups.length);
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const b = fundBridge(f as Any, state.market, PERIODS);
+        const byGroup = FUND_BRIDGE_GROUPS.reduce(
+          (s2, g) => s2 + g.parts.reduce((a: number, k: string) => a + b[k], 0), 0);
+        expect(byGroup).toBeCloseTo(b.gain, 6);
+      }
+    }
+  });
+
+  /* Kapitalrückführungen aus Beteiligungen, die noch gehalten werden, hatten
+     in der alten Aufstellung keinen Platz und fielen in den Restposten. */
+  it("weist Kapitalrückführungen aus, auch aus dem laufenden Portfolio", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      // Gering verschuldet, damit Beteiligungen in Nettoliquidität laufen und
+      // der Cash Sweep überhaupt greift
+      const state = playSeason(seed, 16, 1.2);
+      for (const f of state.funds) {
+        const held = ((f.holdings || []) as Any[]).reduce((s2, c) => s2 + (c.recapOut || 0), 0);
+        const sold = ((f.realized || []) as Any[])
+          .reduce((s2, r) => s2 + (r.bridge ? r.bridge.dist || 0 : 0), 0);
+        // Exakt, nicht "mindestens": Fiele der Anteil aus dem laufenden
+        // Portfolio weg, verschöbe er sich still in den Restposten und die
+        // Summe stimmte weiter.
+        expect(fundBridge(f as Any, state.market, 16).recaps,
+          `${seed}/${f.name}`).toBeCloseTo(held + sold, 9);
+        if (held > 0.05) checked++;
+      }
+    }
+    expect(checked, "keine Rückführung aus dem laufenden Portfolio getroffen").toBeGreaterThan(0);
+  });
+
   /* Die Portfolioansicht zeigt dieselbe Zerlegung über zwei Zeiträume, letztes
      Halbjahr und seit Einstieg. Sie ist nur dann trennscharf, wenn ihre Zeilen
      sich genau auf die Veränderung des Gesamtwerts addieren — vorher stand die
@@ -176,6 +223,43 @@ describe("Value Bridge des Fonds", () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  /* Die Aufstellung endet auf der Kennzahl, nach der gewertet wird:
+     abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je
+     abgerufenem Euro ist der TVPI. */
+  it("leitet auf den TVPI über", () => {
+    for (const seed of SEEDS) {
+      const state = playSeason(seed);
+      for (const f of state.funds) {
+        const b = fundBridge(f as Any, state.market, PERIODS);
+        expect(b.drawn + b.gain).toBeCloseTo(b.value, 6);
+        expect(b.tvpi).toBeCloseTo(tvpiOf(f as Any, state.market, PERIODS), 9);
+      }
+    }
+  });
+
+  /* Die Halbjahresspalte ist die Differenz zweier Stände. Weil die Posten an
+     beiden Stichtagen exakt aufgehen, tun es ihre Differenzen auch — und der
+     Gewinn eines Halbjahres ist die Veränderung des Gesamtwerts abzüglich des
+     in dieser Zeit neu abgerufenen Kapitals. */
+  it("zerlegt auch ein einzelnes Halbjahr vollständig", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      const was = playSeason(seed, 13);
+      const now = playSeason(seed, 14);
+      for (const f of now.funds) {
+        const before = was.funds.find((z) => z.slot === f.slot)!;
+        const step = fundBridgeStep(
+          fundBridge(f as Any, now.market, 14),
+          fundBridge(before as Any, was.market, 13),
+        )!;
+        expect(sumParts(step)).toBeCloseTo(step.gain, 6);
+        expect(step.drawn + step.gain).toBeCloseTo(step.value, 6);
+        checked++;
+      }
+    }
+    expect(checked).toBe(SEEDS.length * 5);
   });
 
   it("hat am Laufzeitende nichts Unrealisiertes mehr", () => {
