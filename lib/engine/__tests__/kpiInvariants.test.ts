@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
   SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, INVEST_PERIOD,
-  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
+  fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep, bridgeChain, liveHist,
   tvpiOf, dpiOf, irrOf, scoreOf, cashflowsOf, navOf, totalValueOf, carryOf,
-  eqvOf, markMultiple,
   IRR_FLOOR, IRR_CAP, TVPI_BENCH, IRR_BENCH, clamp,
 } from "../engine";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
@@ -169,17 +168,24 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
     expect(r.bridge, `${where}: ${r.name} ohne Zerlegung`).toBeTruthy();
   }
 
-  /* 8b — Die unrealisierten Treiber ergeben zusammen genau den heutigen
-     Eigenkapitalwert des Portfolios abzüglich des anteilig fortgeschriebenen
-     Einstiegswerts. Diese Probe hängt nicht am Restposten: Ein Fehler in der
+  /* 8b — Die unrealisierten Treiber erklären zusammen mit dem Rest der
+     Kettenzerlegung genau die Wertänderung des Portfolios seit Einstieg.
+     Diese Probe hängt nicht am Restposten der Aufstellung: Ein Fehler in der
      Anteilsskalierung verschöbe sich sonst still nach "Transaktionskosten"
-     und bliebe unbemerkt. Gerechnet ohne die Nullgrenze von navValueOf(),
-     weil die Treiber sie auch nicht kennen. */
+     und bliebe unbemerkt. */
   const open = ((f.holdings || []) as Any[]).filter((c) => (c.hist || []).length >= 1);
-  const openNow = open.reduce((s: number, c: Any) => s + eqvOf(c, markMultiple(c, market)), 0);
-  const openBase = open.reduce((s: number, c: Any) => s + c.hist[0].eq * (c.st ?? 1), 0);
-  expect(b.uEbitda + b.uMult + b.uDelev, `${where}: unrealisierte Treiber`)
-    .toBeCloseTo(openNow - openBase, 6);
+  const chains = open.map((c: Any) => bridgeChain(c.hist, liveHist(c, market)));
+  const chainNav = chains.reduce((s: number, x: Any) => s + x.nav, 0);
+  const chainRest = chains.reduce((s: number, x: Any) => s + x.rest, 0);
+  expect(b.uEbitda + b.uMult + b.uDelev + chainRest, `${where}: unrealisierte Treiber`)
+    .toBeCloseTo(chainNav, 6);
+  /* …und die Kette erklärt dieselbe Wertänderung wie eine einzelne Spanne vom
+     Einstieg bis heute: Sie verteilt sie nur anders auf die Treiber. */
+  const spanNav = open.reduce((s: number, c: Any) => {
+    const one = bridgeStep(c.hist[0], liveHist(c, market));
+    return one ? s + one.nav : s;
+  }, 0);
+  expect(chainNav, `${where}: Kette vs Spanne`).toBeCloseTo(spanNav, 6);
 
   // 9 — Jede gehaltene Beteiligung ist vollständig zerlegbar
   for (const c of (f.holdings || []) as Any[]) {
@@ -297,6 +303,57 @@ describe("Kennzahlen über viele Partien und Spielweisen", () => {
     expect(Number.isFinite(tvpiOf(cases[0][1], market, PERIODS))).toBe(true);
     // Vor dem zweiten Halbjahr gibt es noch keinen IRR
     expect(irrOf(cases[3][1], market, 1)).toBe(0);
+  });
+
+  /* Bei genau einer Beteiligung muss die unrealisierte Gruppe der Fondsansicht
+     Zahl für Zahl dieselbe sein wie der Wertbeitrag in der Beteiligungsansicht
+     — in beiden Spalten. Vorher stimmte nur die Spalte "seit Einstieg": Die
+     Fondsansicht rechnete ihre Halbjahresspalte als Differenz zweier Spannen
+     ab Einstieg (Basis: Einstiegsmultiple), die Beteiligungsansicht als echte
+     Periode (Basis: Multiple des Vorhalbjahres). Dazu kam, dass der
+     mitgeschriebene Periodenstand ein veraltetes Multiple trug. */
+  it("zeigt bei einer einzigen Beteiligung dieselben Treiber wie die Beteiligung selbst", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      let prev: { fund: Any; market: Any; hy: number } | null = null;
+      for (let hy = 1; hy <= 12; hy++) {
+        const me = state.funds[0] as Any;
+        const d: TurnDecisions = {};
+        // Genau eine Beteiligung kaufen und nie verkaufen
+        if (me.holdings.length === 0 && state.deals.length && hy <= 3) {
+          const x = state.deals[0] as Any;
+          d.bids = [{ dealId: x.id, multiple: x.askMult * 1.05, leverage: x.levCap }];
+        }
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { 0: d }, rng } as Any).state;
+        const f = state.funds[0] as Any;
+        if (f.holdings.length !== 1) { prev = null; continue; }
+        const c = f.holdings[0];
+        const h = c.hist || [];
+        const now = liveHist(c, state.market);
+        const B = fundBridge(f, state.market, hy);
+        const A = bridgeChain(h, now);
+        const where = `${seed}/HJ${hy}`;
+        // Spalte "seit Einstieg"
+        expect(B.uEbitda, `${where}: EBITDA seit Einstieg`).toBeCloseTo(A.ebitda, 6);
+        expect(B.uMult, `${where}: Multiple seit Einstieg`).toBeCloseTo(A.mult, 6);
+        expect(B.uDelev, `${where}: Entschuldung seit Einstieg`).toBeCloseTo(A.delev, 6);
+        // Spalte "letztes Halbjahr"
+        if (prev && h.length >= 2) {
+          const step = fundBridgeStep(B, fundBridge(prev.fund, prev.market, prev.hy))!;
+          const Ahj = bridgeChain(h.slice(-2), now);
+          expect(step.uEbitda, `${where}: EBITDA letztes HJ`).toBeCloseTo(Ahj.ebitda, 6);
+          expect(step.uMult, `${where}: Multiple letztes HJ`).toBeCloseTo(Ahj.mult, 6);
+          expect(step.uDelev, `${where}: Entschuldung letztes HJ`).toBeCloseTo(Ahj.delev, 6);
+          checked++;
+        }
+        prev = { fund: f, market: state.market, hy };
+      }
+    }
+    expect(checked, "kein Halbjahr mit genau einer Beteiligung geprüft").toBeGreaterThan(20);
   });
 
   it("liefert für jede Partie eine vollständige Endrangliste", () => {

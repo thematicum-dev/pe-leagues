@@ -18,7 +18,7 @@ import {
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
-  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeStep, liveHist,
+  isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
@@ -1038,9 +1038,12 @@ export function PerformanceCompare({ c, market }) {
      Tabelle stünde damit unter einem "Total Value", den sie nicht erklärt. */
   const now = liveHist(c, market);
   /* Der letzte mitgeschriebene Eintrag beschreibt denselben Zeitpunkt wie
-     `now`; das letzte Halbjahr beginnt also beim vorletzten. */
+     `now`; das letzte Halbjahr beginnt also beim vorletzten. Beide Spalten
+     rechnen als Kette der Einzelperioden — dieselbe Rechnung wie in der
+     Fondsansicht, damit ein Portfolio aus einer Beteiligung dort dieselben
+     Zahlen zeigt wie hier. */
   const kpi = [deltaSet(h[h.length - 2], now), deltaSet(h[0], now)];
-  const val = [bridgeStep(h[h.length - 2], now), bridgeStep(h[0], now)];
+  const val = [bridgeChain(h.slice(-2), now), bridgeChain(h, now)];
 
   const num = (v, dg, unit) => v == null ? "—"
     : (v >= 0 ? "+" : "−") + Math.abs(v).toLocaleString("de-DE", { minimumFractionDigits: dg, maximumFractionDigits: dg }) + unit;
