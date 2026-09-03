@@ -223,6 +223,10 @@ export const CSS = `
 .pel table.fin tr.sum td.rl{color:var(--ink);}
 .pel table.fin tr.memo td{font-size:10.5px;color:var(--ink2);padding-top:0;padding-bottom:8px;border-bottom:0;}
 .pel table.fin tr.memo + tr td{border-top:1px solid var(--rule);}
+/* Die Vergleichsspalten am Ende — laufendes Halbjahr, Vorjahreshalbjahr, LTM —
+   setzen die Zeitreihe nicht fort. Eine Linie trennt sie von den
+   Geschäftsjahren, sonst liest man sie als deren Fortsetzung. */
+.pel table.fin th.cmpstart,.pel table.fin td.cmpstart{border-left:1px solid var(--rule);}
 .pel table.fin tr.head td{padding-top:16px;border-bottom:0;}
 .pel table.fin tr.head td.rl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink2);font-weight:600;}
@@ -1168,10 +1172,15 @@ interface FinRow {
 function plRows(st): FinRow[] {
   const rows: FinRow[] = [
     { k: "rev", l: "Umsatz", v: (p) => p.revenue },
-    { k: "growth", memo: true, l: "Wachstum ggü. Vorperiode",
-      /* Für die erste Spalte eines Zielunternehmens ist die Vorperiode das
-         Basisjahr der Dreijahres-CAGR — sichtbar ist sie nicht, aber ihr
-         Umsatz ist bekannt, und ohne sie bliebe ausgerechnet die Zeile leer,
+    { k: "growth", memo: true, l: "Wachstum ggü. Vorjahr",
+      /* Durchweg ein Jahresvergleich: Geschäftsjahr gegen Vorjahr, laufendes
+         Halbjahr gegen dasselbe Halbjahr des Vorjahres, LTM gegen die zwölf
+         Monate davor. Welche Spalte womit verglichen wird, entscheidet
+         growthOf() anhand der Vergleichsbasis, die die Periode mitbringt.
+
+         Für die erste Spalte eines Zielunternehmens ist das Vorjahr das
+         Basisjahr der Dreijahres-CAGR — sichtbar ist es nicht, aber sein
+         Umsatz ist bekannt, und ohne ihn bliebe ausgerechnet die Zeile leer,
          die die Schwankung zeigen soll. */
       s: (p, i, P) => {
         if (i === 0 && st.kind === "deal" && st.cagrBase > 0) {
@@ -1315,8 +1324,10 @@ function StatementsSheet({ st, hidden, close }) {
               <thead>
                 <tr>
                   <th className="rl">Mio. €</th>
-                  {P.map((p) => (
-                    <th key={p.key}>{p.label}<small>{p.estimated ? "geschätzt" : p.sub}</small></th>
+                  {P.map((p, i) => (
+                    <th key={p.key} className={p.compare && !P[i - 1]?.compare ? "cmpstart" : undefined}>
+                      {p.label}<small>{p.estimated ? "geschätzt" : p.sub}</small>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1329,7 +1340,9 @@ function StatementsSheet({ st, hidden, close }) {
                     return (
                       <tr className="head" key={r.k}>
                         <td className="rl">{r.l}</td>
-                        {P.map((p) => <td key={p.key} />)}
+                        {P.map((p, i) => (
+                          <td key={p.key} className={p.compare && !P[i - 1]?.compare ? "cmpstart" : undefined} />
+                        ))}
                       </tr>
                     );
                   }
@@ -1340,7 +1353,8 @@ function StatementsSheet({ st, hidden, close }) {
                     <tr className={(r.sum ? "sum" : "") + (r.memo ? " memo" : "")} key={r.k}>
                       <td className="rl">{r.l}</td>
                       {P.map((p, i) => (
-                        <td key={p.key} className={p.estimated ? "est" : ""}>
+                        <td key={p.key} className={(p.estimated ? "est" : "")
+                          + (p.compare && !P[i - 1]?.compare ? " cmpstart" : "")}>
                           {veiled ? "—" : r.memo ? r.s!(p, i, P) : fnum(r.v!(p, i, P))}
                         </td>
                       ))}

@@ -192,6 +192,17 @@ export interface FinPeriod {
      Halteperiode — davor gehörte das Unternehmen jemand anderem. */
   opening: boolean;
   estimated: boolean;
+  /* Vergleichsspalte statt Glied der Zeitreihe: das laufende Halbjahr, das
+     Halbjahr des Vorjahres, die rollierenden zwölf Monate. Sie stehen neben
+     den Geschäftsjahren, setzen sie aber nicht fort — ihre Eröffnungsbilanz
+     schließt deshalb nicht an die Vorspalte an.                            */
+  compare?: boolean;
+  /* Vergleichsbasis für die Wachstumszeile, wenn die Nachbarspalte nicht die
+     richtige ist: Das laufende Halbjahr misst sich am Vorjahreshalbjahr, die
+     LTM-Periode an der LTM-Periode ein Jahr davor — nicht am Geschäftsjahr
+     daneben, mit dem sie sich überschneidet.                               */
+  cmpRevenue?: number;
+  cmpAdjEbitda?: number;
 
   // GuV
   revenue: number;
@@ -343,7 +354,7 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
     const oneOff = adjEbitda * shown[i].oneOff;
     periods.push(makePeriod({
       key: "y" + back, label: back === 0 ? "LTM" : `−${back}J`,
-      sub: back === 0 ? "letzte 12M" : "12M", months: 12,
+      sub: back === 0 ? "LTM · 12M" : "12M", months: 12,
       levered: false,
       revenue, adjEbitda, oneOff, da: capex, interest: 0, tax,
       dNwc: (nwPct / 100) * (revenue - revPrev), capex, acquisitions: 0, distributions: 0,
@@ -470,42 +481,75 @@ export function holdingStatements(c: Any): Statements | null {
     }));
   }
 
-  const periods = [opening, ...groupToYears(halves, true)];
+  /* Geschäftsjahre, dann drei Spalten, die ein Portfolio-Review immer sehen
+     will: das laufende Halbjahr, dasselbe Halbjahr des Vorjahres daneben, und
+     die letzten zwölf Monate rollierend.
+
+     Vorher endete die Reihe bei ungerader Halbjahreszahl auf einem
+     Sechsmonatsstummel — eine Spalte, die neben lauter Jahreszahlen steht und
+     halb so groß ist. Die LTM-Spalte ist die übliche Antwort darauf: Sie
+     schließt dieselbe Lücke, aber mit einer vergleichbaren Zahl.           */
+  const n = halves.length;
+  const tail: FinPeriod[] = [];
+  if (n >= 3) tail.push({ ...halves[n - 3], key: "hp", label: "HJ " + (n - 2), sub: "6M Vorjahr", compare: true,
+    ...(n >= 5 ? { cmpRevenue: halves[n - 5].revenue, cmpAdjEbitda: halves[n - 5].adjEbitda } : {}) });
+  if (n >= 1) tail.push({ ...halves[n - 1], key: "hc", label: "HJ " + n, sub: "6M laufend", compare: true,
+    ...(n >= 3 ? { cmpRevenue: halves[n - 3].revenue, cmpAdjEbitda: halves[n - 3].adjEbitda } : {}) });
+
+  const years = groupToYears(halves, true);
+  if (n >= 2 && n % 2 === 1) {
+    // Ungerade Zahl an Halbjahren: Die letzten zwölf Monate liegen quer zu den
+    // Geschäftsjahren und brauchen eine eigene Spalte.
+    const ltm = mergeHalves(halves[n - 2], halves[n - 1], "ltm", "LTM", "12M rollierend", true);
+    // Verglichen wird mit den zwölf Monaten davor, nicht mit dem
+    // Geschäftsjahr daneben — das überschneidet sich mit der LTM-Periode.
+    const before = n >= 4 ? mergeHalves(halves[n - 4], halves[n - 3], "x", "x", "x", true) : null;
+    tail.push({ ...ltm, compare: true,
+      ...(before ? { cmpRevenue: before.revenue, cmpAdjEbitda: before.adjEbitda } : {}) });
+  } else if (years.length) {
+    // Gerade Zahl: Das jüngste Geschäftsjahr *ist* die LTM-Periode.
+    years[years.length - 1] = { ...years[years.length - 1], sub: "12M · zugleich LTM" };
+  }
+
   return {
     kind: "holding", name: c.name, sector: c.sector,
-    periods, levered: true,
+    periods: [opening, ...years, ...tail], levered: true,
     anyEstimated: halves.some((p) => p.estimated),
   };
 }
 
-/* Zwei Halbjahre ergeben ein Geschäftsjahr: Stromgrößen addiert, Bilanz vom
-   Stichtag des zweiten. Bleibt am Ende ein einzelnes Halbjahr übrig, wird es
-   als Sechsmonatsspalte ausgewiesen statt stillschweigend hochgerechnet.    */
+/* Zwei aufeinanderfolgende Halbjahre zu einer Zwölfmonatsspalte: Stromgrößen
+   addiert, Bilanz vom Stichtag des zweiten. Trägt sowohl das Geschäftsjahr als
+   auch die rollierende LTM-Periode — der Unterschied ist nur, welche zwei
+   Halbjahre zusammengefasst werden.                                        */
+function mergeHalves(a: FinPeriod, b: FinPeriod, key: string, label: string,
+  sub: string, levered: boolean): FinPeriod {
+  return makePeriod({
+    key, label, sub, months: 12,
+    estimated: a.estimated || b.estimated, levered,
+    revenue: a.revenue + b.revenue,
+    adjEbitda: a.adjEbitda + b.adjEbitda,
+    oneOff: a.oneOff + b.oneOff,
+    da: a.da + b.da,
+    interest: a.interest + b.interest,
+    tax: a.tax + b.tax,
+    dNwc: a.dNwc + b.dNwc,
+    capex: a.capex + b.capex,
+    acquisitions: a.acquisitions + b.acquisitions,
+    distributions: a.distributions + b.distributions,
+    ppe: b.ppe, goodwill: b.goodwill, nwc: b.nwc,
+    netDebt: b.netDebt, equity: b.equity, netDebtOpen: a.netDebtOpen,
+  });
+}
+
+/* Die abgeschlossenen Geschäftsjahre. Ein einzelnes übriges Halbjahr am Ende
+   erscheint hier nicht mehr als halbe Spalte zwischen lauter Jahreszahlen —
+   es steht in der LTM- und der Halbjahresspalte (siehe holdingStatements). */
 function groupToYears(halves: FinPeriod[], levered: boolean): FinPeriod[] {
   const out: FinPeriod[] = [];
-  for (let i = 0; i < halves.length; i += 2) {
-    const a = halves[i], b = halves[i + 1];
-    const year = Math.floor(i / 2) + 1;
-    if (!b) {
-      out.push({ ...a, key: "y" + year, label: "J" + year, sub: "6M (laufend)" });
-      continue;
-    }
-    out.push(makePeriod({
-      key: "y" + year, label: "J" + year, sub: "12M", months: 12,
-      estimated: a.estimated || b.estimated, levered,
-      revenue: a.revenue + b.revenue,
-      adjEbitda: a.adjEbitda + b.adjEbitda,
-      oneOff: a.oneOff + b.oneOff,
-      da: a.da + b.da,
-      interest: a.interest + b.interest,
-      tax: a.tax + b.tax,
-      dNwc: a.dNwc + b.dNwc,
-      capex: a.capex + b.capex,
-      acquisitions: a.acquisitions + b.acquisitions,
-      distributions: a.distributions + b.distributions,
-      ppe: b.ppe, goodwill: b.goodwill, nwc: b.nwc,
-      netDebt: b.netDebt, equity: b.equity, netDebtOpen: a.netDebtOpen,
-    }));
+  for (let i = 0; i + 1 < halves.length; i += 2) {
+    out.push(mergeHalves(halves[i], halves[i + 1],
+      "y" + (i / 2 + 1), "J" + (i / 2 + 1), "12M", levered));
   }
   return out;
 }
@@ -532,7 +576,13 @@ export function ratiosOf(p: FinPeriod, levered: boolean) {
    Perioden — eine Sechsmonatsspalte neben einem Geschäftsjahr ergäbe einen
    Einbruch, den es nicht gab.                                               */
 export function growthOf(p: FinPeriod, prev: FinPeriod | null, key: "revenue" | "adjEbitda") {
-  if (!prev || prev.opening || p.opening || p.months !== prev.months) return null;
-  if (!(prev[key] > 0)) return null;
-  return (p[key] / prev[key] - 1) * 100;
+  if (p.opening) return null;
+  /* Trägt die Spalte ihre eigene Vergleichsbasis, gilt die. Sonst die
+     Nachbarspalte — aber nur, wenn sie dieselbe Länge hat: Sechs gegen zwölf
+     Monate wäre kein Wachstum, sondern ein Maßstabsfehler. */
+  const own = key === "revenue" ? p.cmpRevenue : p.cmpAdjEbitda;
+  const base = own != null ? own
+    : prev && p.months === prev.months ? prev[key] : null;
+  if (!(base != null && base > 0)) return null;
+  return (p[key] / base - 1) * 100;
 }
