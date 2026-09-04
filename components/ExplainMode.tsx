@@ -41,8 +41,12 @@ function Briefing({ dark, setDark, onStart }) {
             <div className="eyebrow">Erklärmodus · Vintage 2026</div>
             <h1 className="disp" style={{ fontSize: 38, margin: "8px 0 0" }}>PE-Leagues</h1>
           </div>
-          <button className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-            onClick={() => setDark(!dark)} aria-label="Darstellung wechseln">{dark ? "☀" : "☾"}</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Link href="/dashboard" className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              aria-label="Zum Dashboard">←</Link>
+            <button className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+              onClick={() => setDark(!dark)} aria-label="Darstellung wechseln">{dark ? "☀" : "☾"}</button>
+          </div>
         </div>
 
         <div className="card">
@@ -853,6 +857,9 @@ function GuidedRun({ dark, setDark, back }) {
                 <div className="stat">Erklärmodus · Dealflow</div>
                 <div className="statv mono">{eur(CAPITAL)} <span style={{ fontSize: 11, opacity: .6 }}>Dry Powder</span></div>
               </div>
+              <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
+                ←
+              </Link>
               <button className="theme" onClick={() => { haptic(6); setDark(!dark); }} aria-label="Darstellung wechseln">
                 {dark ? "☀" : "☾"}
               </button>
@@ -907,6 +914,9 @@ function GuidedRun({ dark, setDark, back }) {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
+              ←
+            </Link>
             <button className="theme" onClick={() => { haptic(6); setDark(!dark); }} aria-label="Darstellung wechseln">
               {dark ? "☀" : "☾"}
             </button>

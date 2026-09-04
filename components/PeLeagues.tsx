@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 
 /* ---------------- Spiellogik ----------------
    SECTORS, ARCHES, CAPITAL, MAX_SLOTS und die übrigen Parameter sowie alle
@@ -853,8 +854,12 @@ function finalize(c, gross, buyer, feeRate, extra) {
               <div className="eyebrow">Vintage 2026 · Kohorte 01</div>
               <h1 className="disp" style={{ fontSize: 38, margin: "8px 0 6px" }}>PE-Leagues</h1>
             </div>
-            <button className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
-              onClick={() => setDark(!dark)} aria-label="Darstellung wechseln">{dark ? "☀" : "☾"}</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Link href="/dashboard" className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                aria-label="Zum Dashboard">←</Link>
+              <button className="theme" style={{ borderColor: "var(--rule)", color: "var(--ink)" }}
+                onClick={() => setDark(!dark)} aria-label="Darstellung wechseln">{dark ? "☀" : "☾"}</button>
+            </div>
           </div>
           <div style={{ padding: "0 16px" }}>
             <p style={{ fontSize: 14, color: "var(--ink2)", lineHeight: 1.55, margin: 0 }}>
@@ -894,6 +899,9 @@ function finalize(c, gross, buyer, feeRate, extra) {
             <div className="stat">Halbjahr</div>
             <div className="statv mono">{quarter}<span style={{ opacity: .5 }}>/{PERIODS}</span></div>
           </div>
+          <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
+            ←
+          </Link>
           <button className="theme" onClick={() => { haptic(6); setDark(!dark); }} aria-label="Darstellung wechseln">
             {dark ? "☀" : "☾"}
           </button>
