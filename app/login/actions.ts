@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/auth/next";
 
 export async function login(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/dashboard");
+  const next = safeNext(String(formData.get("next") ?? ""));
 
   if (!email || !password) {
     return { error: "Bitte E-Mail-Adresse und Passwort eingeben." };

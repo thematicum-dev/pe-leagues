@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAnonKey, getSupabaseUrl } from "./env";
+import { safeNext } from "@/lib/auth/next";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -43,7 +44,12 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", path);
+    // safeNext filtert den Übungsmodus heraus: der ist kein Anmeldeziel,
+    // dort landet man nur bewusst vom Dashboard aus.
+    const next = safeNext(path);
+    if (next !== "/dashboard") {
+      url.searchParams.set("next", next);
+    }
     return NextResponse.redirect(url);
   }
 
