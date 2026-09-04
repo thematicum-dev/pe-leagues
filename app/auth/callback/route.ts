@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-
-// Nur eigene, relative Ziele zulassen -- sonst ließe sich der Link aus der
-// E-Mail zu einer Weiterleitung auf eine fremde Seite umbiegen.
-function safeNext(raw: string | null): string {
-  return raw && /^\/[A-Za-z0-9\-._~/]*$/.test(raw) ? raw : "/dashboard";
-}
+import { safeNext } from "@/lib/auth/next";
 
 // Ziel des Bestätigungslinks aus E-Mails (Registrierung, Passwort-vergessen).
 //

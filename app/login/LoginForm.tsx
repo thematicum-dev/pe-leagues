@@ -4,11 +4,12 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { login } from "./actions";
+import { safeNext } from "@/lib/auth/next";
 import Logo from "@/components/Logo";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = safeNext(searchParams.get("next"));
   const [state, formAction, pending] = useActionState(login, null);
 
   return (
@@ -40,9 +41,6 @@ export default function LoginForm() {
         <div className="authlinks">
           <Link href="/forgot-password">Passwort vergessen?</Link>
           <Link href="/signup">Neu hier? Registrieren</Link>
-        </div>
-        <div className="authlinks">
-          <Link href="/practice">Ohne Anmeldung: Übungsmodus</Link>
         </div>
       </form>
     </main>

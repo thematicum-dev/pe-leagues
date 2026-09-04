@@ -67,9 +67,6 @@ export default function SignupPage() {
         <div className="authlinks">
           <Link href="/login">Schon registriert? Anmelden</Link>
         </div>
-        <div className="authlinks">
-          <Link href="/practice">Ohne Anmeldung: Übungsmodus</Link>
-        </div>
       </form>
     </main>
   );

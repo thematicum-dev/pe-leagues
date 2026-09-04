@@ -17,12 +17,13 @@ export default async function Home() {
     <main className="landing">
       <div className="landingcard">
         <Logo />
-        <p className="tagline">Zehn Jahre. Fünf Fonds. Eine Rangliste.</p>
-        <h1>Führe deinen Buyout-Fonds gegen echte Mitspieler.</h1>
+        <p className="tagline">500 Mio. € Commitment. Fünf Fonds. Ein Dealflow.</p>
+        <h1>Manage deinen Private-Equity-Fonds durch einen vollen Zyklus.</h1>
         <p>
-          Zehn Jahre, getaktet in Halbjahren: bieten, Portfolios entwickeln, verkaufen. Melde
-          dich an, um Mehrspieler-Partien zu erstellen und beizutreten — oder probiere zuerst den
-          Übungsmodus, ganz ohne Konto.
+          Investment, Value Creation, Exit: Einstiegsmultiple und Kapitalstruktur, das
+          Wertsteigerungsprogramm über die Halteperiode, der Realisierungszeitpunkt. Maximiere die
+          Rendite, gemessen an TVPI und IRR. Jede Partie geht in deinen persönlichen Track Record
+          ein — und in die globale Rangliste. Reicht es für Top Quartile der PE Leagues Community?
         </p>
         <div className="landingactions">
           <Link href="/login" className="btn-primary">
@@ -31,9 +32,6 @@ export default async function Home() {
           <Link href="/signup" className="btn-secondary">
             Konto erstellen
           </Link>
-        </div>
-        <div className="landingpractice">
-          <Link href="/practice">Ohne Anmeldung direkt in den Übungsmodus →</Link>
         </div>
       </div>
     </main>
