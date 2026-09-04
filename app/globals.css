@@ -160,11 +160,6 @@ body {
   cursor: default;
 }
 
-.landingpractice a {
-  color: var(--ink2);
-  font-size: 13px;
-}
-
 .authcard {
   display: flex;
   flex-direction: column;
