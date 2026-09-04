@@ -53,7 +53,6 @@ export default async function ConfirmEmailPage({
 
         <div className="authlinks">
           <Link href="/forgot-password">Passwort vergessen</Link>
-          <Link href="/practice">Übungsmodus</Link>
         </div>
       </div>
     </main>

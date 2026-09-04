@@ -41,9 +41,6 @@ export default function LoginForm() {
           <Link href="/forgot-password">Passwort vergessen?</Link>
           <Link href="/signup">Neu hier? Registrieren</Link>
         </div>
-        <div className="authlinks">
-          <Link href="/practice">Ohne Anmeldung: Übungsmodus</Link>
-        </div>
       </form>
     </main>
   );
