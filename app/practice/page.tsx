@@ -1,20 +1,13 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccess } from "@/lib/access/context";
 import PeLeagues from "@/components/PeLeagues";
 
 export const dynamic = "force-dynamic";
 
 export default async function PracticePage() {
-  // Zweite Schranke neben der Middleware: der Übungsmodus ist nur
-  // angemeldeten Nutzern zugänglich.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login?next=/practice");
-  }
+  // Dieselbe Schranke wie für den restlichen Spielbereich: angemeldet,
+  // Profil vorhanden, vom Admin freigegeben, mindestens ein Universum
+  // zugeteilt. Die Middleware fängt nur den fehlenden Login ab.
+  await requireAccess("/practice");
 
   return <PeLeagues />;
 }

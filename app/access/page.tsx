@@ -60,7 +60,6 @@ export default async function AccessPage() {
         </form>
         <div className="authlinks">
           <Link href="/access">Status neu laden</Link>
-          <Link href="/practice">Übungsmodus</Link>
         </div>
       </div>
     </main>
