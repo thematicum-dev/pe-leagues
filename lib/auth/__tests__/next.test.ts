@@ -13,9 +13,16 @@ describe("safeNext", () => {
     expect(safeNext("")).toBe("/dashboard");
   });
 
-  it("leitet nie in den Übungsmodus", () => {
+  it("leitet nie in Übungs- oder Erklärmodus", () => {
     expect(safeNext("/practice")).toBe("/dashboard");
     expect(safeNext("/practice/")).toBe("/dashboard");
+    expect(safeNext("/explain")).toBe("/dashboard");
+    expect(safeNext("/explain/")).toBe("/dashboard");
+  });
+
+  it("verwechselt gleich beginnende Pfade nicht mit den beiden Modi", () => {
+    expect(safeNext("/practices")).toBe("/practices");
+    expect(safeNext("/explained")).toBe("/explained");
   });
 
   it("weist fremde Ziele ab", () => {

@@ -94,6 +94,9 @@ export default async function DashboardPage() {
             <a href="/practice" className="btn-secondary">
               Übungsmodus
             </a>
+            <a href="/explain" className="btn-secondary">
+              Erklärmodus
+            </a>
             {isAdmin && (
               <a href="/admin" className="btn-secondary">
                 Admin

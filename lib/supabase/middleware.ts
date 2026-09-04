@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   "/leaderboard",
   "/season",
   "/practice",
+  "/explain",
 ];
 
 export async function updateSession(request: NextRequest) {
