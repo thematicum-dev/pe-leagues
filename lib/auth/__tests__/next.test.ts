@@ -13,7 +13,7 @@ describe("safeNext", () => {
     expect(safeNext("")).toBe("/dashboard");
   });
 
-  it("leitet nie in Übungs- oder Erklärmodus", () => {
+  it("leitet nie in Übungsmodus oder Einführung", () => {
     expect(safeNext("/practice")).toBe("/dashboard");
     expect(safeNext("/practice/")).toBe("/dashboard");
     expect(safeNext("/explain")).toBe("/dashboard");

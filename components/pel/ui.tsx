@@ -135,6 +135,12 @@ export const CSS = `
 .pel .shelfmain{flex:1;min-width:0;}
 .pel .shelfname{font-size:14px;font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .shelfmoic{font-size:16px;font-weight:500;width:52px;text-align:right;flex:none;}
+/* Die Sparkline wird an der Metazeile ausgerichtet, nicht in der Zeile zentriert:
+   zentriert reichte sie in das Zeilenfeld des Namens hinein, und weil die Kurve
+   je nach Verlauf ihre Box oben ausfüllt, lag die Linie genau auf der Unterkante
+   des Namens. Die feste Höhe ersetzt zugleich die Ableitung aus dem viewBox --
+   die ist als Flex-Element nicht in jedem Browser gleich. */
+.pel .shelfspark{width:64px;height:26px;flex:none;display:block;align-self:flex-end;}
 .pel .card.slot{border-style:dashed;background:transparent;box-shadow:none;}
 .pel .hhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:16px 15px 0;}
 .pel .flagpill{flex:none;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;
@@ -547,7 +553,7 @@ export function News({ feed, quarter, practice }) {
         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
       </div>
       {last.length === 0 ? (
-        <div className="quiet">{practice ? "Ruhiges Halbjahr. Setz eine Maßnahme auf oder schließ es ab." : "Ruhiges Halbjahr. Gib Gebote ab und schließe es ab."}</div>
+        <div className="quiet">{practice ? "Ruhiges Halbjahr — keine Meldungen. Setze eine Maßnahme auf oder schließe das Halbjahr ab." : "Ruhiges Halbjahr — keine Meldungen. Gib Gebote ab oder schließe das Halbjahr ab."}</div>
       ) : (
         last.map((f, i) => (
           <div className={"item " + (f.tone || "neu")} key={i} style={{ animationDelay: `${i * 60}ms` }}>
@@ -700,10 +706,11 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
       <div className="pad" style={{ paddingTop: 12 }}>
         <StatementsButton statements={statements} hidden={hidden}
           label={`📑 Financial Statements · ${DEAL_YEARS} Jahre`} />
-        <p className="hint" style={{ margin: "6px 0 12px" }}>
-          {hidden ? "Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt."
-            : "GuV, Bilanz und Kapitalflussrechnung des Ziels, aggregiert wie im Investmentmodell."}
-        </p>
+        {hidden && (
+          <p className="hint" style={{ margin: "6px 0 12px" }}>
+            Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
+          </p>
+        )}
         {dd ? (
           <p className="hint teal">🔍 Due Diligence abgeschlossen</p>
         ) : (
@@ -714,10 +721,10 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
                 : `🔍 Due Diligence · ${eur(ddCost)}`}
             </button>
             <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 6 }}>
-              {hidden ? "Ohne DD kein Datenraum — du kaufst auf Umsatz und Bauchgefühl."
-                : flagHidden ? "Flagge ungeprüft, Branchenreferenz und erwartetes Wachstum ggü. dem Sektor fehlen."
-                : ddFull ? `Bei Analysefähigkeit ${me.attrs.analysis} laufen höchstens ${ddCap} Datenräume gleichzeitig. Ein Prozess müsste abgebrochen werden.`
-                : `Branchenreferenz, Schätzung des Wachstums gegenüber dem Sektor (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig sofort — auch wenn du den Deal nicht bekommst.`}
+              {hidden ? "Ohne Datenraum bleiben Ertrag und Cashflow verdeckt."
+                : flagHidden ? "Flagge, Branchenreferenz und erwartetes Wachstum bleiben ohne Datenraum verdeckt."
+                : ddFull ? `Höchstens ${ddCap} Datenräume gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
+                : `Branchenreferenz, Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
             </p>
           </div>
         )}
@@ -728,7 +735,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           {mult < reserve
             ? `Unter der Schmerzgrenze des Verkäufers (rund ${x(reserve)}) — er zieht das Objekt zurück.`
             : d.type === "prop"
-              ? `Off-Market. Der Gesellschafter verkauft nicht unter rund ${x(reserve)}, andere Fonds sitzen selten mit am Tisch.`
+              ? `Off-Market. Reservationspreis rund ${x(reserve)}, Mitbieter aus der Kohorte sind selten.`
               : `Auktion. Reservationspreis rund ${x(reserve)}, die Kohorte bietet mit.`}
         </p>
         <div className="slrow" style={{ marginTop: 8 }}><span>Leverage</span>
@@ -746,12 +753,6 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
               <Info k="impliedMoM" />
             </td></tr>
         </tbody></table>
-        {mom != null && (
-          <p className="hint" style={{ marginTop: 6 }}>
-            Base Case ohne Value Creation, Exit zum Einstiegsmultiple nach {LBO_YEARS} Jahren.
-            Was darüber hinausgeht, musst du selbst erarbeiten.
-          </p>
-        )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           {bid ? (
             <button className="ox" style={{ flex: 1 }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
@@ -899,8 +900,12 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             ? ` · ${finYears} ${finYears === 1 ? "Jahr" : "Jahre"} Halteperiode`
             : " · Eröffnungsbilanz"}`} />
         <p className="hint" style={{ marginTop: 6 }}>
-          GuV, Bilanz und Kapitalflussrechnung seit dem Vollzug — mit Kaufpreisallokation,
-          Akquisitionsfinanzierung und der Überleitung von bereinigtem auf berichtetes EBITDA.
+          GuV, Bilanz, Kapitalflussrechnung
+          <Info t="Financial Statements">
+            GuV, Bilanz und Kapitalflussrechnung der Beteiligung ab dem Vollzug — einschließlich
+            Kaufpreisallokation, Akquisitionsfinanzierung und der Überleitung von bereinigtem auf
+            berichtetes EBITDA.
+          </Info>
         </p>
       </div>
       <div className="pad" style={{ paddingTop: 12 }}>
@@ -909,8 +914,9 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
             const searching = !!se, eb = ebitdaOf(c);
             return (
-              <button key={k} className={"seat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")}
-                className={(k === "cfo" ? sp("hire") : "").trim()}
+              <button key={k}
+                className={("seat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
+                  + (k === "cfo" ? sp("hire") : "")).trim()}
                 disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
                 <div className="rn">{nm}</div>
                 <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
@@ -1753,6 +1759,13 @@ export function Track({ c }) {
 
 /* TVPI-Verlauf der Kohorte. Der eigene Fonds kräftig, die Wettbewerber im Hintergrund,
    dazu das Interquartilsband — die Währung, in der im Fundraising gesprochen wird.   */
+/* Quartil über den Perzentilrang (rank − 0,5) / n. Die frühere Rechnung
+   (rank <= Math.ceil(n / 4)) wies bei fünf Fonds auch Platz 2 dem ersten
+   Quartil zu -- bei 40 % der Kohorte ist das zweites Quartil. */
+function quartileOf(rank, n) {
+  return Math.min(4, Math.max(1, Math.ceil(((rank - 0.5) / n) * 4)));
+}
+
 export function TvpiChart({ hist, meIdx }) {
   if (!hist || hist.length < 2) return <div className="quiet">Der Verlauf entsteht ab dem zweiten Halbjahr.</div>;
   const T = 8, B = 96, L = 26, R = 276;
@@ -1793,8 +1806,7 @@ export function TvpiChart({ hist, meIdx }) {
         <text x={R} y={B + 12} fontSize="7.5" fontFamily="Inter" textAnchor="end"
           style={{ fill: "var(--ink2)" }}>HJ {hist.length - 1}</text>
       </svg>
-      <p className="hint" style={{ marginTop: 8 }}>Platz {rank} von {n} · {rank <= Math.ceil(n / 4) ? "1. Quartil"
-        : rank <= Math.ceil(n / 2) ? "2. Quartil" : rank <= Math.ceil(n * 3 / 4) ? "3. Quartil" : "4. Quartil"}</p>
+      <p className="hint" style={{ marginTop: 8 }}>Platz {rank} von {n} · {quartileOf(rank, n)}. Quartil</p>
     </div>
   );
 }
@@ -1849,7 +1861,12 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
         const base = c.costTotal || 1;
         const vals = t.length > 1 ? t.map((v) => v / base) : [1, 1];
         const hiV = Math.max(1.15, ...vals), loV = Math.min(0.85, ...vals);
-        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 64},${24 - (v - loV) / (hiV - loV || 1) * 22}`).join(" ");
+        /* Zeichenfläche innerhalb der 26 Einheiten hohen Box: Grundlinie bei 24,
+           Amplitude 18. Die sechs Einheiten Luft nach oben sind Absicht -- ein
+           stark steigender Verlauf stieß sonst an die Oberkante der Box und lag
+           damit direkt an der Namenszeile. */
+        const yOf = (v) => 24 - ((v - loV) / (hiV - loV || 1)) * 18;
+        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 64},${yOf(v)}`).join(" ");
         return (
           <div className="card st shelf" key={c.uid} style={{ "--sec": SECCOLOR[c.sector] }}
             onClick={() => onPick && onPick(c.uid)}>
@@ -1862,10 +1879,10 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
                   {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ</span>
                 </div>
               </div>
-              <svg viewBox="0 0 64 26" style={{ width: 64, flex: "none" }} role="img"
+              <svg viewBox="0 0 64 26" className="shelfspark" role="img"
                 aria-label={`Wertverlauf von ${c.name}`}>
-                <line x1="0" y1={24 - (1 - loV) / (hiV - loV || 1) * 22} x2="64"
-                  y2={24 - (1 - loV) / (hiV - loV || 1) * 22} style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
+                <line x1="0" y1={yOf(1)} x2="64" y2={yOf(1)}
+                  style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
                 <polyline points={pts} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" />
               </svg>
               <div className="mono shelfmoic" style={{ color: col }}>{h.moic.toFixed(2)}×</div>
@@ -1904,6 +1921,12 @@ export function Def({ t, children }) {
    heißen bzw. anders gerechnet werden als hier. Gängige Begriffe wie EBITDA,
    TVPI oder Leverage stehen bewusst nicht darin — die erklärt niemand, der
    das Spiel spielt, gern erklärt bekommen. */
+/* Gebührenreserve bei Auflage: dieselbe Rechnung wie feeReserveOf() für ein
+   Portfolio ohne Beteiligungen -- je Halbjahr der Investitionsperiode ein
+   halbes Jahr Management Fee auf das Commitment. Als Konstante hier, damit der
+   Glossartext nicht von der Engine abdriften kann. */
+const RESERVE_AT_START = (CAPITAL * MGMT_FEE) / 2 * INVEST_PERIOD;
+
 export const GLOSSARY = {
   adjEbitda: {
     t: "Adjusted vs. Reported EBITDA",
@@ -1955,20 +1978,21 @@ export const GLOSSARY = {
     t: "Eignung",
     d: <>Wie gut eine Maßnahme <b>zum konkreten Defizit dieses Unternehmens</b> passt. Ein Cost-out-Programm
       zahlt sich dort aus, wo Marge gegenüber der Branche fehlt, und läuft leer, wo sie schon darüber liegt.
-      Über <b>1,0</b> ist die Maßnahme klar angezeigt, unter <b>0,4</b> lohnt sie kaum. Jede Wiederholung
-      derselben Maßnahme senkt die Eignung weiter.</>,
+      Ab <b>1,25</b> gilt die Eignung als hoch, ab <b>0,75</b> als mittel, ab <b>0,45</b> als gering,
+      darunter als kaum gegeben. Jede Wiederholung derselben Maßnahme senkt die Eignung weiter.</>,
   },
   endpressure: {
     t: "Exitfenster",
-    d: <>Ab etwa Jahr 8 wissen Käufer, dass dein Fonds auf ein Laufzeitende zuläuft — und <b>preisen genau
-      das ein</b>. Der erzielbare Multiple sinkt mit jedem weiteren Halbjahr, unabhängig davon, wie gut das
-      Unternehmen läuft. Ein Verkaufsprozess braucht selbst zwei Halbjahre; wer zu spät startet, verkauft
-      zwangsläufig in den Abschlag hinein.</>,
+    d: <>Über die letzten {END_PRESSURE_FROM} Halbjahre der Fondslaufzeit — also ab
+      {" "}<b>Halbjahr {PERIODS - END_PRESSURE_FROM + 1}</b> — preisen Käufer ein, dass der Fonds auf sein
+      Laufzeitende zuläuft. Der erzielbare Multiple sinkt mit jedem weiteren Halbjahr, bis zu
+      {" "}<b>{x(LIQ_DISC)}</b> am Schluss, unabhängig davon, wie gut das Unternehmen läuft. Ein
+      Verkaufsprozess braucht selbst {hj(PROC_Q)}; wer zu spät startet, verkauft in den Abschlag hinein.</>,
   },
   impliedMoM: {
-    t: "Implied MoM 5Y",
-    d: <>Das Geldvielfache, das dieses Ziel <b>bei deinem aktuellen Gebot und Leverage</b> über fünf Jahre
-      abwürfe, wenn du es einfach laufen lässt — der <b>Base Case des Underwritings</b>. Gerechnet wird mit
+    t: `Implied MoM ${LBO_YEARS}Y`,
+    d: <>Das Geldvielfache, das dieses Ziel <b>bei aktuellem Gebot und Leverage</b> über {LBO_YEARS} Jahre
+      abwürfe, wenn es ohne weiteres Zutun läuft — der <b>Base Case des Underwritings</b>. Gerechnet wird mit
       derselben Mechanik wie im Spiel: Sektorwachstum plus erwarteter Vorsprung, Margenkonvergenz auf die
       Branche, Capex, Working Capital, Zins, Steuern und Schuldentilgung.
       <br /><br />
@@ -1979,10 +2003,12 @@ export const GLOSSARY = {
   },
   dryPowder: {
     t: "Dry Powder",
-    d: <>Das Kapital, das du <b>heute noch investieren kannst</b>: offenes Commitment plus einbehaltene
-      Erlöse, <b>abzüglich der Gebührenreserve</b>. Die Management Fee liegt innerhalb des Commitments —
-      über die Laufzeit rund 70 Mio. €, die von Anfang an reserviert sind. Deshalb sind von 500 Mio. €
-      Commitment ohne Recycling nur rund 430 Mio. € tatsächlich investierbar.</>,
+    d: <>Das Kapital, das <b>heute noch investierbar ist</b>: offenes Commitment plus einbehaltene
+      Erlöse, <b>abzüglich der Gebührenreserve</b>. Die Management Fee liegt innerhalb des Commitments
+      und ist deshalb von Beginn an zurückgestellt — bei Auflage {eur(RESERVE_AT_START)}. Von
+      {" "}{eur(CAPITAL)} Commitment sind ohne Recycling also rund {eur(CAPITAL - RESERVE_AT_START)}
+      {" "}investierbar. Nach der Investitionsperiode bemisst sich die Gebühr am Einstand des
+      Restportfolios, die Reserve sinkt entsprechend.</>,
   },
 };
 
@@ -2165,10 +2191,15 @@ export function UseProceeds({ item, me, quarter, settle }) {
               <td>{eur(capLeft)}{quarter > INVEST_PERIOD ? " — Investitionsperiode beendet" : ""}</td></tr>
           </tbody></table>
           <p className="hint" style={{ marginTop: 10 }}>
-            Einbehalten bringt TVPI und kostet IRR: Das Geld arbeitet weiter, statt zu den Investoren
-            zurückzufließen — der Rückfluss verschiebt sich nach hinten, und der Betrag steht wieder im
-            Risiko. Lohnt sich, wenn ein konkreter Deal vor dir liegt und das offene Commitment knapp ist.
-            Ausschütten lohnt, wenn im Dealflow nichts Überzeugendes steht: Dann läge das Geld nur herum.
+            Einbehalten hebt den TVPI und kostet IRR.
+            <Info t="Einbehalten oder ausschütten">
+              Einbehaltenes Kapital arbeitet weiter, statt an die Investoren zurückzufließen. Das hebt den
+              Multiple, verschiebt aber den Rückfluss nach hinten und setzt den Betrag erneut dem Risiko
+              aus — im IRR gewinnt der frühere Rückfluss immer.
+              <br /><br />
+              Einbehalten lohnt, wenn ein konkreter Deal ansteht und das offene Commitment knapp ist.
+              Ausschütten lohnt, wenn der Dealflow nichts Überzeugendes hergibt.
+            </Info>
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, margin: "0 16px 24px" }}>

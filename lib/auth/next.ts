@@ -6,7 +6,7 @@
  * 1. Nur eigene, relative Ziele -- sonst ließe sich der Link (aus einer
  *    E-Mail oder als /login?next=...) zu einer Weiterleitung auf eine fremde
  *    Seite umbiegen.
- * 2. Übungs- und Erklärmodus sind nie ein Anmeldeziel. Eine normale Anmeldung
+ * 2. Übungsmodus und Einführung sind nie ein Anmeldeziel. Eine normale Anmeldung
  *    endet immer auf dem Dashboard; von dort ruft man sie bewusst auf.
  */
 export function safeNext(raw: string | null | undefined): string {

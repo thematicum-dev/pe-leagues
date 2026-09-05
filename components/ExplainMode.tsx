@@ -1,6 +1,6 @@
 "use client";
 
-/* Erklärmodus: der geführte Durchlauf durch die Spielentscheidungen.
+/* Einführung: der geführte Durchlauf durch die Spielentscheidungen.
    Erst das Briefing mit den Begriffen, dann eine einzelne Beteiligung über
    zehn Halbjahre, bei der ein Coach jeden Schritt kommentiert und das Feld
    markiert, auf das getippt werden muss.
@@ -38,7 +38,7 @@ function Briefing({ dark, setDark, onStart }) {
       <div className="wrap">
         <div style={{ padding: "36px 16px 4px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div className="eyebrow">Erklärmodus · Vintage 2026</div>
+            <div className="eyebrow">Einführung · Vintage 2026</div>
             <h1 className="disp" style={{ fontSize: 38, margin: "8px 0 0" }}>PE-Leagues</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -250,7 +250,7 @@ function Briefing({ dark, setDark, onStart }) {
           </div>
           <div className="pad" style={{ paddingTop: 4 }}>
             <button className="solid" style={{ width: "100%", padding: 12 }} onClick={onStart}>
-              Erklärmodus starten
+              Einführung starten
             </button>
           </div>
         </div>
@@ -273,7 +273,7 @@ function Briefing({ dark, setDark, onStart }) {
 
 
 /* ============================================================
-   ERKLÄRMODUS — Value Creation an einer Beteiligung
+   EINFÜHRUNG — Value Creation an einer Beteiligung
    Läuft auf denselben Funktionen wie die Partie: stepCompany,
    maturePeople, initSuccess, effSkill, markMultiple, makeBridge.
    Unterschied: ein Unternehmen, eingefrorene Marktmultiples und
@@ -417,7 +417,7 @@ function GuidedRun({ dark, setDark, back }) {
   const [offer, setOffer] = useState(null);
   const [prog, setProg] = useState(0);
   const market = useMemo(practiceMarket, []);
-  /* Eigene Zufallsinstanz für den Erklärmodus — unabhängig von der Partie,
+  /* Eigene Zufallsinstanz für die Einführung — unabhängig von der Partie,
      damit sich beide nicht denselben Zufallsstrom teilen. reset() legt bei
      jedem Durchlauf wieder denselben festen Startwert fest. */
   const rngRef = React.useRef<Rng | null>(null);
@@ -432,7 +432,7 @@ function GuidedRun({ dark, setDark, back }) {
     setQ(0); setSl([]); setInitPick(null); setSheet(null); setOver(null); setSeen([]);
     setFeed([{
       q: 0, e: "🎓", tone: "tip",
-      t: "<b>Erklärmodus.</b> Eine Beteiligung, zehn Halbjahre, dieselbe Value-Creation-Logik wie in der Partie. Die Marktmultiples sind eingefroren — was du am Ende siehst, ist ausschließlich deine eigene Wertschöpfung, ohne Rückenwind vom Markt.",
+      t: "<b>Einführung.</b> Eine Beteiligung, zehn Halbjahre, dieselbe Value-Creation-Logik wie in der Partie. Die Marktmultiples sind eingefroren — was du am Ende siehst, ist ausschließlich deine eigene Wertschöpfung, ohne Rückenwind vom Markt.",
     }, {
       q: 0, e: "📋", tone: "tip",
       t: "Der Fall: Sondermaschinenbau, 70 Mio. € Umsatz, Marge auf Benchmark, gekauft zu 8,6× mit 2,2× Leverage. <b>Performance 1,2</b> und <b>Growth 1,3</b> liegen beide unter Branchenniveau, der <b>CFO ist vakant</b>, und der CEO ist ein Gründer kurz vor dem Rückzug. Drei Baustellen, zwei Slots — du kannst nicht alles gleichzeitig.",
@@ -511,7 +511,7 @@ function GuidedRun({ dark, setDark, back }) {
   }
 
   /* Benchmarkstudie: dieselbe Mechanik wie in der Partie, nur wird sie hier
-     nicht aus der Fondsliquidität bezahlt — der Erklärmodus kennt keinen Fonds.
+     nicht aus der Fondsliquidität bezahlt — die Einführung kennt keinen Fonds.
      Die Kosten laufen wie alle Beratungskosten über die Beteiligung.        */
   /* Zuschlag: dieselbe Konstruktion wie in der Partie, nur ohne Wettbewerber.
      Ohne Datenraum greift dasselbe Informationsrisiko wie dort.             */
@@ -540,7 +540,7 @@ function GuidedRun({ dark, setDark, back }) {
       t: `<b>${c.name}</b>: Benchmarkstudie beauftragt (${eur(cost)}) — Branchenmarge ${pct(c.benchMargin)}, Marktwachstum ${pct(SECTORS[c.sector].g)}, typischer Capex ${pct(c.benchCapex)} vom Umsatz. Erst damit lässt sich beurteilen, wo dieses Unternehmen wirklich steht.` }, ...p]);
   }
 
-  /* Vorzeitiger Verkauf. Ohne diese Möglichkeit trainiert der Erklärmodus
+  /* Vorzeitiger Verkauf. Ohne diese Möglichkeit trainiert die Einführung
      genau die Gewohnheit, die die Wertung bestraft: durchhalten bis zum Ende,
      weil der Multiple ja noch steigt. Ab Halbjahr 6 liegt jede Periode ein
      Angebot auf dem Tisch — dieselbe Preisbildung wie in der Partie.        */
@@ -670,7 +670,7 @@ function GuidedRun({ dark, setDark, back }) {
 
   /* Deal-IRR auf Halbjahresbasis: eine Auszahlung am Anfang, ein Rückfluss am
      Ende. Zwischenausschüttungen aus dem Cash Sweep werden vereinfachend dem
-     Exitzeitpunkt zugerechnet — im Erklärmodus geht es um die Größenordnung,
+     Exitzeitpunkt zugerechnet — in der Einführung geht es um die Größenordnung,
      nicht um die dritte Nachkommastelle.                                     */
   function pracIrr(moic, holdQ) {
     if (!(moic > 0) || holdQ < 1) return 0;
@@ -854,7 +854,7 @@ function GuidedRun({ dark, setDark, back }) {
           <div className="bar">
             <div className="barrow">
               <div>
-                <div className="stat">Erklärmodus · Dealflow</div>
+                <div className="stat">Einführung · Dealflow</div>
                 <div className="statv mono">{eur(CAPITAL)} <span style={{ fontSize: 11, opacity: .6 }}>Dry Powder</span></div>
               </div>
               <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
@@ -903,7 +903,7 @@ function GuidedRun({ dark, setDark, back }) {
       <div className="bar">
         <div className="barrow">
           <div>
-            <div className="stat">Erklärmodus · Jahr {Math.floor(q / 2) + 1} · H{(q % 2) + 1}</div>
+            <div className="stat">Einführung · Jahr {Math.floor(q / 2) + 1} · H{(q % 2) + 1}</div>
             <AnimatedNumber className="statv mono" value={moic}
               format={(v) => <>{v.toFixed(2)}× <span style={{ fontSize: 11, opacity: .6 }}>MOIC</span></>} />
             {q > 0 && (
@@ -1056,7 +1056,7 @@ function GuidedRun({ dark, setDark, back }) {
 }
 
 
-/* Der Erklärmodus als Ganzes: Briefing, dann der geführte Durchlauf. Die
+/* Die Einführung als Ganzes: Briefing, dann der geführte Durchlauf. Die
    Darstellung (hell/dunkel) gehört hierher, damit sie über beide Schritte
    erhalten bleibt. */
 export default function ExplainMode() {
