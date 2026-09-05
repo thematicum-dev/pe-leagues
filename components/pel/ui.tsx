@@ -135,6 +135,12 @@ export const CSS = `
 .pel .shelfmain{flex:1;min-width:0;}
 .pel .shelfname{font-size:14px;font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .shelfmoic{font-size:16px;font-weight:500;width:52px;text-align:right;flex:none;}
+/* Die Sparkline wird an der Metazeile ausgerichtet, nicht in der Zeile zentriert:
+   zentriert reichte sie in das Zeilenfeld des Namens hinein, und weil die Kurve
+   je nach Verlauf ihre Box oben ausfüllt, lag die Linie genau auf der Unterkante
+   des Namens. Die feste Höhe ersetzt zugleich die Ableitung aus dem viewBox --
+   die ist als Flex-Element nicht in jedem Browser gleich. */
+.pel .shelfspark{width:64px;height:26px;flex:none;display:block;align-self:flex-end;}
 .pel .card.slot{border-style:dashed;background:transparent;box-shadow:none;}
 .pel .hhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:16px 15px 0;}
 .pel .flagpill{flex:none;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;
@@ -1849,7 +1855,12 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
         const base = c.costTotal || 1;
         const vals = t.length > 1 ? t.map((v) => v / base) : [1, 1];
         const hiV = Math.max(1.15, ...vals), loV = Math.min(0.85, ...vals);
-        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 64},${24 - (v - loV) / (hiV - loV || 1) * 22}`).join(" ");
+        /* Zeichenfläche innerhalb der 26 Einheiten hohen Box: Grundlinie bei 24,
+           Amplitude 18. Die sechs Einheiten Luft nach oben sind Absicht -- ein
+           stark steigender Verlauf stieß sonst an die Oberkante der Box und lag
+           damit direkt an der Namenszeile. */
+        const yOf = (v) => 24 - ((v - loV) / (hiV - loV || 1)) * 18;
+        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 64},${yOf(v)}`).join(" ");
         return (
           <div className="card st shelf" key={c.uid} style={{ "--sec": SECCOLOR[c.sector] }}
             onClick={() => onPick && onPick(c.uid)}>
@@ -1862,10 +1873,10 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
                   {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ</span>
                 </div>
               </div>
-              <svg viewBox="0 0 64 26" style={{ width: 64, flex: "none" }} role="img"
+              <svg viewBox="0 0 64 26" className="shelfspark" role="img"
                 aria-label={`Wertverlauf von ${c.name}`}>
-                <line x1="0" y1={24 - (1 - loV) / (hiV - loV || 1) * 22} x2="64"
-                  y2={24 - (1 - loV) / (hiV - loV || 1) * 22} style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
+                <line x1="0" y1={yOf(1)} x2="64" y2={yOf(1)}
+                  style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
                 <polyline points={pts} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" />
               </svg>
               <div className="mono shelfmoic" style={{ color: col }}>{h.moic.toFixed(2)}×</div>
