@@ -914,8 +914,9 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
             const searching = !!se, eb = ebitdaOf(c);
             return (
-              <button key={k} className={"seat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")}
-                className={(k === "cfo" ? sp("hire") : "").trim()}
+              <button key={k}
+                className={("seat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
+                  + (k === "cfo" ? sp("hire") : "")).trim()}
                 disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
                 <div className="rn">{nm}</div>
                 <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
