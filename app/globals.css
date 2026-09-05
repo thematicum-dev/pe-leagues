@@ -283,6 +283,120 @@ body {
   box-sizing: border-box;
 }
 
+/* Abschnittsmarke über einer Gruppe von Karten. Hält die drei Bereiche des
+   Dashboards (Partie, Üben, Konto) auseinander, ohne eine weitere Kartenkante
+   einzuziehen. */
+.dashsection {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  flex-wrap: wrap;
+  margin: 24px 2px 10px;
+}
+
+.dashsection h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink2);
+  margin: 0;
+}
+
+.dashsection .dashsub {
+  font-size: 12px;
+}
+
+/* Der Spielmodus ist der Kern des Produkts und deshalb die einzige farbig
+   hervorgehobene Karte -- Einführung und Übungsmodus bleiben bewusst ruhig,
+   sonst konkurrieren drei Einstiege um dieselbe Aufmerksamkeit. */
+.dashcard-accent {
+  border-color: color-mix(in srgb, var(--teal) 40%, var(--rule));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--teal) 8%, transparent), transparent 140px),
+    var(--card);
+}
+
+.dashcard-accent h2 {
+  color: var(--teal);
+}
+
+/* Die beiden Übungswege nebeneinander: gleich gewichtet, beide ruhiger als
+   die Partie. */
+.modegrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 460px) {
+  .modegrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modecard {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 15px 16px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.modecard:hover {
+  border-color: var(--ink2);
+  background: color-mix(in srgb, var(--ink) 5%, var(--card));
+}
+
+.modecard h3 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 5px;
+}
+
+.modecard p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+/* Nebensächliche Wege (Rangliste, Admin, Abmelden) treten hinter die drei
+   Einstiege zurück. */
+.dashtools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-quiet {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink2);
+}
+
 .dashform {
   display: flex;
   gap: 10px;
