@@ -9,7 +9,7 @@ export default async function ExplainPage() {
   // zugeteilt. Die Middleware fängt nur den fehlenden Login ab.
   //
   // Ohne next-Ziel: nach der Anmeldung geht es aufs Dashboard, nicht zurück
-  // in den Erklärmodus.
+  // in die Einführung.
   await requireAccess();
 
   return <ExplainMode />;

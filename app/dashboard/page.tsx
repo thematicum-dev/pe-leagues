@@ -87,27 +87,17 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
-          <div className="landingactions">
-            <a href="/leaderboard" className="btn-secondary">
+          <div className="dashtools">
+            <a href="/leaderboard" className="btn-quiet">
               Rangliste
             </a>
-            <a href="/practice" className="btn-secondary">
-              Übungsmodus
-            </a>
-            <a href="/explain" className="btn-secondary">
-              Erklärmodus
-            </a>
             {isAdmin && (
-              <a href="/admin" className="btn-secondary">
+              <a href="/admin" className="btn-quiet">
                 Admin
               </a>
             )}
             <form action={signOut}>
-              <button
-                type="submit"
-                className="btn-secondary"
-                style={{ border: "1px solid var(--rule)" }}
-              >
+              <button type="submit" className="btn-quiet">
                 Abmelden
               </button>
             </form>
@@ -115,6 +105,13 @@ export default async function DashboardPage() {
         </div>
 
         <UniverseSwitcher universes={universes} activeUniverseId={activeUniverse.id} />
+
+        {/* Der Spielmodus steht oben und ist die einzige farbig hervorgehobene
+            Karte -- alles andere ist Vorbereitung darauf. */}
+        <div className="dashsection">
+          <h2>Spielmodus</h2>
+          <span className="dashsub">Gegen vier Mitspieler, ein Halbjahr je Zug</span>
+        </div>
 
         <LobbyOverview
           initialMySeason={mySeason}
@@ -124,6 +121,28 @@ export default async function DashboardPage() {
           universeActive={activeUniverse.isActive}
           showUniverse={showUniverse}
         />
+
+        <div className="dashsection">
+          <h2>Üben</h2>
+          <span className="dashsub">Allein, jederzeit</span>
+        </div>
+
+        <div className="modegrid">
+          <a href="/explain" className="modecard">
+            <h3>Einführung</h3>
+            <p>
+              Geführt durch alle Entscheidungen: eine Beteiligung über zehn Halbjahre,
+              ein Coach erklärt jeden Schritt.
+            </p>
+          </a>
+          <a href="/practice" className="modecard">
+            <h3>Übungsmodus</h3>
+            <p>
+              Eine vollständige Solopartie gegen vier Fonds derselben Kohorte — wie im
+              Spielmodus, nur ohne Mitspieler.
+            </p>
+          </a>
+        </div>
       </div>
     </main>
   );

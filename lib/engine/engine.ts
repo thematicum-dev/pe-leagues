@@ -586,19 +586,22 @@ export const initSuccess = (E, cls = "hard") => cls === "rel"
     ? clamp(0.56 + 0.048 * E, 0.50, 0.92)
     : clamp(0.20 + 0.072 * E, 0.20, 0.82);
 export const CLS_LABEL = { rel: "verlässlich", tr: "Transformation", hard: "marktabhängig" };
-// Ein starkes Team liefert schneller: ab effektivem Rating 3,2 in einem Halbjahr.
+// Ein starkes Team liefert schneller: vier Halbjahre unter Rating 1,6, drei ab 1,6,
+// zwei ab 3,2 und eines ab 4,8.
 export const initDur = (E) => Math.max(1, 4 - Math.floor(E / 1.6));
-/* Jede Maßnahme steht je Beteiligung nur einmal zur Verfügung, deshalb wiegt der
-   einzelne Gewinn schwerer als früher. Er hängt weiterhin deutlich am Team:
-   effektives Rating 2 bringt 1,07, Rating 6 bringt 1,68.                       */
+/* Der Gewinn einer Auflage hängt deutlich am Team: effektives Rating 2 bringt
+   1,90, Rating 6 bringt 2,86. Gebremst werden Wiederholungen nicht über eine
+   Obergrenze je Maßnahme, sondern wirtschaftlich -- siehe repeatMalus und
+   ceilingFactor.                                                              */
 export const initGain = (E) => 0.70 + 3.60 * E / (E + 4);
-/* Je weiter über Branchenniveau, desto weniger bringt die nächste Maßnahme. Da
-   erreichte Stufen nicht mehr verfallen, ist das die einzige Bremse gegen
-   unbegrenztes Aufstocken — bewusst mild, damit Ausbauen sich lohnt.          */
+/* Je weiter über Branchenniveau, desto weniger bringt die nächste Maßnahme.
+   Eine von drei Bremsen gegen unbegrenztes Aufstocken: dazu kommen der Rückfall
+   zur Benchmark (DECAY in stepCompany, solange in der Dimension kein Programm
+   läuft) und repeatMalus je weiterer Auflage. Bewusst mild, damit Ausbauen sich
+   lohnt.                                                                      */
 export const ceilingFactor = (lvl) => Math.max(0.15, 1 - 0.13 * Math.max(0, lvl - 2));
 export const ACC_SPREAD = [0.3, 1.3];   // Streubreite des Ergebnisses bei Acceleration
 
-// Jede Maßnahme steht je Beteiligung genau einmal zur Verfügung.
 /* Wie oft wurde diese Maßnahme in dieser Halteperiode schon aufgelegt?
    Vorher war jede genau einmal verfügbar. Das machte aus der Value Creation eine
    Abarbeitungsliste: sieben Maßnahmen, zwei Werkbänke, fertig — und ab der Mitte

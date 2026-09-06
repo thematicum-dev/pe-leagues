@@ -1,6 +1,6 @@
 "use client";
 
-/* Erklärmodus: der geführte Durchlauf durch die Spielentscheidungen.
+/* Einführung: der geführte Durchlauf durch die Spielentscheidungen.
    Erst das Briefing mit den Begriffen, dann eine einzelne Beteiligung über
    zehn Halbjahre, bei der ein Coach jeden Schritt kommentiert und das Feld
    markiert, auf das getippt werden muss.
@@ -18,6 +18,8 @@ import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, BASE_RATE, BOOK, CAPITAL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST,
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
+  MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
+  CV_FEE, IPO_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
   TVPI_BENCH, addonCheck, anyInit, bookOff, ceilingFactor, chargeOff, clamp, ddCapOf, ddCostOf,
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, effSkill, eqvOf, eur, growthPrem,
@@ -32,13 +34,18 @@ import {
 } from "@/components/pel/ui";
 
 /* Das Briefing: die Begriffe, bevor der geführte Durchlauf beginnt. */
+/* Gebührenreserve bei Auflage: dieselbe Rechnung wie feeReserveOf() für ein
+   Portfolio ohne Beteiligungen. Als Konstante, damit der Text nicht von der
+   Engine abdriften kann. */
+const RESERVE_AT_START = (CAPITAL * MGMT_FEE) / 2 * INVEST_PERIOD;
+
 function Briefing({ dark, setDark, onStart }) {
   return (
     <div className={"pel" + (dark ? " dark" : "")}><style>{CSS}</style>
       <div className="wrap">
         <div style={{ padding: "36px 16px 4px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div className="eyebrow">Erklärmodus · Vintage 2026</div>
+            <div className="eyebrow">Einführung · Vintage 2026</div>
             <h1 className="disp" style={{ fontSize: 38, margin: "8px 0 0" }}>PE-Leagues</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -115,8 +122,10 @@ function Briefing({ dark, setDark, onStart }) {
             Managements, <b>Performance</b> die operative Verfassung (Marge, Investitionen, Working Capital),
             <b> Growth</b> die Fähigkeit zu wachsen. Stufe 2 ist Branchendurchschnitt: dort wächst das Unternehmen
             mit seinem Markt und hält seine Marge. Darüber wird es besser als der Wettbewerb, darunter schlechter.
-            Erreichte Stufen bleiben — was ein Programm aufgebaut hat, fällt nicht wieder zurück. Dafür bringt
-            jede weitere Stufe über dem Branchenniveau weniger als die davor.
+            Erreichte Stufen halten sich nicht von selbst: Läuft in einer Dimension kein Programm, fällt
+            sie je Halbjahr um {pct(DECAY * 100)} des Abstands zum Branchenniveau zurück — bis auf Stufe
+            {PLAT_BENCH}, tiefer nicht. Und jede weitere Stufe über dem Branchenniveau bringt weniger als
+            die davor.
           </Def>
           <Def t="Growth trägt nur, was darunter steht">
             Wachstum wirkt höchstens so weit, wie People und Performance es tragen — konkret bis zum niedrigeren
@@ -131,19 +140,19 @@ function Briefing({ dark, setDark, onStart }) {
             und das ist teurer als eine reguläre Besetzung.
           </Def>
           <Def t="Programme und ihr Risiko">
-            Jedes Programm steht je Beteiligung <b>genau einmal</b> zur Verfügung. Über eine Halteperiode
-            lassen sich also höchstens vier Performance- und drei Growth-Maßnahmen fahren — die Auswahl
-            ist damit eine echte Entscheidung, keine Wiederholung.
+            Vier Performance- und drei Growth-Programme stehen zur Wahl. Jedes lässt sich je Beteiligung
+            bis zu {REPEAT_MAX}-mal auflegen, aber jede weitere Auflage bringt weniger, dauert länger und
+            senkt die Eignung — irgendwann ist an dieser Stelle nichts mehr zu holen.
             <br /><br />
             <b>Verlässliche</b> Programme liegen im Zugriff des Managements — Kosten senken, Working Capital
-            freisetzen, Preise durchsetzen. Sie gelingen in 70–97 % der Fälle, und selbst wenn sie das Ziel
-            verfehlen, kommt ein Drittel an. <b>Transformationen</b> wie ERP oder KI sind aufwendig und gehen
-            binär aus: 50–90 % je nach Team, ein Fehlschlag bringt nichts außer Kosten. <b>Marktabhängige</b>
-            Programme — neuer Markt, Zukauf — hängen an Dritten und gelingen nur in 20–86 % der Fälle.
+            freisetzen, Preise durchsetzen. Sie gelingen in 55–97 % der Fälle, und selbst wenn sie das Ziel
+            verfehlen, kommt ein Teil an. <b>Transformationen</b> wie ERP oder KI sind aufwendig und gehen
+            binär aus: 50–92 % je nach Team, ein Fehlschlag bringt nichts außer Kosten. <b>Marktabhängige</b>
+            Programme — neuer Markt, Zukauf — hängen an Dritten und gelingen nur in 20–82 % der Fälle.
             Alle drei Spannen hängen fast vollständig am Rating der zuständigen Position.
           </Def>
           <Def t="Assetqualität">
-            Eine Note von 0 bis 100, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
+            Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
             schneller wächst als sein Markt und die Marge stabil bleibt, und fällt bei hoher Verschuldung,
             vakanten Positionen oder überdehntem Wachstum.
           </Def>
@@ -166,9 +175,9 @@ function Briefing({ dark, setDark, onStart }) {
             laufen gleichzeitig.
           </Def>
           <Def t="Laufzeitende">
-            Was nach zehn Jahren noch im Portfolio steht, wird zwangsweise verwertet: 1,5× Abschlag auf das
-            Marktmultiple, kein Verhandlungsspielraum, rund 15 % unter Buchwert. Wer rechtzeitig einen Prozess
-            startet, bekommt deutlich mehr.
+            Was nach zehn Jahren noch im Portfolio steht, wird zwangsweise verwertet: {x(LIQ_DISC)} Abschlag
+            auf das Marktmultiple, kein Verhandlungsspielraum. Wer rechtzeitig einen Prozess startet,
+            bekommt deutlich mehr.
           </Def>
         </div>
 
@@ -183,8 +192,9 @@ function Briefing({ dark, setDark, onStart }) {
             außergewöhnlicher Jahrgang, unter 0,60 wird das nächste Fundraising schwierig.
           </Def>
           <Def t="Das Exitfenster schließt sich">
-            Käufer kennen die Laufzeit deines Fonds. Ab Jahr 8 preisen sie ein, dass du verkaufen musst —
-            der erzielbare Multiple sinkt bis zum Laufzeitende um bis zu {LIQ_DISC.toFixed(1).replace(".", ",")} Turns.
+            Käufer kennen die Laufzeit deines Fonds. Über die letzten {END_PRESSURE_FROM} Halbjahre — ab
+            Halbjahr {PERIODS - END_PRESSURE_FROM + 1} — preisen sie ein, dass du verkaufen musst:
+            der erzielbare Multiple sinkt bis zum Laufzeitende um bis zu {x(LIQ_DISC)}.
             Wer alles bis zum Schluss liegen lässt, verkauft an einen Markt, der das weiß: gemessen 1,02
             Wertung gegen 1,12 bei aktiver Exitsteuerung.
           </Def>
@@ -214,9 +224,9 @@ function Briefing({ dark, setDark, onStart }) {
           </Def>
           <Def t="Das Commitment ist eine harte Grenze">
             Mehr als {eur(CAPITAL)} kannst du nicht abrufen. Und die Management Fee liegt innerhalb dieser
-            Summe: Über die Laufzeit sind das rund 70 Mio. €, die von Anfang an reserviert werden.
-            Investierbar sind ohne Recycling also rund 430 Mio. €, nicht 500. Das angezeigte Dry Powder
-            ist bereits um diese Reserve bereinigt.
+            Summe: Bei Auflage sind {eur(RESERVE_AT_START)} zurückgestellt. Investierbar sind ohne
+            Recycling also rund {eur(CAPITAL - RESERVE_AT_START)}, nicht {eur(CAPITAL)}. Das angezeigte
+            Dry Powder ist bereits um diese Reserve bereinigt.
           </Def>
         </div>
 
@@ -224,12 +234,11 @@ function Briefing({ dark, setDark, onStart }) {
           <h3 className="disp">Fondsökonomie</h3>
           <table className="ledger"><tbody>
             <tr><td className="lab">Commitment</td><td style={{ textAlign: "left" }}>{eur(CAPITAL)}, abgerufen bei Bedarf, max. {MAX_SLOTS} Beteiligungen</td></tr>
-            <tr><td className="lab">Gebührenreserve</td><td style={{ textAlign: "left" }}>rund 70 Mio. €, vom Dry Powder abgezogen</td></tr>
-            <tr><td className="lab">Management Fee</td><td style={{ textAlign: "left" }}>2 % p.a., ab Jahr 6 auf Anschaffungswerte, innerhalb des Commitments</td></tr>
-            <tr><td className="lab">Gebührenreserve</td><td style={{ textAlign: "left" }}>rund 70 Mio. €, vom Dry Powder abgezogen</td></tr>
-            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>2 % beim Kauf, 2–3 % beim Verkauf</td></tr>
+            <tr><td className="lab">Gebührenreserve</td><td style={{ textAlign: "left" }}>{eur(RESERVE_AT_START)} bei Auflage, vom Dry Powder abgezogen</td></tr>
+            <tr><td className="lab">Management Fee</td><td style={{ textAlign: "left" }}>{pct(MGMT_FEE * 100)} p.a., ab Jahr 6 auf Anschaffungswerte, innerhalb des Commitments</td></tr>
+            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(CV_FEE * 100)}–{pct(IPO_FEE * 100)} beim Verkauf je nach Weg</td></tr>
             <tr><td className="lab">Carried Interest</td><td style={{ textAlign: "left" }}>20 % über 8 % Hurdle auf die Abrufe</td></tr>
-            <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Jahr 8 sinkt der erzielbare Preis, bis zu −{LIQ_DISC.toFixed(1).replace(".", ",")}× am Laufzeitende</td></tr>
+            <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Halbjahr {PERIODS - END_PRESSURE_FROM + 1} sinkt der erzielbare Preis, bis zu −{x(LIQ_DISC)} am Laufzeitende</td></tr>
             <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar bis Jahr 5, kumuliert max. 100 % des Commitments</td></tr>
             <tr><td className="lab">Investitionsperiode</td><td style={{ textAlign: "left" }}>Jahr 1–5</td></tr>
           </tbody></table>
@@ -250,7 +259,7 @@ function Briefing({ dark, setDark, onStart }) {
           </div>
           <div className="pad" style={{ paddingTop: 4 }}>
             <button className="solid" style={{ width: "100%", padding: 12 }} onClick={onStart}>
-              Erklärmodus starten
+              Einführung starten
             </button>
           </div>
         </div>
@@ -273,7 +282,7 @@ function Briefing({ dark, setDark, onStart }) {
 
 
 /* ============================================================
-   ERKLÄRMODUS — Value Creation an einer Beteiligung
+   EINFÜHRUNG — Value Creation an einer Beteiligung
    Läuft auf denselben Funktionen wie die Partie: stepCompany,
    maturePeople, initSuccess, effSkill, markMultiple, makeBridge.
    Unterschied: ein Unternehmen, eingefrorene Marktmultiples und
@@ -291,7 +300,7 @@ function practiceMarket() {
   return m;
 }
 
-/* Fester Übungsfall: Sondermaschinenbau, knapp über Benchmarkmarge, beide
+/* Fester Übungsfall: Sondermaschinenbau, Marge unter der Branchenreferenz, beide
    Reifegrade unter Branchenniveau, CFO vakant, Gründer-CEO vor dem Rückzug.
    Damit sind alle drei Dimensionen in einer Partie erfahrbar.               */
 /* Ein Ziel für den geführten Durchlauf. Bewusst mit Margenlücke zur Branche und
@@ -374,7 +383,7 @@ const COACH = [
   { id: "over", when: (o) => overstretch(o.c) > 0,
     t: "<b>Überdehnung.</b> Dein Growth-Reifegrad ist höher, als People und Performance ihn tragen. Nur der gedeckelte Teil wirkt, der Rest kostet 1,4 pp Marge und drückt die Assetqualität. Genau dieser Fehlermodus — skalieren ohne Unterbau — beschäftigt Operating Partner in der Praxis am häufigsten." },
   { id: "gp", when: (o) => growthPrem(o.c) >= 0.08,
-    t: "Deine Umsatz-CAGR liegt über dem Sektor, und das zahlt jetzt <b>direkt aufs Multiple</b> — bis zu +35 %. Wachstum ist empirisch der größte Werthebel der Assetklasse, vor Multiple-Expansion und deutlich vor Margenverbesserung. Es wirkt nur langsamer als ein Kostenprogramm." },
+    t: "Deine Umsatz-CAGR liegt über dem Sektor, und das zahlt jetzt <b>direkt aufs Multiple</b> — bis zu +45 %. Wachstum ist empirisch der größte Werthebel der Assetklasse, vor Multiple-Expansion und deutlich vor Margenverbesserung. Es wirkt nur langsamer als ein Kostenprogramm." },
   { id: "oplev", when: (o) => opLeverage(o.c) >= 0.5,
     t: "<b>Operating Leverage</b>: der Umsatz wächst schneller als die Kostenbasis, die Zielmarge steigt mit. Wachstum und Marge sind keine Gegner — wachsende Unternehmen weiten ihre Marge häufiger aus als schrumpfende." },
   { id: "founder", when: (o) => o.news.some((n) => n.e === "👋"),
@@ -382,7 +391,7 @@ const COACH = [
   { id: "lev", when: (o) => o.c.netDebt / Math.max(0.5, ebitdaOf(o.c)) > (o.c.covLimit ?? COV_DEFAULT) - 0.5,
     t: "Der Leverage nähert sich dem <b>Covenant</b>. Zwei Perioden darüber und die Kreditgeber vollstrecken — das Eigenkapital wird ausgebucht, unabhängig davon, wie gut die operative Story ist. Entschuldung ist hier kein Nebeneffekt, sondern Risikomanagement." },
   { id: "ceil", when: (o) => o.c.plat > 3 || o.c.acc > 3,
-    t: "Über Reifegrad 3 greift die <b>Sättigung</b>: jede weitere Maßnahme bringt weniger, der Verfall wird gleichzeitig steiler. Ab hier lohnt oft die andere Dimension mehr als die nächste Stufe auf derselben." },
+    t: "Oberhalb des Branchenniveaus greift die <b>Sättigung</b>: jede weitere Maßnahme bringt weniger, und der Rückfall zur Benchmark wird gleichzeitig steiler. Ab hier lohnt oft die andere Dimension mehr als die nächste Stufe auf derselben." },
   { id: "idle", when: (o) => !anyInit(o.c) && !(o.c.searches || []).length && o.q >= 2,
     t: "Eine Periode ohne Maßnahme und ohne Search. Deine <b>Umsetzungskapazität</b> verfällt ungenutzt, während Zinsen und Verfall weiterlaufen. Leerlauf ist im Portfolio die teuerste Entscheidung, weil sie sich nicht wie eine anfühlt." },
   { id: "exit", when: (o) => o.q >= PRAC_EXIT_FROM,
@@ -417,7 +426,7 @@ function GuidedRun({ dark, setDark, back }) {
   const [offer, setOffer] = useState(null);
   const [prog, setProg] = useState(0);
   const market = useMemo(practiceMarket, []);
-  /* Eigene Zufallsinstanz für den Erklärmodus — unabhängig von der Partie,
+  /* Eigene Zufallsinstanz für die Einführung — unabhängig von der Partie,
      damit sich beide nicht denselben Zufallsstrom teilen. reset() legt bei
      jedem Durchlauf wieder denselben festen Startwert fest. */
   const rngRef = React.useRef<Rng | null>(null);
@@ -432,10 +441,10 @@ function GuidedRun({ dark, setDark, back }) {
     setQ(0); setSl([]); setInitPick(null); setSheet(null); setOver(null); setSeen([]);
     setFeed([{
       q: 0, e: "🎓", tone: "tip",
-      t: "<b>Erklärmodus.</b> Eine Beteiligung, zehn Halbjahre, dieselbe Value-Creation-Logik wie in der Partie. Die Marktmultiples sind eingefroren — was du am Ende siehst, ist ausschließlich deine eigene Wertschöpfung, ohne Rückenwind vom Markt.",
+      t: "<b>Einführung.</b> Eine Beteiligung, zehn Halbjahre, dieselbe Value-Creation-Logik wie in der Partie. Die Marktmultiples sind eingefroren — was du am Ende siehst, ist ausschließlich deine eigene Wertschöpfung, ohne Rückenwind vom Markt.",
     }, {
       q: 0, e: "📋", tone: "tip",
-      t: "Der Fall: Sondermaschinenbau, 70 Mio. € Umsatz, Marge auf Benchmark, gekauft zu 8,6× mit 2,2× Leverage. <b>Performance 1,2</b> und <b>Growth 1,3</b> liegen beide unter Branchenniveau, der <b>CFO ist vakant</b>, und der CEO ist ein Gründer kurz vor dem Rückzug. Drei Baustellen, zwei Slots — du kannst nicht alles gleichzeitig.",
+      t: "Zwei Ziele stehen zur Wahl: ein proprietäres mit Nachfolgesituation und eines aus einem strukturierten Prozess. Beide liegen mit ihrer <b>Marge unter dem Branchenniveau</b>, beide Reifegrade starten unter Stufe 2, der <b>CFO ist vakant</b> und der CEO ist ein Gründer kurz vor dem Rückzug. Preis und Leverage bestimmst du selbst — drei Baustellen, zwei Slots, du kannst nicht alles gleichzeitig.",
     }]);
   }
 
@@ -511,7 +520,7 @@ function GuidedRun({ dark, setDark, back }) {
   }
 
   /* Benchmarkstudie: dieselbe Mechanik wie in der Partie, nur wird sie hier
-     nicht aus der Fondsliquidität bezahlt — der Erklärmodus kennt keinen Fonds.
+     nicht aus der Fondsliquidität bezahlt — die Einführung kennt keinen Fonds.
      Die Kosten laufen wie alle Beratungskosten über die Beteiligung.        */
   /* Zuschlag: dieselbe Konstruktion wie in der Partie, nur ohne Wettbewerber.
      Ohne Datenraum greift dasselbe Informationsrisiko wie dort.             */
@@ -540,7 +549,7 @@ function GuidedRun({ dark, setDark, back }) {
       t: `<b>${c.name}</b>: Benchmarkstudie beauftragt (${eur(cost)}) — Branchenmarge ${pct(c.benchMargin)}, Marktwachstum ${pct(SECTORS[c.sector].g)}, typischer Capex ${pct(c.benchCapex)} vom Umsatz. Erst damit lässt sich beurteilen, wo dieses Unternehmen wirklich steht.` }, ...p]);
   }
 
-  /* Vorzeitiger Verkauf. Ohne diese Möglichkeit trainiert der Erklärmodus
+  /* Vorzeitiger Verkauf. Ohne diese Möglichkeit trainiert die Einführung
      genau die Gewohnheit, die die Wertung bestraft: durchhalten bis zum Ende,
      weil der Multiple ja noch steigt. Ab Halbjahr 6 liegt jede Periode ein
      Angebot auf dem Tisch — dieselbe Preisbildung wie in der Partie.        */
@@ -670,7 +679,7 @@ function GuidedRun({ dark, setDark, back }) {
 
   /* Deal-IRR auf Halbjahresbasis: eine Auszahlung am Anfang, ein Rückfluss am
      Ende. Zwischenausschüttungen aus dem Cash Sweep werden vereinfachend dem
-     Exitzeitpunkt zugerechnet — im Erklärmodus geht es um die Größenordnung,
+     Exitzeitpunkt zugerechnet — in der Einführung geht es um die Größenordnung,
      nicht um die dritte Nachkommastelle.                                     */
   function pracIrr(moic, holdQ) {
     if (!(moic > 0) || holdQ < 1) return 0;
@@ -765,7 +774,7 @@ function GuidedRun({ dark, setDark, back }) {
         <p>Performance und Growth laufen parallel, je eine Werkbank. Im Katalog steht bei jeder Maßnahme, ob sie zu diesem Fall passt:</p>
         <dl>
           <Kpi t="Eignung">Ob überhaupt ein Defizit da ist, an dem die Maßnahme ansetzen kann. Cost-out auf einer Marge über Branchenniveau bringt nichts.</Kpi>
-          <Kpi t="Reifegrad">Wie weit diese Dimension ausgebaut ist, 0 bis 5. Über Stufe 3 bringt jede weitere Auflage spürbar weniger.</Kpi>
+          <Kpi t="Reifegrad">Wie weit diese Dimension ausgebaut ist, 0 bis 5. Ab Stufe {PLAT_BENCH} — dem Branchenniveau — bringt jede weitere Auflage weniger als die davor.</Kpi>
         </dl>
         <p className="why"><b>Tu jetzt das:</b> Öffne Performance und wähle die Maßnahme mit der höchsten Eignung. Programme mit geringer Eignung kosten Geld und Zeit und liefern kaum etwas — das Weglassen ist hier eine echte Entscheidung.</p>
       </>) },
@@ -854,7 +863,7 @@ function GuidedRun({ dark, setDark, back }) {
           <div className="bar">
             <div className="barrow">
               <div>
-                <div className="stat">Erklärmodus · Dealflow</div>
+                <div className="stat">Einführung · Dealflow</div>
                 <div className="statv mono">{eur(CAPITAL)} <span style={{ fontSize: 11, opacity: .6 }}>Dry Powder</span></div>
               </div>
               <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
@@ -903,7 +912,7 @@ function GuidedRun({ dark, setDark, back }) {
       <div className="bar">
         <div className="barrow">
           <div>
-            <div className="stat">Erklärmodus · Jahr {Math.floor(q / 2) + 1} · H{(q % 2) + 1}</div>
+            <div className="stat">Einführung · Jahr {Math.floor(q / 2) + 1} · H{(q % 2) + 1}</div>
             <AnimatedNumber className="statv mono" value={moic}
               format={(v) => <>{v.toFixed(2)}× <span style={{ fontSize: 11, opacity: .6 }}>MOIC</span></>} />
             {q > 0 && (
@@ -1056,7 +1065,7 @@ function GuidedRun({ dark, setDark, back }) {
 }
 
 
-/* Der Erklärmodus als Ganzes: Briefing, dann der geführte Durchlauf. Die
+/* Die Einführung als Ganzes: Briefing, dann der geführte Durchlauf. Die
    Darstellung (hell/dunkel) gehört hierher, damit sie über beide Schritte
    erhalten bleibt. */
 export default function ExplainMode() {

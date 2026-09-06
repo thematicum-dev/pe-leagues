@@ -192,7 +192,7 @@ export default function LobbyOverview({
 
   if (mySeason) {
     return (
-      <div className="dashcard">
+      <div className="dashcard dashcard-accent">
         <h2>Deine Partie{showUniverse ? ` · ${universeName}` : ""}</h2>
         <div className="seasonrow">
           <span>Partie {mySeason.id.slice(0, 8)}</span>
@@ -217,7 +217,7 @@ export default function LobbyOverview({
   }
 
   return (
-    <div className="dashcard">
+    <div className="dashcard dashcard-accent">
       <h2>Offene Partien{showUniverse ? ` · ${universeName}` : ""}</h2>
       {error && <p className="autherror">{error}</p>}
       {openLobbies.length === 0 && (

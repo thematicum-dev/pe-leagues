@@ -737,8 +737,8 @@ export default function MultiplayerGame({
             </button>
             {notReadyYet && (
               <p className="hint" style={{ marginTop: 8 }}>
-                Noch nicht so weit — das Halbjahr läuft weiter, bis alle abgegeben haben oder die Frist erreicht ist.
-                Kein Fehler, einfach kurz später nochmal versuchen.
+                Die Auswertung steht noch aus. Sie startet, sobald alle abgegeben haben oder die Frist
+                abgelaufen ist.
               </p>
             )}
           </div>
@@ -822,10 +822,10 @@ export default function MultiplayerGame({
               <h3 className="disp">
                 EV/EBITDA je Sektor
                 <Info t="Sektormultiple">
-                  Das durchschnittliche Bewertungsvielfache des EBITDA in diesem Sektor — die Referenz für
-                  jede Preiserwartung im Dealflow. Es bewegt sich jedes Halbjahr mit dem Markt und wirkt in
-                  beide Richtungen: teuer einkaufen kostet, teuer verkaufen bringt. Der Pfeil zeigt gegen
-                  das Niveau bei Fondsauflage.
+                  Das durchschnittliche Bewertungsvielfache des EBITDA in diesem Sektor und damit die
+                  Referenz für jede Preiserwartung im Dealflow. Es bewegt sich jedes Halbjahr mit dem
+                  Markt und wirkt in beide Richtungen: teuer einkaufen kostet, teuer verkaufen bringt.
+                  Der Pfeil zeigt die Veränderung gegenüber dem Niveau bei Fondsauflage.
                 </Info>
               </h3>
               <MarketChart hist={marketHist} />
@@ -862,8 +862,7 @@ export default function MultiplayerGame({
             {bootstrapPending && (
               <div className="card">
                 <div className="pad" style={{ paddingTop: 16, fontSize: 13, color: "var(--ink2)", lineHeight: 1.55 }}>
-                  Der erste Dealflow wird gerade zusammengestellt — einen Moment.
-                  Die Ansicht aktualisiert sich von selbst, sobald die Prozesse offen sind.
+                  Der erste Dealflow wird zusammengestellt. Die Ansicht aktualisiert sich selbst.
                 </div>
               </div>
             )}
