@@ -1948,7 +1948,7 @@ export const GLOSSARY = {
   },
   quality: {
     t: "Assetqualität",
-    d: <>Ein Sammelwert von 0 bis 100 für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
+    d: <>Ein Sammelwert zwischen 10 und 97 beim Einstieg für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
       Marge zu stehen: <b>Kundenbindung, Marktposition, Preissetzungsmacht, Abhängigkeiten</b>. Er wirkt
       direkt auf das Bewertungsmultiple — je höher, desto mehr zahlt ein Käufer je Euro EBITDA. Value
       Creation kann ihn heben, ein Abschwung oder überzogener Leverage drückt ihn.</>,
