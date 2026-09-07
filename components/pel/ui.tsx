@@ -640,7 +640,13 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
   const dBand = driftBandOf(me.attrs.analysis);
   const gapM = d.margin - d.benchMargin;
   const gapG = d.growth - SECTORS[d.sector].g;
-  const cap = d.levCap + 0.3 * me.attrs.financing;
+  /* Obergrenze des Reglers = Fremdkapitalkapazität des Ziels. Vorher stand hier
+     levCap + 0,3 x financing; die Auswertung verwirft aber jedes Gebot über
+     levCap (runQuarter.ts, Schritt 1) -- der obere Reglerbereich führte damit
+     zu Geboten, die kommentarlos verfielen. Die KI ist auf denselben Wert
+     begrenzt, deshalb folgt der Regler dem Server und nicht umgekehrt.
+     Financing wirkt weiterhin über den Zinssatz und den Covenant-Spielraum. */
+  const cap = d.levCap;
   /* Implied MoM: der Base Case des Underwritings zum aktuellen Reglerstand.
      Ohne Datenraum gibt es keine Schätzung des Wachstums gegenüber dem Sektor
      — dann wird mit Sektorwachstum gerechnet. Ist das EBITDA selbst verdeckt
@@ -1974,7 +1980,8 @@ export const GLOSSARY = {
   score: {
     t: "Wertung",
     d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVPI, zur Hälfte IRR</b>, jeweils gegen
-      eine Branchenbenchmark normiert. <b>1,00 bedeutet exakt Benchmark-Niveau.</b> Sie beantwortet beide
+      eine Marke normiert ({x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
+      und damit das obere Viertel der Kohorte.</b> Sie beantwortet beide
       Fragen zugleich — wie viel du verdienst und wie lange du dafür brauchst. Ein hoher Multiple nach zehn
       Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.</>,
   },

@@ -1205,16 +1205,26 @@ export function irrOf(f, market, quarter) {
 }
 
 /* ---------- Wertung ----------
-   Je zur Hälfte Multiple und Verzinsung, beide gegen den Anspruch eines guten
-   Buyout-Fonds normiert: 2,0× TVPI und 15 % IRR ergeben je 1,00 Punkt. Eine
-   Wertung von 1,00 ist damit ein Fonds auf Benchmarkniveau, 1,50 ein sehr guter,
-   unter 0,60 wird es für das nächste Fundraising schwierig.
+   Je zur Hälfte Multiple und Verzinsung, beide gegen die Marke eines guten
+   Buyout-Fonds normiert: 1,5x TVPI und 14 % IRR ergeben je 1,00 Punkt.
+
+   Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen.
+   Vorher standen hier 2,0x und 15 % -- zwei Werte, die weder zueinander noch
+   zu dieser Simulation passten: 2,0x am Laufzeitende sind rechnerisch 7,2 %
+   IRR, für 15 % über zehn Jahre bräuchte es 4,05x. In 120 durchgerechneten
+   Partien erreichte zudem keiner von 600 Fonds die 2,0x, der Median der
+   Wertung lag bei 0,57.
+
+   1,5x und 14 % liegen dagegen auf der Kurve dieser Engine (bei TVPI 1,4-1,6
+   beträgt der Median-IRR 13,4 %) und treffen das obere Viertel der Kohorte:
+   Wertung p25 0,34, Median 0,70, p75 1,01, p90 1,25. "1,00 = Benchmarkniveau"
+   heißt damit tatsächlich Top Quartile.
 
    Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
    man ein Asset, das noch weiterläuft.                                       */
-export const TVPI_BENCH = 2.0, IRR_BENCH = 0.15;
+export const TVPI_BENCH = 1.5, IRR_BENCH = 0.14;
 export function scoreOf(f, market, quarter) {
   const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
   const i = irrOf(f, market, quarter) / IRR_BENCH;

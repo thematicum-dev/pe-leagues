@@ -187,9 +187,10 @@ function Briefing({ dark, setDark, onStart }) {
         <div className="card">
           <Def t="Zwei Kennzahlen, je zur Hälfte">
             <b>TVPI</b> misst, wie viel du aus jedem abgerufenen Euro gemacht hast. <b>IRR</b> misst, wie
-            schnell er zurückkam. Beide werden gegen den Anspruch eines guten Buyout-Fonds normiert —
-            2,00× und 15 % ergeben je einen Punkt. Eine Wertung von 1,00 ist Benchmarkniveau, 1,50 ein
-            außergewöhnlicher Jahrgang, unter 0,60 wird das nächste Fundraising schwierig.
+            schnell er zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
+            {x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Eine Wertung von
+            <b> 1,00</b> ist Benchmarkniveau und trifft das obere Viertel der Kohorte; 1,50 erreicht
+            kaum einer, unter 0,35 liegt das untere Viertel.
           </Def>
           <Def t="Das Exitfenster schließt sich">
             Käufer kennen die Laufzeit deines Fonds. Über die letzten {END_PRESSURE_FROM} Halbjahre — ab

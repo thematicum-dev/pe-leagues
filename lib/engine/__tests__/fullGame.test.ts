@@ -186,7 +186,11 @@ const GOLDEN_RESULT = {
   tvpi: 1.558837,
   dpi: 1.168698,
   irr: 0.080391,
-  score: 0.657678,
+  /* Angepasst mit der Neukalibrierung der Wertungsmarken (TVPI_BENCH 2,0 -> 1,5,
+     IRR_BENCH 15 % -> 14 %). Der Test belegt dabei, dass die Umstellung nur die
+     Wertung berührt: tvpi, dpi, irr, nav, Marktstände und die Position des
+     Zufallsgenerators sind gegenüber dem vorigen Sollwert unverändert. */
+  score: 0.806722,
   carry: 64.208005,
   landmark: {
     sector: "Consumer",

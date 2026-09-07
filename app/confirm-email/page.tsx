@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/auth/next";
 import Logo from "@/components/Logo";
 import ResendForm from "./ResendForm";
 
@@ -23,7 +24,7 @@ export default async function ConfirmEmailPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect(next && next.startsWith("/") ? next : "/dashboard");
+    redirect(safeNext(next));
   }
 
   return (
