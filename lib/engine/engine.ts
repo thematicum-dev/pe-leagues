@@ -1220,6 +1220,12 @@ export function irrOf(f, market, quarter) {
    Wertung p25 0,34, Median 0,70, p75 1,01, p90 1,25. "1,00 = Benchmarkniveau"
    heißt damit tatsächlich Top Quartile.
 
+   Bewusst nicht nachgezogen: Die globale Rangliste liest die Wertung aus den
+   gespeicherten Endständen abgeschlossener Partien (global_leaderboard.sql).
+   Partien, die vor dieser Umstellung endeten, behalten deshalb ihre nach der
+   alten Marke gerechnete Wertung und fallen gegenüber neuen Partien etwas
+   niedriger aus. Das ist so entschieden, kein Versehen.
+
    Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
