@@ -183,18 +183,21 @@ const GOLDEN_RESULT = {
   undrawn: 40.417132,
   drawn: 459.582868,
   nav: 195.371067,
-  tvpi: 1.562454,
-  dpi: 1.172447,
-  irr: 0.08084,
+  tvpi: 1.56607,
+  dpi: 1.176196,
+  irr: 0.081289,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
      carry, dpi, irr, score und tvpi -- weniger Einmalaufwand gegen die
      Nettoverschuldung heißt höhere Exiterlöse. finalRngPosition, nav, drawn
      und die Marktstände sind unverändert: Die Zahl der Zufallsziehungen ist
-     dieselbe geblieben, es haben sich ausschließlich Beträge verschoben. */
-  score: 0.809533,
-  carry: 64.623527,
+     dieselbe geblieben, es haben sich ausschließlich Beträge verschoben.
+     Ein drittes Mal mit der Anhebung des Renditeniveaus (Programmkosten und
+     Retainer -25 %, Antrittsprämie pauschal 0,3 Jahresgehälter, MULT_CAP 1,85,
+     Wachstumsprämie 0,070/0,55). Auch hier bleibt finalRngPosition gleich. */
+  score: 0.812342,
+  carry: 65.039049,
   landmark: {
     sector: "Consumer",
     revenue: 250.534344,

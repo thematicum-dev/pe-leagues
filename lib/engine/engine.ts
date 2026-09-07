@@ -469,7 +469,10 @@ export const DRIFT_LOAD = 0.45, GROWTH_MEAN = 1.6;
 export const driftErrSd = (analysis) => clamp(4.6 - 0.90 * analysis, 0.3, 4.6);
 export const driftEstOf = (d, analysis) => d.drift + d.dnoise * driftErrSd(analysis);
 export const driftBandOf = (analysis) => 1.3 * 0.577 * driftErrSd(analysis);
-export const MULT_CAP = 1.60;      // Obergrenze: Vielfaches des Sektormultiples
+export const MULT_CAP = 1.85;      // Obergrenze: Vielfaches des Sektormultiples.
+// Von 1,60 angehoben. Gemessen band die Grenze nur bei 1 % der Beteiligungen, war
+// also nie die eigentliche Bremse -- sie kappte aber genau die besten Assets, bei
+// denen Qualität und Wachstumsprämie zusammenkommen.
 
 export const CAPITAL = 500;
 /* Voreingestellte Punkteverteilung des menschlichen Fonds. Der Spieler darf
@@ -524,13 +527,14 @@ export const PAY_ANCHOR = 2.5;     // Ratingniveau, auf dem SEAT_PAY gilt
 export const sizeFactor = (eb) => Math.sqrt(clamp(eb, 2, 60) / 10);
 export const ratingFactor = (sk) => 0.30 + 0.70 * Math.pow(Math.max(sk, 0.5) / PAY_ANCHOR, 1.35);
 export const payOf = (seat, sk, eb) => SEAT_PAY[seat] * sizeFactor(eb) * ratingFactor(sk);
-export const RETAINER_PCT = 0.30;  // Headhunter: 30 % eines Jahresgehalts, Marktstandard
-export const signPct = (sk) => 0.10 + 0.05 * sk;   // Signing Bonus als Anteil eines Jahresgehalts
+export const RETAINER_PCT = 0.225; // Headhunter, gesenkt von 30 % auf 22,5 % eines Jahresgehalts
+export const SIGN_PCT = 0.30;      // Signing Bonus: 0,3 Jahresgehälter, unabhängig vom Rating
+// (vorher 0,10 + 0,05 x Rating, also 0,20 bei Rating 2 und 0,35 bei Rating 5)
 export const SEVER_YEARS = 1.0;    // Abfindung: zwölf Monatsgehälter des Amtsinhabers
 // Der Retainer wird bei Mandatserteilung fällig, also auf Marktniveau, nicht
 // auf dem erst später bekannten Rating des Kandidaten.
 export const retainerOf = (seat, eb) => payOf(seat, PAY_ANCHOR, eb) * RETAINER_PCT;
-export const signBonusOf = (seat, sk, eb) => payOf(seat, sk, eb) * signPct(sk);
+export const signBonusOf = (seat, sk, eb) => payOf(seat, sk, eb) * SIGN_PCT;
 export const severanceOf = (seat, sk, eb) => payOf(seat, sk, eb) * SEVER_YEARS;
 export const INIT_SLOTS = 4;       // Initiativ-Slots pro Halbjahr fürs ganze Portfolio
 export const LTIP_SHARE = 0.06;    // Sweet Equity des MEP am Exiterlös
@@ -636,18 +640,18 @@ export const sumInit = (c, key) => (c.initP && c.initP[key] || 0) + (c.initA && 
 export const INITS = {
   plat: [
     { id: "opex", n: "Cost-out-Programm", cls: "rel", d: "Einkauf bündeln, Gemeinkosten straffen, Standorte verdichten.",
-      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.08, cx: 0 },
+      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.06, cx: 0 },
     /* Der Ertrag steckt jetzt in der Quote selbst: nwcFix senkt die
        Kapitalbindung dauerhaft, und weil die Quote auf dem Bestand rechnet,
        fließt der Unterschied sofort als Liquidität zu. legacyRelease ist der
        pauschale Einmaleffekt von früher und wird nur noch bei der
        Wiederholung alter Halbjahre angewandt (siehe EngineCompat).         */
     { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Senkt die Kapitalbindung dauerhaft und setzt den Unterschied sofort frei.",
-      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.048, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
+      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.036, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
     { id: "erp", n: "ERP & Digitalisierung", cls: "tr", d: "Systemlandschaft ersetzen. Großer Hebel, langer Atem — und ein Fehlschlag bringt gar nichts.",
-      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.24, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
+      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.18, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
     { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
-      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.20, cx: 1.0, capexFix: -0.9, failCost: 0.30,
+      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.15, cx: 1.0, capexFix: -0.9, failCost: 0.30,
       req: (c) => effSkill(c, "cfo") >= 4, reqT: "Effektives CFO-Rating mindestens 4" },
   ],
   acc: [
@@ -953,7 +957,13 @@ export function cagrPrem(c) {
    beim Closing kein Bewertungssprung entsteht.                                */
 export function growthPrem(c) {
   if (!c.hist || c.hist.length < 3) return 0;
-  return clamp(cagrPrem(c) * 0.050, -0.20, 0.45);
+  /* Aufschlag je Prozentpunkt Umsatz-CAGR über dem Sektor. Von 0,050 auf 0,070
+     angehoben und die Obergrenze von 0,45 auf 0,55: Der Multiple-Kanal trug in
+     der Messung nur 11 % des abgerufenen Kapitals bei, weil die Prämie im Median
+     bei exakt 0,000 lag -- ein Betrieb, der mit seinem Sektor wächst, bekam gar
+     nichts. Der Boden bleibt bei -0,20, damit Unterperformance nicht härter
+     bestraft wird als zuvor. */
+  return clamp(cagrPrem(c) * 0.070, -0.20, 0.55);
 }
 /* Die Assetqualität trägt das Exit-Multiple stärker als früher: seit der
    Cashflow-Korrektur liefert die Entschuldung nur noch die Hälfte, der Wert muss
