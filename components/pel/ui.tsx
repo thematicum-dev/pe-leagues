@@ -131,6 +131,10 @@ export const CSS = `
   padding:22px 2px 6px;border-top:1px solid var(--rule);margin:18px 16px 0;}
 .pel .card.shelf{cursor:pointer;transition:border-color .15s ease;}
 .pel .card.shelf:hover{border-color:var(--ink2);}
+/* Ohne .pad an derselben Zeile: .pel .pad{padding:0 16px 16px} steht in dieser
+   Datei nach .shelfrow und hat dieselbe Spezifität -- es gewann und setzte den
+   oberen Innenabstand auf 0. Der Unternehmensname klebte dadurch an der
+   Oberkante der Karte. */
 .pel .shelfrow{display:flex;gap:13px;align-items:center;padding:19px 16px;}
 .pel .shelfmain{flex:1;min-width:0;}
 .pel .shelfname{font-size:14px;font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1870,7 +1874,7 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
         return (
           <div className="card st shelf" key={c.uid} style={{ "--sec": SECCOLOR[c.sector] }}
             onClick={() => onPick && onPick(c.uid)}>
-            <div className="pad shelfrow">
+            <div className="shelfrow">
               <div className="shelfmain">
                 <div className="shelfname">
                   <i className="hdot" style={{ background: col }} />{c.name}
