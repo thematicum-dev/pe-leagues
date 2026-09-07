@@ -636,18 +636,18 @@ export const sumInit = (c, key) => (c.initP && c.initP[key] || 0) + (c.initA && 
 export const INITS = {
   plat: [
     { id: "opex", n: "Cost-out-Programm", cls: "rel", d: "Einkauf bündeln, Gemeinkosten straffen, Standorte verdichten.",
-      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.10, cx: 0 },
+      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.08, cx: 0 },
     /* Der Ertrag steckt jetzt in der Quote selbst: nwcFix senkt die
        Kapitalbindung dauerhaft, und weil die Quote auf dem Bestand rechnet,
        fließt der Unterschied sofort als Liquidität zu. legacyRelease ist der
        pauschale Einmaleffekt von früher und wird nur noch bei der
        Wiederholung alter Halbjahre angewandt (siehe EngineCompat).         */
     { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Senkt die Kapitalbindung dauerhaft und setzt den Unterschied sofort frei.",
-      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.06, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
+      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.048, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
     { id: "erp", n: "ERP & Digitalisierung", cls: "tr", d: "Systemlandschaft ersetzen. Großer Hebel, langer Atem — und ein Fehlschlag bringt gar nichts.",
-      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.30, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
+      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.24, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
     { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
-      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.25, cx: 1.0, capexFix: -0.9, failCost: 0.30,
+      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.20, cx: 1.0, capexFix: -0.9, failCost: 0.30,
       req: (c) => effSkill(c, "cfo") >= 4, reqT: "Effektives CFO-Rating mindestens 4" },
   ],
   acc: [

@@ -183,15 +183,18 @@ const GOLDEN_RESULT = {
   undrawn: 40.417132,
   drawn: 459.582868,
   nav: 195.371067,
-  tvpi: 1.558837,
-  dpi: 1.168698,
-  irr: 0.080391,
-  /* Angepasst mit der Neukalibrierung der Wertungsmarken (TVPI_BENCH 2,0 -> 1,5,
-     IRR_BENCH 15 % -> 14 %). Der Test belegt dabei, dass die Umstellung nur die
-     Wertung berührt: tvpi, dpi, irr, nav, Marktstände und die Position des
-     Zufallsgenerators sind gegenüber dem vorigen Sollwert unverändert. */
-  score: 0.806722,
-  carry: 64.208005,
+  tvpi: 1.562454,
+  dpi: 1.172447,
+  irr: 0.08084,
+  /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
+     (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
+     und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
+     carry, dpi, irr, score und tvpi -- weniger Einmalaufwand gegen die
+     Nettoverschuldung heißt höhere Exiterlöse. finalRngPosition, nav, drawn
+     und die Marktstände sind unverändert: Die Zahl der Zufallsziehungen ist
+     dieselbe geblieben, es haben sich ausschließlich Beträge verschoben. */
+  score: 0.809533,
+  carry: 64.623527,
   landmark: {
     sector: "Consumer",
     revenue: 250.534344,
