@@ -188,10 +188,7 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
     const truth = played.states[played.states.length - 1].state;
     expect(JSON.stringify(throughJson(rebuilt))).toBe(JSON.stringify(throughJson(truth)));
     expect(needsBackfill(rebuilt)).toBe(false);
-    /* Eigenes Zeitlimit: Der Startwert dieser Partie liegt am schweren Rand der
-       Suchkosten (siehe backfillSeason) und braucht rund 24.000 Wiederholungen.
-       Das ist der Fall, den der Test abdecken soll — nicht der bequeme.      */
-  }, 60000);
+  });
 
   it("liefert danach Abschlüsse ohne eine einzige geschätzte Spalte", () => {
     const res = backfillSeason({
@@ -214,8 +211,24 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
       });
     });
     expect(checked).toBeGreaterThan(0);
-    // Zweiter voller Suchlauf über dieselbe Partie, siehe oben.
-  }, 60000);
+  });
+
+  /* Die Suchkosten sind selbst eine Eigenschaft, die kaputtgehen kann, ohne
+     dass ein einziger Wert falsch wird: Vor der schrittweisen Vertiefung
+     kostete genau diese Partie 24.295 Wiederholungen statt der jetzigen gut
+     800, und der Unterschied zwischen "geht" und "geht nicht" war allein das
+     Budget. Ein Ergebnistest hätte das nie bemerkt. Die Schranke liegt bewusst
+     weit über dem gemessenen Wert -- sie soll eine Rückkehr zur erschöpfenden
+     Suche je Halbjahr abfangen, nicht jede Schwankung.                      */
+  it("kommt ohne erschöpfende Suche aus", () => {
+    const res = backfillSeason({
+      states: stored,
+      decisionsByHalfYear: played.decisionsByHalfYear,
+      endSeed: played.endSeed,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.attempts).toBeLessThan(3000);
+  });
 
   it("verweigert die Wiederherstellung, wenn der Endstand nicht passt", () => {
     const res = backfillSeason({
