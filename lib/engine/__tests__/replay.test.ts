@@ -213,6 +213,23 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
     expect(checked).toBeGreaterThan(0);
   });
 
+  /* Die Suchkosten sind selbst eine Eigenschaft, die kaputtgehen kann, ohne
+     dass ein einziger Wert falsch wird: Vor der schrittweisen Vertiefung
+     kostete genau diese Partie 24.295 Wiederholungen statt der jetzigen gut
+     800, und der Unterschied zwischen "geht" und "geht nicht" war allein das
+     Budget. Ein Ergebnistest hätte das nie bemerkt. Die Schranke liegt bewusst
+     weit über dem gemessenen Wert -- sie soll eine Rückkehr zur erschöpfenden
+     Suche je Halbjahr abfangen, nicht jede Schwankung.                      */
+  it("kommt ohne erschöpfende Suche aus", () => {
+    const res = backfillSeason({
+      states: stored,
+      decisionsByHalfYear: played.decisionsByHalfYear,
+      endSeed: played.endSeed,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.attempts).toBeLessThan(3000);
+  });
+
   it("verweigert die Wiederherstellung, wenn der Endstand nicht passt", () => {
     const res = backfillSeason({
       states: stored,

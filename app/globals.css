@@ -589,6 +589,9 @@ body {
 .universeswitch {
   display: flex;
   align-items: center;
+  /* Umbruch, damit eine Fehlermeldung zum Universumswechsel eine eigene
+     Zeile unter dem Auswahlfeld bekommt statt es zusammenzuquetschen. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
   font-size: 13px;

@@ -113,7 +113,14 @@ export default async function DashboardPage() {
           <span className="dashsub">Gegen vier Mitspieler, ein Halbjahr je Zug</span>
         </div>
 
+        {/* key je Universum: LobbyOverview setzt mySeason und openLobbies über
+            useState aus den Props auf. Das greift nur beim Einhängen -- nach
+            einem Universumswechsel lieferte der Server zwar neue Werte, die
+            Komponente zeigte aber weiter die Partie des vorigen Universums.
+            Nur die Überschrift folgte, weil universeName eine reine Prop ist.
+            Der key erzwingt das Neuaufsetzen mit den neuen Daten. */}
         <LobbyOverview
+          key={activeUniverse.id}
           initialMySeason={mySeason}
           initialOpenLobbies={openLobbies}
           universeId={activeUniverse.id}

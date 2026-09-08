@@ -6,12 +6,20 @@
    Modul-Zustand zu teilen.                                            */
 import type { Rng } from "./rng.ts";
 
+/* g = Marktwachstum des Sektors in Prozent p. a., m = typisches Einstiegs-
+   multiple. Jeder Sektor wurde um einen Prozentpunkt angehoben: Die alten
+   Werte lagen am unteren Rand dessen, was der europäische Mittelstand in den
+   Erhebungen zeigt, und drückten das erreichbare EBITDA-Wachstum über eine
+   Halteperiode entsprechend. Die Rangfolge der Sektoren bleibt unverändert —
+   angehoben wird das Niveau, nicht die Struktur. Wer die Zahl hier ändert,
+   muss GROWTH_MEAN mitziehen: Der Drift misst den Abstand des bisherigen
+   Wachstums zum Sektor, und dieser Abstand verschiebt sich sonst.           */
 export const SECTORS = {
-  Industrials: { g: 3.0, m: 8.5 },
-  Healthcare:  { g: 5.0, m: 11.0 },
-  Software:    { g: 8.0, m: 13.0 },
-  Services:    { g: 3.5, m: 9.0 },
-  Consumer:    { g: 2.0, m: 8.0 },
+  Industrials: { g: 4.0, m: 8.5 },
+  Healthcare:  { g: 6.0, m: 11.0 },
+  Software:    { g: 9.0, m: 13.0 },
+  Services:    { g: 4.5, m: 9.0 },
+  Consumer:    { g: 3.0, m: 8.0 },
 };
 export const SECNAMES = Object.keys(SECTORS);
 // Nicht jede Flagge ist ein Risiko: die Buy-&-Build-Plattform ist die These,
@@ -216,6 +224,15 @@ export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
    rng.nrm(x) summiert vier Gleichverteilungen und zentriert sie; die
    Standardabweichung ist damit x·√(4/12) = 0,577·x.                       */
 export const GROWTH_NOISE = 6;      // Streubreite auf das annualisierte Wachstum, in pp
+/* Wachstumsbeitrag je effektiver Reifegradstufe über dem Branchenniveau, in pp
+   p. a., vor dem Operations-Multiplikator. Von 1,5 auf 1,7 angehoben: Ein
+   vollständig durchgezogenes Wachstumsprogramm hebt den effektiven Reifegrad
+   in der Messung um rund 1,4 Stufen, trug damit aber nur 2,7 pp zum Wachstum
+   bei — gegen eine Streuung von 3,5 pp Standardabweichung war die eigene
+   Entscheidung im Ergebnis kaum sichtbar. Bewusst moderat: Der Deckel
+   accEff = min(acc, People+1, Performance+1) soll die Bindung bleiben, nicht
+   die Höhe des Beitrags.                                                    */
+export const ACC_GROWTH_PP = 1.7;
 export const MARGIN_NOISE = 0.6;    // Streubreite auf die Marge, in pp
 /* Wahrscheinlichkeit eines Sonderereignisses je Beteiligung und Halbjahr
    (siehe EVENTS). Verlorener Schlüsselkunde, Großauftrag, abgesprungener CEO
@@ -345,7 +362,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(GROWTH_NOISE);
+  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * ACC_GROWTH_PP * opsMult + rng.nrm(GROWTH_NOISE);
   const rev0 = c.revenue;
   c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
 
@@ -463,13 +480,22 @@ export const QUAL_COEF = 0.006;    // Qualitätsaufschlag je Punkt auf das Sekto
 /* Kopplung zwischen bisherigem Wachstum und erwarteter Performance vs. Markt.
    DRIFT_LOAD 0,30 auf eine Streuung von 3,2 pp ergibt ein Signal mit sd 0,96 pp
    gegen ein Residuum von 0,98 pp — die Karte erklärt rund die Hälfte.        */
-export const DRIFT_LOAD = 0.45, GROWTH_MEAN = 1.6;
+/* GROWTH_MEAN ist der durchschnittliche Abstand der historischen Wachstums-
+   bänder des Dealbuchs (BOOK) zum Sektorwachstum. Mit der Anhebung der
+   Sektorraten um einen Punkt schrumpft dieser Abstand von 1,6 auf 0,6; die
+   Konstante zieht das exakt nach, damit der Drift im Mittel weiterhin null
+   ist. Ohne diese Anpassung hätte die Anhebung sich zu 45 % selbst wieder
+   aufgehoben, weil jeder Deal einen entsprechend negativen Drift bekäme.   */
+export const DRIFT_LOAD = 0.45, GROWTH_MEAN = 0.6;
 /* Schätzgüte des Datenraums: Analyse verkleinert den Fehler, beseitigt ihn nie.
    Ohne Due Diligence gibt es überhaupt keine Schätzung.                       */
 export const driftErrSd = (analysis) => clamp(4.6 - 0.90 * analysis, 0.3, 4.6);
 export const driftEstOf = (d, analysis) => d.drift + d.dnoise * driftErrSd(analysis);
 export const driftBandOf = (analysis) => 1.3 * 0.577 * driftErrSd(analysis);
-export const MULT_CAP = 1.60;      // Obergrenze: Vielfaches des Sektormultiples
+export const MULT_CAP = 1.85;      // Obergrenze: Vielfaches des Sektormultiples.
+// Von 1,60 angehoben. Gemessen band die Grenze nur bei 1 % der Beteiligungen, war
+// also nie die eigentliche Bremse -- sie kappte aber genau die besten Assets, bei
+// denen Qualität und Wachstumsprämie zusammenkommen.
 
 export const CAPITAL = 500;
 /* Voreingestellte Punkteverteilung des menschlichen Fonds. Der Spieler darf
@@ -524,13 +550,14 @@ export const PAY_ANCHOR = 2.5;     // Ratingniveau, auf dem SEAT_PAY gilt
 export const sizeFactor = (eb) => Math.sqrt(clamp(eb, 2, 60) / 10);
 export const ratingFactor = (sk) => 0.30 + 0.70 * Math.pow(Math.max(sk, 0.5) / PAY_ANCHOR, 1.35);
 export const payOf = (seat, sk, eb) => SEAT_PAY[seat] * sizeFactor(eb) * ratingFactor(sk);
-export const RETAINER_PCT = 0.30;  // Headhunter: 30 % eines Jahresgehalts, Marktstandard
-export const signPct = (sk) => 0.10 + 0.05 * sk;   // Signing Bonus als Anteil eines Jahresgehalts
+export const RETAINER_PCT = 0.225; // Headhunter, gesenkt von 30 % auf 22,5 % eines Jahresgehalts
+export const SIGN_PCT = 0.30;      // Signing Bonus: 0,3 Jahresgehälter, unabhängig vom Rating
+// (vorher 0,10 + 0,05 x Rating, also 0,20 bei Rating 2 und 0,35 bei Rating 5)
 export const SEVER_YEARS = 1.0;    // Abfindung: zwölf Monatsgehälter des Amtsinhabers
 // Der Retainer wird bei Mandatserteilung fällig, also auf Marktniveau, nicht
 // auf dem erst später bekannten Rating des Kandidaten.
 export const retainerOf = (seat, eb) => payOf(seat, PAY_ANCHOR, eb) * RETAINER_PCT;
-export const signBonusOf = (seat, sk, eb) => payOf(seat, sk, eb) * signPct(sk);
+export const signBonusOf = (seat, sk, eb) => payOf(seat, sk, eb) * SIGN_PCT;
 export const severanceOf = (seat, sk, eb) => payOf(seat, sk, eb) * SEVER_YEARS;
 export const INIT_SLOTS = 4;       // Initiativ-Slots pro Halbjahr fürs ganze Portfolio
 export const LTIP_SHARE = 0.06;    // Sweet Equity des MEP am Exiterlös
@@ -636,18 +663,18 @@ export const sumInit = (c, key) => (c.initP && c.initP[key] || 0) + (c.initA && 
 export const INITS = {
   plat: [
     { id: "opex", n: "Cost-out-Programm", cls: "rel", d: "Einkauf bündeln, Gemeinkosten straffen, Standorte verdichten.",
-      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.10, cx: 0 },
+      sm: 0.02, dm: -1, gm: 0.8, oneOff: 0.06, cx: 0 },
     /* Der Ertrag steckt jetzt in der Quote selbst: nwcFix senkt die
        Kapitalbindung dauerhaft, und weil die Quote auf dem Bestand rechnet,
        fließt der Unterschied sofort als Liquidität zu. legacyRelease ist der
        pauschale Einmaleffekt von früher und wird nur noch bei der
        Wiederholung alter Halbjahre angewandt (siehe EngineCompat).         */
     { id: "nwc", n: "NWC-Programm (Cash Release)", cls: "rel", d: "Forderungslaufzeiten, Bestände und Zahlungsziele. Senkt die Kapitalbindung dauerhaft und setzt den Unterschied sofort frei.",
-      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.06, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
+      sm: 0.05, dm: 0, gm: 0.5, oneOff: 0.036, cx: 0, nwcFix: -3, legacyRelease: 0.35 },
     { id: "erp", n: "ERP & Digitalisierung", cls: "tr", d: "Systemlandschaft ersetzen. Großer Hebel, langer Atem — und ein Fehlschlag bringt gar nichts.",
-      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.30, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
+      sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.18, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
     { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
-      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.25, cx: 1.0, capexFix: -0.9, failCost: 0.30,
+      sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.15, cx: 1.0, capexFix: -0.9, failCost: 0.30,
       req: (c) => effSkill(c, "cfo") >= 4, reqT: "Effektives CFO-Rating mindestens 4" },
   ],
   acc: [
@@ -703,8 +730,8 @@ export function fitLabel(id, c) {
       : c.plat < 2.5 ? "Prozesse noch zu unreif für Automatisierung" : "Größe im mittleren Bereich",
     pen: c.quality >= 70 ? "starke Marktstellung, Preise sind durchsetzbar"
       : c.quality <= 45 ? "schwache Marktstellung, kaum Preissetzungsmacht" : "durchschnittliche Marktstellung",
-    exp: SECTORS[c.sector].g >= 5 ? "wachsender Markt trägt die Expansion"
-      : SECTORS[c.sector].g <= 3 ? "stagnierender Markt — Expansion kostet Marge ohne Gegenwert" : "Markt wächst moderat",
+    exp: SECTORS[c.sector].g >= 6 ? "wachsender Markt trägt die Expansion"
+      : SECTORS[c.sector].g <= 4 ? "stagnierender Markt — Expansion kostet Marge ohne Gegenwert" : "Markt wächst moderat",
   }[id] || "";
   return { f, t: t[0], color: t[1], why };
 }
@@ -953,7 +980,13 @@ export function cagrPrem(c) {
    beim Closing kein Bewertungssprung entsteht.                                */
 export function growthPrem(c) {
   if (!c.hist || c.hist.length < 3) return 0;
-  return clamp(cagrPrem(c) * 0.050, -0.20, 0.45);
+  /* Aufschlag je Prozentpunkt Umsatz-CAGR über dem Sektor. Von 0,050 auf 0,070
+     angehoben und die Obergrenze von 0,45 auf 0,55: Der Multiple-Kanal trug in
+     der Messung nur 11 % des abgerufenen Kapitals bei, weil die Prämie im Median
+     bei exakt 0,000 lag -- ein Betrieb, der mit seinem Sektor wächst, bekam gar
+     nichts. Der Boden bleibt bei -0,20, damit Unterperformance nicht härter
+     bestraft wird als zuvor. */
+  return clamp(cagrPrem(c) * 0.070, -0.20, 0.55);
 }
 /* Die Assetqualität trägt das Exit-Multiple stärker als früher: seit der
    Cashflow-Korrektur liefert die Entschuldung nur noch die Hälfte, der Wert muss
@@ -1205,16 +1238,50 @@ export function irrOf(f, market, quarter) {
 }
 
 /* ---------- Wertung ----------
-   Je zur Hälfte Multiple und Verzinsung, beide gegen den Anspruch eines guten
-   Buyout-Fonds normiert: 2,0× TVPI und 15 % IRR ergeben je 1,00 Punkt. Eine
-   Wertung von 1,00 ist damit ein Fonds auf Benchmarkniveau, 1,50 ein sehr guter,
-   unter 0,60 wird es für das nächste Fundraising schwierig.
+   Je zur Hälfte Multiple und Verzinsung, beide gegen die Marke eines guten
+   Buyout-Fonds normiert: 1,7x TVPI und 18 % IRR ergeben je 1,00 Punkt.
+
+   Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen,
+   und werden nach zwei Bedingungen gesetzt:
+     1. Die Wertung 1,00 soll das obere Viertel der Kohorte treffen -- das ist
+        die Aussage "1,00 = Benchmarkniveau".
+     2. Die beiden Marken müssen denselben Fonds beschreiben. Der Median-IRR
+        der Fonds, die um TVPI_BENCH herum liegen, muss also IRR_BENCH sein;
+        sonst verlangt eine Hälfte der Wertung etwas anderes als die andere.
+
+   Erste Fassung 2,0x und 15 %: verfehlte beide Bedingungen. Keiner von 600
+   Fonds erreichte die 2,0x, der Median der Wertung lag bei 0,57, und die
+   beiden Marken passten auch rechnerisch nicht zueinander.
+
+   Zweite Fassung 1,5x und 14 %: gemessen auf der damaligen Renditekurve.
+
+   Dritte Fassung, hier, nach der Anhebung des Wachstumsniveaus (Sektorraten
+   +1 pp, ACC_GROWTH_PP 1,5 -> 1,7): Dieselbe Messung über 120 Partien mit je
+   fünf Fonds ergibt jetzt TVPI p25 1,11, Median 1,42, p75 1,69, und die Fonds
+   um TVPI 1,7 herum erreichen einen Median-IRR von 18,8 %. Mit den alten
+   Marken war die Wertung entsprechend nach oben verrutscht -- p75 stieg von
+   1,15 auf 1,21, der Median von 0,76 auf 0,85. 1,7x und 18 % stellen beide
+   Bedingungen wieder her: Wertung p25 0,41, Median 0,71, p75 1,00, p90 1,20.
+
+   Zur Einordnung der absoluten Höhe: Die Messung läuft über eine
+   nachgebildete Partie (ein menschlicher Fondsplatz nach festem Regelwerk,
+   vier KI-Archetypen). Dieselbe Messung reproduziert die zweite Fassung mit
+   p75 1,15 statt der damals notierten 1,01 -- der Zuschnitt des menschlichen
+   Fondsplatzes verschiebt das Niveau also um gut einen Zehntelpunkt. Die
+   Rangfolge und der Abstand der Quartile sind davon nicht betroffen, die
+   absolute Lage der Marke trägt diese Unschärfe.
+
+   Bewusst nicht nachgezogen: Die globale Rangliste liest die Wertung aus den
+   gespeicherten Endständen abgeschlossener Partien (global_leaderboard.sql).
+   Partien, die vor dieser Umstellung endeten, behalten deshalb ihre nach der
+   alten Marke gerechnete Wertung und fallen gegenüber neuen Partien etwas
+   niedriger aus. Das ist so entschieden, kein Versehen.
 
    Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
    man ein Asset, das noch weiterläuft.                                       */
-export const TVPI_BENCH = 2.0, IRR_BENCH = 0.15;
+export const TVPI_BENCH = 1.7, IRR_BENCH = 0.18;
 export function scoreOf(f, market, quarter) {
   const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
   const i = irrOf(f, market, quarter) / IRR_BENCH;

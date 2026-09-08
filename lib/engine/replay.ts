@@ -143,6 +143,15 @@ export function replayHalfYear(
    und mehreren Verkaufsprozessen bequem hineinpasst — und trotzdem eine
    aussichtslose Suche in Sekunden endet statt in Minuten.                   */
 export const MAX_DRAWS_PER_HALF_YEAR = 6000;
+/* Gesamtbudget an Wiederholungen für eine ganze Partie. Mit der schrittweisen
+   Vertiefung (siehe backfillSeason) kostet eine wiederherstellbare Partie
+   gemessen 150 bis 850 Versuche, eine nicht wiederherstellbare rund 7.000 —
+   letztere endet von selbst, sobald der Suchraum erschöpft ist, nicht erst am
+   Budget. Das Budget ist also kein Regelweg, sondern ein Notaus für einen
+   Verlauf, den diese Messungen nicht abdecken. Entsprechend großzügig: Ein
+   Fehlschlag heißt, dass die Partie gar nicht wiederherstellbar ist, während
+   ein langsamer Erfolg bei einem einmaligen Reparaturlauf nicht weh tut.    */
+export const BACKFILL_BUDGET = 100000;
 
 /* Startposition eines ausgewerteten Halbjahres finden: die Zahl der Ziehungen,
    um die der Strom vom Ende dieses Halbjahres zurückgedreht werden muss.
@@ -161,10 +170,23 @@ export function findStartSeed(
   prevState: RuntimeState, halfYear: number,
   decisionsBySlot: Record<number, TurnDecisions>,
   expected: RuntimeState, endSeed: number,
-  opts: { maxDraws?: number; budget?: number; exclude?: Set<number> } = {},
+  opts: {
+    maxDraws?: number; budget?: number; exclude?: Set<number>;
+    /* Wie weit der Ringsuchlauf um den Schätzwert herum gehen darf. Ohne
+       Angabe die volle Strecke bis maxDraws. Der Aufrufer setzt den Radius
+       klein, wenn er die Suche erst einmal flach halten und im Zweifel
+       später mit größerem Radius wiederholen will — siehe backfillSeason. */
+    radius?: number;
+    /* Zähler für die tatsächlich verbrauchten Wiederholungen. Nötig, weil der
+       Rückgabewert bei einer erfolglosen Suche null ist und die Kosten sonst
+       verlorengingen: Genau die erfolglose Suche ist die teure.            */
+    counter?: { n: number };
+  } = {},
 ): { seed: number; draws: number; attempts: number } | null {
   const maxDraws = opts.maxDraws ?? MAX_DRAWS_PER_HALF_YEAR;
+  const radius = Math.min(opts.radius ?? maxDraws, maxDraws);
   const budget = opts.budget ?? 2 * maxDraws + 16;
+  const counter = opts.counter;
   let attempts = 0;
   const tried = new Set<number>();
 
@@ -177,6 +199,7 @@ export function findStartSeed(
     if (steps < 1 || steps > maxDraws || tried.has(steps)) return null;
     tried.add(steps);
     attempts++;
+    if (counter) counter.n++;
     const seed = rngStepBack(endSeed, steps);
     const r = replayHalfYear(prevState, halfYear, decisionsBySlot, seed);
     /* Die Endposition muss nicht eigens geprüft werden: Wer bei
@@ -203,7 +226,7 @@ export function findStartSeed(
   /* Sonst ringförmig um den Schätzwert herum, bis der Suchraum erschöpft ist.
      Der Ring beginnt bei Abstand null: Die letzte Messung der Schleife oben
      liefert einen neuen Schätzwert, der selbst noch nicht geprüft wurde. */
-  for (let d = 0; d <= maxDraws && attempts < budget; d++) {
+  for (let d = 0; d <= radius && attempts < budget; d++) {
     attempt(guess + d);
     if (hit) return hit;
     if (d > 0) attempt(guess - d);
@@ -247,11 +270,8 @@ export interface BackfillResult {
 export function backfillSeason(input: BackfillInput): BackfillResult {
   const rows = [...input.states].sort((a, b) => a.halfYear - b.halfYear);
   const startSeeds: Record<number, number> = {};
-  /* Gesamtbudget an Wiederholungen. Eine volle Partie mit fünf menschlichen
-     Fonds über fünfzehn Halbjahre braucht gemessen rund 200 — die Grenze liegt
-     also hundertfach darüber und bricht trotzdem in Sekunden ab, wenn sich
-     eine Partie nicht herstellen lässt.                                     */
-  const budget = input.budget ?? 25000;
+  /* Gesamtbudget an Wiederholungen, siehe die Suchstrategie weiter unten. */
+  const budget = input.budget ?? BACKFILL_BUDGET;
   let attempts = 0;
 
   if (!rows.length || rows[0].halfYear !== 0) {
@@ -271,29 +291,59 @@ export function backfillSeason(input: BackfillInput): BackfillResult {
      und die Suche an derselben Stelle fortgesetzt. Weil die Kette bis
      Halbjahr 1 durchgeprüft wird, bleibt am Ende nur die tatsächlich
      gespielte Reihenfolge übrig.                                            */
-  const rejected = new Map<string, Set<number>>();
+  const maxDraws = input.maxDraws ?? MAX_DRAWS_PER_HALF_YEAR;
   let deepest = n;
-  const solve = (k: number, endSeed: number): Record<number, number> | null => {
-    if (k === 0) return {};
-    if (k < deepest) deepest = k;
-    const key = `${k}:${endSeed}`;
-    let excluded = rejected.get(key);
-    if (!excluded) { excluded = new Set(); rejected.set(key, excluded); }
-    for (;;) {
-      if (attempts >= budget) return null;
-      const found = findStartSeed(
-        rows[k - 1].state, k, input.decisionsByHalfYear[k] || {}, rows[k].state, endSeed,
-        { maxDraws: input.maxDraws, exclude: excluded },
-      );
-      attempts += found ? found.attempts : (input.maxDraws ?? MAX_DRAWS_PER_HALF_YEAR);
-      if (!found) return null;
-      const rest = solve(k - 1, found.seed);
-      if (rest) { rest[k] = found.seed; return rest; }
-      excluded.add(found.seed);
-    }
+  const solveAt = (radius: number) => {
+    const rejected = new Map<string, Set<number>>();
+    const solve = (k: number, endSeed: number): Record<number, number> | null => {
+      if (k === 0) return {};
+      if (k < deepest) deepest = k;
+      const key = `${k}:${endSeed}`;
+      let excluded = rejected.get(key);
+      if (!excluded) { excluded = new Set(); rejected.set(key, excluded); }
+      for (;;) {
+        if (attempts >= budget) return null;
+        const counter = { n: 0 };
+        const found = findStartSeed(
+          rows[k - 1].state, k, input.decisionsByHalfYear[k] || {}, rows[k].state, endSeed,
+          { maxDraws, radius, exclude: excluded, counter },
+        );
+        attempts += counter.n;
+        if (!found) return null;
+        const rest = solve(k - 1, found.seed);
+        if (rest) { rest[k] = found.seed; return rest; }
+        excluded.add(found.seed);
+      }
+    };
+    return solve(n, input.endSeed);
   };
 
-  const chain = solve(n, input.endSeed);
+  /* Schrittweise vertiefen statt gleich in die Vollen. Der Grund ist eine
+     Unwucht, die sich messen lässt: Eine erfolgreiche Suche findet die
+     Startposition fast immer innerhalb weniger Dutzend Schritte um den
+     Schätzwert — über eine gemessene Partie lagen alle dreizehn Treffer
+     zwischen 2 und 93 Versuchen. Eine erfolglose Suche dagegen muss den
+     ganzen Ring bis maxDraws abgehen, um "gibt es nicht" beweisen zu können,
+     und kostet damit rund 12.000.
+
+     Erfolglose Suchen sind kein Ausnahmefall, sondern der Normalbetrieb der
+     Rücknahme: Ein mehrdeutiger Kandidat für Halbjahr k wird genau dadurch
+     widerlegt, dass Halbjahr k−1 damit nicht lösbar ist. In derselben Partie
+     kamen auf dreizehn Treffer (zusammen 295 Versuche) vier solcher Beweise
+     — und die kosteten 24.000. Der gesamte Aufwand steckte also im
+     Widerlegen, nicht im Finden.
+
+     Mit einem kleinen Radius wird dieser Beweis billig, und die Vollständigkeit
+     bleibt erhalten: Findet ein Durchgang keine Kette, wird der nächste mit
+     größerem Radius gefahren, bis maxDraws erreicht ist. Durchsucht wird am
+     Ende derselbe Raum, nur in anderer Reihenfolge — flach über die ganze
+     Kette statt erschöpfend je Halbjahr.                                    */
+  let chain: Record<number, number> | null = null;
+  for (const radius of [64, 512, maxDraws]) {
+    deepest = n;
+    chain = solveAt(radius);
+    if (chain || attempts >= budget || radius >= maxDraws) break;
+  }
   if (!chain) {
     return { ok: false, states: [], startSeeds, attempts, reason: `half_year_${deepest}_not_reproducible` };
   }
