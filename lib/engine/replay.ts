@@ -247,11 +247,19 @@ export interface BackfillResult {
 export function backfillSeason(input: BackfillInput): BackfillResult {
   const rows = [...input.states].sort((a, b) => a.halfYear - b.halfYear);
   const startSeeds: Record<number, number> = {};
-  /* Gesamtbudget an Wiederholungen. Eine volle Partie mit fünf menschlichen
-     Fonds über fünfzehn Halbjahre braucht gemessen rund 200 — die Grenze liegt
-     also hundertfach darüber und bricht trotzdem in Sekunden ab, wenn sich
-     eine Partie nicht herstellen lässt.                                     */
-  const budget = input.budget ?? 25000;
+  /* Gesamtbudget an Wiederholungen. Der Median liegt gemessen bei rund 250 je
+     Partie, die Verteilung hat aber einen schweren Rand: Über acht Startwerte
+     gemessen brauchten zwei davon 6.200 und 24.300 Versuche. Der Grund steckt
+     in findStartSeed — der Schätzwert stammt aus einer Wiederholung von einer
+     falschen Position aus, und wenn diese Wiederholung einen anderen Pfad
+     nimmt (eine Beteiligung mehr, ein Exit weniger), liegt er einige tausend
+     Ziehungen daneben und der Ringsuchlauf muss die Strecke abgehen.
+     Das frühere Budget von 25.000 stand unter der Annahme, es liege
+     hundertfach über dem Bedarf; gegen diesen Rand war es faktisch knapp.
+     Ein Fehlschlag heißt, dass die Partie gar nicht wiederherstellbar ist —
+     ein langsamer Erfolg ist deutlich besser. 100.000 Versuche entsprechen
+     rund einer Minute für einen einmaligen Wiederherstellungslauf.          */
+  const budget = input.budget ?? 100000;
   let attempts = 0;
 
   if (!rows.length || rows[0].halfYear !== 0) {

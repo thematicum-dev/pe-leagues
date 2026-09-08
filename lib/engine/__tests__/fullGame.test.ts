@@ -182,10 +182,10 @@ const GOLDEN_RESULT = {
   cash: 40.417132,
   undrawn: 40.417132,
   drawn: 459.582868,
-  nav: 195.371067,
-  tvpi: 1.56607,
-  dpi: 1.176196,
-  irr: 0.081289,
+  nav: 205.409127,
+  tvpi: 1.680096,
+  dpi: 1.274223,
+  irr: 0.094225,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
@@ -195,9 +195,17 @@ const GOLDEN_RESULT = {
      dieselbe geblieben, es haben sich ausschließlich Beträge verschoben.
      Ein drittes Mal mit der Anhebung des Renditeniveaus (Programmkosten und
      Retainer -25 %, Antrittsprämie pauschal 0,3 Jahresgehälter, MULT_CAP 1,85,
-     Wachstumsprämie 0,070/0,55). Auch hier bleibt finalRngPosition gleich. */
-  score: 0.812342,
-  carry: 65.039049,
+     Wachstumsprämie 0,070/0,55). Auch hier bleibt finalRngPosition gleich.
+     Ein viertes Mal mit der Anhebung des Wachstums: Sektorraten je +1 pp
+     (GROWTH_MEAN entsprechend 1,6 -> 0,6) und ACC_GROWTH_PP 1,5 -> 1,7. Diese
+     Partie legt Wachstumsmaßnahmen auf, deshalb schlagen beide Hebel durch --
+     das EBITDA der Beispielbeteiligung steigt von 86,0 auf 97,0, der TVPI von
+     1,566 auf 1,680. Unverändert bleiben finalRngPosition, drawn, cash,
+     undrawn, die Marktstände und das Landmark-Objekt: An der Zahl und der
+     Reihenfolge der Zufallsziehungen ändert sich nichts, und newLandmark
+     zieht sein Wachstum aus dem Archetypband statt aus SECTORS. */
+  score: 0.89655,
+  carry: 78.140101,
   landmark: {
     sector: "Consumer",
     revenue: 250.534344,
@@ -205,13 +213,13 @@ const GOLDEN_RESULT = {
     askMult: 11.137611,
     name: "Obereck Nutrition Gruppe",
   },
-  healthMoic: 1.781943,
+  healthMoic: 1.897106,
   healthCount: 2,
   bridge: {
     entry: 82.956383,
-    ebitda: 86.005777,
-    mult: -62.123914,
-    delev: -4.639328,
+    ebitda: 97.00887,
+    mult: -72.436625,
+    delev: -5.32971,
     exit: 90,
   },
   marketFinal: {

@@ -6,12 +6,20 @@
    Modul-Zustand zu teilen.                                            */
 import type { Rng } from "./rng.ts";
 
+/* g = Marktwachstum des Sektors in Prozent p. a., m = typisches Einstiegs-
+   multiple. Jeder Sektor wurde um einen Prozentpunkt angehoben: Die alten
+   Werte lagen am unteren Rand dessen, was der europäische Mittelstand in den
+   Erhebungen zeigt, und drückten das erreichbare EBITDA-Wachstum über eine
+   Halteperiode entsprechend. Die Rangfolge der Sektoren bleibt unverändert —
+   angehoben wird das Niveau, nicht die Struktur. Wer die Zahl hier ändert,
+   muss GROWTH_MEAN mitziehen: Der Drift misst den Abstand des bisherigen
+   Wachstums zum Sektor, und dieser Abstand verschiebt sich sonst.           */
 export const SECTORS = {
-  Industrials: { g: 3.0, m: 8.5 },
-  Healthcare:  { g: 5.0, m: 11.0 },
-  Software:    { g: 8.0, m: 13.0 },
-  Services:    { g: 3.5, m: 9.0 },
-  Consumer:    { g: 2.0, m: 8.0 },
+  Industrials: { g: 4.0, m: 8.5 },
+  Healthcare:  { g: 6.0, m: 11.0 },
+  Software:    { g: 9.0, m: 13.0 },
+  Services:    { g: 4.5, m: 9.0 },
+  Consumer:    { g: 3.0, m: 8.0 },
 };
 export const SECNAMES = Object.keys(SECTORS);
 // Nicht jede Flagge ist ein Risiko: die Buy-&-Build-Plattform ist die These,
@@ -216,6 +224,15 @@ export function decayOf(lvl) { return DECAY * Math.max(0, lvl - 2); }
    rng.nrm(x) summiert vier Gleichverteilungen und zentriert sie; die
    Standardabweichung ist damit x·√(4/12) = 0,577·x.                       */
 export const GROWTH_NOISE = 6;      // Streubreite auf das annualisierte Wachstum, in pp
+/* Wachstumsbeitrag je effektiver Reifegradstufe über dem Branchenniveau, in pp
+   p. a., vor dem Operations-Multiplikator. Von 1,5 auf 1,7 angehoben: Ein
+   vollständig durchgezogenes Wachstumsprogramm hebt den effektiven Reifegrad
+   in der Messung um rund 1,4 Stufen, trug damit aber nur 2,7 pp zum Wachstum
+   bei — gegen eine Streuung von 3,5 pp Standardabweichung war die eigene
+   Entscheidung im Ergebnis kaum sichtbar. Bewusst moderat: Der Deckel
+   accEff = min(acc, People+1, Performance+1) soll die Bindung bleiben, nicht
+   die Höhe des Beitrags.                                                    */
+export const ACC_GROWTH_PP = 1.7;
 export const MARGIN_NOISE = 0.6;    // Streubreite auf die Marge, in pp
 /* Wahrscheinlichkeit eines Sonderereignisses je Beteiligung und Halbjahr
    (siehe EVENTS). Verlorener Schlüsselkunde, Großauftrag, abgesprungener CEO
@@ -345,7 +362,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * 1.5 * opsMult + rng.nrm(GROWTH_NOISE);
+  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * ACC_GROWTH_PP * opsMult + rng.nrm(GROWTH_NOISE);
   const rev0 = c.revenue;
   c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
 
@@ -463,7 +480,13 @@ export const QUAL_COEF = 0.006;    // Qualitätsaufschlag je Punkt auf das Sekto
 /* Kopplung zwischen bisherigem Wachstum und erwarteter Performance vs. Markt.
    DRIFT_LOAD 0,30 auf eine Streuung von 3,2 pp ergibt ein Signal mit sd 0,96 pp
    gegen ein Residuum von 0,98 pp — die Karte erklärt rund die Hälfte.        */
-export const DRIFT_LOAD = 0.45, GROWTH_MEAN = 1.6;
+/* GROWTH_MEAN ist der durchschnittliche Abstand der historischen Wachstums-
+   bänder des Dealbuchs (BOOK) zum Sektorwachstum. Mit der Anhebung der
+   Sektorraten um einen Punkt schrumpft dieser Abstand von 1,6 auf 0,6; die
+   Konstante zieht das exakt nach, damit der Drift im Mittel weiterhin null
+   ist. Ohne diese Anpassung hätte die Anhebung sich zu 45 % selbst wieder
+   aufgehoben, weil jeder Deal einen entsprechend negativen Drift bekäme.   */
+export const DRIFT_LOAD = 0.45, GROWTH_MEAN = 0.6;
 /* Schätzgüte des Datenraums: Analyse verkleinert den Fehler, beseitigt ihn nie.
    Ohne Due Diligence gibt es überhaupt keine Schätzung.                       */
 export const driftErrSd = (analysis) => clamp(4.6 - 0.90 * analysis, 0.3, 4.6);
@@ -707,8 +730,8 @@ export function fitLabel(id, c) {
       : c.plat < 2.5 ? "Prozesse noch zu unreif für Automatisierung" : "Größe im mittleren Bereich",
     pen: c.quality >= 70 ? "starke Marktstellung, Preise sind durchsetzbar"
       : c.quality <= 45 ? "schwache Marktstellung, kaum Preissetzungsmacht" : "durchschnittliche Marktstellung",
-    exp: SECTORS[c.sector].g >= 5 ? "wachsender Markt trägt die Expansion"
-      : SECTORS[c.sector].g <= 3 ? "stagnierender Markt — Expansion kostet Marge ohne Gegenwert" : "Markt wächst moderat",
+    exp: SECTORS[c.sector].g >= 6 ? "wachsender Markt trägt die Expansion"
+      : SECTORS[c.sector].g <= 4 ? "stagnierender Markt — Expansion kostet Marge ohne Gegenwert" : "Markt wächst moderat",
   }[id] || "";
   return { f, t: t[0], color: t[1], why };
 }

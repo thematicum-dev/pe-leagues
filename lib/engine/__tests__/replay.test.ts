@@ -188,7 +188,10 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
     const truth = played.states[played.states.length - 1].state;
     expect(JSON.stringify(throughJson(rebuilt))).toBe(JSON.stringify(throughJson(truth)));
     expect(needsBackfill(rebuilt)).toBe(false);
-  });
+    /* Eigenes Zeitlimit: Der Startwert dieser Partie liegt am schweren Rand der
+       Suchkosten (siehe backfillSeason) und braucht rund 24.000 Wiederholungen.
+       Das ist der Fall, den der Test abdecken soll — nicht der bequeme.      */
+  }, 60000);
 
   it("liefert danach Abschlüsse ohne eine einzige geschätzte Spalte", () => {
     const res = backfillSeason({
@@ -211,7 +214,8 @@ describe("Nachträgliche Periodenmitschrift einer laufenden Partie", () => {
       });
     });
     expect(checked).toBeGreaterThan(0);
-  });
+    // Zweiter voller Suchlauf über dieselbe Partie, siehe oben.
+  }, 60000);
 
   it("verweigert die Wiederherstellung, wenn der Endstand nicht passt", () => {
     const res = backfillSeason({
