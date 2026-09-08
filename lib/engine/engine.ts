@@ -1239,19 +1239,37 @@ export function irrOf(f, market, quarter) {
 
 /* ---------- Wertung ----------
    Je zur Hälfte Multiple und Verzinsung, beide gegen die Marke eines guten
-   Buyout-Fonds normiert: 1,5x TVPI und 14 % IRR ergeben je 1,00 Punkt.
+   Buyout-Fonds normiert: 1,7x TVPI und 18 % IRR ergeben je 1,00 Punkt.
 
-   Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen.
-   Vorher standen hier 2,0x und 15 % -- zwei Werte, die weder zueinander noch
-   zu dieser Simulation passten: 2,0x am Laufzeitende sind rechnerisch 7,2 %
-   IRR, für 15 % über zehn Jahre bräuchte es 4,05x. In 120 durchgerechneten
-   Partien erreichte zudem keiner von 600 Fonds die 2,0x, der Median der
-   Wertung lag bei 0,57.
+   Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen,
+   und werden nach zwei Bedingungen gesetzt:
+     1. Die Wertung 1,00 soll das obere Viertel der Kohorte treffen -- das ist
+        die Aussage "1,00 = Benchmarkniveau".
+     2. Die beiden Marken müssen denselben Fonds beschreiben. Der Median-IRR
+        der Fonds, die um TVPI_BENCH herum liegen, muss also IRR_BENCH sein;
+        sonst verlangt eine Hälfte der Wertung etwas anderes als die andere.
 
-   1,5x und 14 % liegen dagegen auf der Kurve dieser Engine (bei TVPI 1,4-1,6
-   beträgt der Median-IRR 13,4 %) und treffen das obere Viertel der Kohorte:
-   Wertung p25 0,34, Median 0,70, p75 1,01, p90 1,25. "1,00 = Benchmarkniveau"
-   heißt damit tatsächlich Top Quartile.
+   Erste Fassung 2,0x und 15 %: verfehlte beide Bedingungen. Keiner von 600
+   Fonds erreichte die 2,0x, der Median der Wertung lag bei 0,57, und die
+   beiden Marken passten auch rechnerisch nicht zueinander.
+
+   Zweite Fassung 1,5x und 14 %: gemessen auf der damaligen Renditekurve.
+
+   Dritte Fassung, hier, nach der Anhebung des Wachstumsniveaus (Sektorraten
+   +1 pp, ACC_GROWTH_PP 1,5 -> 1,7): Dieselbe Messung über 120 Partien mit je
+   fünf Fonds ergibt jetzt TVPI p25 1,11, Median 1,42, p75 1,69, und die Fonds
+   um TVPI 1,7 herum erreichen einen Median-IRR von 18,8 %. Mit den alten
+   Marken war die Wertung entsprechend nach oben verrutscht -- p75 stieg von
+   1,15 auf 1,21, der Median von 0,76 auf 0,85. 1,7x und 18 % stellen beide
+   Bedingungen wieder her: Wertung p25 0,41, Median 0,71, p75 1,00, p90 1,20.
+
+   Zur Einordnung der absoluten Höhe: Die Messung läuft über eine
+   nachgebildete Partie (ein menschlicher Fondsplatz nach festem Regelwerk,
+   vier KI-Archetypen). Dieselbe Messung reproduziert die zweite Fassung mit
+   p75 1,15 statt der damals notierten 1,01 -- der Zuschnitt des menschlichen
+   Fondsplatzes verschiebt das Niveau also um gut einen Zehntelpunkt. Die
+   Rangfolge und der Abstand der Quartile sind davon nicht betroffen, die
+   absolute Lage der Marke trägt diese Unschärfe.
 
    Bewusst nicht nachgezogen: Die globale Rangliste liest die Wertung aus den
    gespeicherten Endständen abgeschlossener Partien (global_leaderboard.sql).
@@ -1263,7 +1281,7 @@ export function irrOf(f, market, quarter) {
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
    man ein Asset, das noch weiterläuft.                                       */
-export const TVPI_BENCH = 1.5, IRR_BENCH = 0.14;
+export const TVPI_BENCH = 1.7, IRR_BENCH = 0.18;
 export function scoreOf(f, market, quarter) {
   const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
   const i = irrOf(f, market, quarter) / IRR_BENCH;

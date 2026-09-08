@@ -203,8 +203,12 @@ const GOLDEN_RESULT = {
      1,566 auf 1,680. Unverändert bleiben finalRngPosition, drawn, cash,
      undrawn, die Marktstände und das Landmark-Objekt: An der Zahl und der
      Reihenfolge der Zufallsziehungen ändert sich nichts, und newLandmark
-     zieht sein Wachstum aus dem Archetypband statt aus SECTORS. */
-  score: 0.89655,
+     zieht sein Wachstum aus dem Archetypband statt aus SECTORS.
+     Ein fünftes Mal mit der Neukalibrierung der Wertungsmarken auf die
+     angehobene Renditekurve (TVPI_BENCH 1,5 -> 1,7, IRR_BENCH 14 % -> 18 %).
+     Diese Marken gehen ausschließlich in scoreOf ein, deshalb bewegt sich
+     hier auch nur score: 0,896550 -> 0,755882. */
+  score: 0.755882,
   carry: 78.140101,
   landmark: {
     sector: "Consumer",
