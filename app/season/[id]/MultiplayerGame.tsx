@@ -231,6 +231,13 @@ function Delta({ value, eps, format, invert, neutral }: {
   );
 }
 
+/* Betragsveränderung ohne Einheit. Mit vollem "Mio. €" lief die Veränderung des
+   Dry Powder bei 320 px in die PortCos-Spalte daneben. Die Einheit steht
+   unmittelbar davor am Wert selbst, also ist sie hier Wiederholung -- und die
+   Rundungsregeln bleiben dieselben, weil weiterhin eur() formatiert und
+   lediglich der Zusatz entfällt. */
+const eurDelta = (v: number) => eur(v).replace(" Mio. €", "");
+
 /* Bewertung einer Veränderung für die Färbung des Werts selbst — dieselbe
    Regel wie in Delta, damit Zahl und Pfeil nie auseinanderlaufen. */
 function dirOf(value: number | null, eps: number, invert?: boolean): string {
@@ -888,6 +895,7 @@ export default function MultiplayerGame({
       irr: irrOf(prevFund, mk, q),
       rank: order.findIndex((r) => r.slot === humanSlot) + 1,
       portcos: ((prevFund as Any).holdings as Any[]).length,
+      dryPowder: investableOf(prevFund as Any, q),
     };
   })() : null;
   const d = (now: number, was: number | undefined) => (prev == null || was == null ? null : now - was);
@@ -1040,7 +1048,16 @@ export default function MultiplayerGame({
           <div className="barrow">
             <div>
               <div className="stat">Dry Powder</div>
-              <AnimatedNumber className="statv mono" value={investableOf(me, quarter)} format={eur} style={undefined} />
+              <div className="statv mono">
+                <AnimatedNumber value={investableOf(me, quarter)} format={eur} className={undefined} style={undefined} />
+                {/* Ohne Farbe, wie bei PortCos: Sinkendes Dry Powder heißt, dass
+                    investiert wurde — das ist der Zweck des Fonds und kein
+                    Rückschlag. Steigendes heißt, dass ein Exit Kapital
+                    zurückgebracht hat. Keine der beiden Richtungen ist für sich
+                    genommen gut oder schlecht. */}
+                <Delta value={d(investableOf(me, quarter), prev?.dryPowder)} eps={0.5} neutral
+                  format={eurDelta} />
+              </div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div className="stat">PortCos</div>
