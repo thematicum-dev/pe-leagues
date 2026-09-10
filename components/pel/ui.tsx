@@ -36,6 +36,13 @@ export const CSS = `
 .pel { --paper:#F4F6F2; --card:#FFFFFF; --ink:#12201F; --ink2:#6B7B79;
   --rule:#E2E7DF; --ox:#B4443C; --teal:#1B7A6B; --gold:#B08430; --shade:#EDF1EA;
   --zebra:transparent; --panel:#12201F; --onpanel:#F4F6F2; --glow:rgba(18,32,31,.05);
+  /* Signalfarben für die Kopfleiste. Die Leiste steht in beiden Themes auf
+     --panel, also immer auf dunklem Grund — die themeabhängigen --ox/--teal/
+     --gold sind im hellen Theme für dunklen Text auf hellem Grund gemacht und
+     hätten dort keinen Kontrast. Diese drei sind deshalb bewusst nicht
+     themeabhängig: Sie entsprechen den dunkelthemigen Tönen, die für genau
+     diesen Untergrund gewählt wurden.                                       */
+  --pteal:#5FC4B1; --pgold:#DCB264; --pox:#E3897F;
   --r:10px;
   font-family:'Inter',system-ui,sans-serif; color:var(--ink); background:var(--paper);
   min-height:100%; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;
@@ -53,6 +60,31 @@ export const CSS = `
 .pel .bar{position:sticky;top:0;z-index:20;background:var(--panel);color:var(--onpanel);padding:11px 16px 0;
   box-shadow:0 2px 14px var(--glow);}
 .pel .barrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+/* Fristenleiste ganz oben in der Kopfleiste. Zieht sich über die Polsterung
+   von .bar hinweg bis an beide Ränder, damit der Balken die volle Breite hat
+   und nicht wie ein eingerücktes Kästchen wirkt. */
+.pel .dlbar{position:relative;overflow:hidden;margin:-11px -16px 9px;padding:6px 16px 8px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.pel .dlbar{background:rgba(95,196,177,.11);}
+.pel .dlbar.warn{background:rgba(220,178,100,.13);}
+.pel .dlbar.crit{background:rgba(227,137,127,.16);}
+/* Die Restzeit als Linie an der Unterkante, nicht als Fläche hinter dem Text:
+   Als Fläche schnitt der Balken bei niedrigem Stand mitten durch die
+   Beschriftung und las sich wie eine Texthervorhebung statt wie eine Anzeige.
+   Er läuft leer statt voll — die verbleibende Zeit ist die Ressource. */
+.pel .dlfill{position:absolute;left:0;bottom:0;height:3px;background:var(--pteal);
+  transition:width 1s linear,background .4s ease;}
+.pel .dlbar.warn .dlfill{background:var(--pgold);}
+.pel .dlbar.crit .dlfill{background:var(--pox);}
+.pel .dltxt{position:relative;font-size:10.5px;letter-spacing:.05em;color:var(--onpanel);opacity:.75;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pel .dlval{position:relative;font-size:11px;font-weight:600;color:var(--pteal);white-space:nowrap;}
+.pel .dlbar.warn .dlval{color:var(--pgold);}
+.pel .dlbar.crit .dlval{color:var(--pox);}
+.pel .dlbar.crit .dlval{animation:dlpulse 1.6s ease-in-out infinite;}
+@keyframes dlpulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+@media (prefers-reduced-motion:reduce){.pel .dlbar.crit .dlval{animation:none;}
+  .pel .dlfill{transition:none;}}
 .pel .barrow > div{min-width:0;}
 .pel .hint{font-size:11px;line-height:1.5;color:var(--ink2);margin:0;}
 .pel .hint.ox{color:var(--ox);}

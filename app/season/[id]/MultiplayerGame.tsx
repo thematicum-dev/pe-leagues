@@ -15,7 +15,7 @@
    Original (Gebote, Due Diligence, Search/Hire, Maßnahmen, MEP, Exits,
    Verkaufsangebote) ist abgebildet. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -66,23 +66,89 @@ export interface MultiplayerGameProps {
 }
 
 
+/* Die aktuelle Uhrzeit, im Sekundentakt.
+
+   Als externe Quelle statt als State im Effekt, und das aus einem Grund: Der
+   Server rendert diese Ansicht vor, und seine Uhr steht nicht auf derselben
+   Sekunde wie die des Browsers. Eine ins Server-HTML eingebackene Restzeit
+   wäre beim Hydrieren ein Mismatch. useSyncExternalStore trennt genau das —
+   der Server-Schnappschuss ist null ("hier gibt es keine Uhr"), und wer null
+   bekommt, zeigt so lange nichts an.
+
+   Der Schnappschuss wird auf volle Sekunden gerundet, weil er zwischen zwei
+   Takten stabil sein muss: Gäbe er bei jedem Aufruf einen neuen Wert zurück,
+   liefe React in eine Endlosschleife. */
+const clockSubscribe = (onChange: () => void) => {
+  const id = setInterval(onChange, 1000);
+  return () => clearInterval(id);
+};
+const clockSnapshot = () => Math.floor(Date.now() / 1000) * 1000;
+const clockServerSnapshot = () => null;
+
+function useNow(): number | null {
+  return useSyncExternalStore(clockSubscribe, clockSnapshot, clockServerSnapshot);
+}
+
+/* Restzeit in Worten. Die Genauigkeit richtet sich nach der Größenordnung:
+   Über einer Stunde helfen Sekunden niemandem und lassen die Leiste nur
+   flackern, unter einer Stunde sind sie genau das, worauf man schaut. */
 function formatRemaining(ms: number): string {
-  if (ms <= 0) return "Frist läuft ab …";
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (ms <= 0) return "Frist abgelaufen";
+  const total = Math.floor(ms / 1000);
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (d > 0) return `${d} ${d === 1 ? "Tag" : "Tage"} ${h} Std`;
+  if (h > 0) return `${h} Std ${String(m).padStart(2, "0")} Min`;
+  return `${m}:${String(sec).padStart(2, "0")} Min`;
 }
 
 function Countdown({ deadline }: { deadline: string }) {
   const target = useMemo(() => new Date(deadline).getTime(), [deadline]);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return <span className="mono">{formatRemaining(target - now)}</span>;
+  const now = useNow();
+  return <span className="mono">{now == null ? "…" : formatRemaining(target - now)}</span>;
+}
+
+/* Der Horizont, über den die Leiste leerläuft. Die tatsächliche Frist liegt
+   auf der nächsten Mitternacht nach der Auswertung (siehe
+   lib/engine/deadline.ts) und ist damit zwischen sechs und dreißig Stunden
+   entfernt — es gibt keine feste Fensterlänge, an der sich ein Anteil messen
+   ließe. Die Leiste zeigt deshalb nicht "wie viel vom Fenster ist herum",
+   sondern "wie nah ist der letzte Tag": Ab 24 Stunden Restzeit ist sie voll
+   und beginnt erst dann zu laufen. Genau dort fängt die Dringlichkeit an. */
+const DEADLINE_HORIZON_MS = 24 * 60 * 60 * 1000;
+/* Die Warnschwelle liegt bewusst bei sechs Stunden: Das ist zugleich die
+   kürzeste Frist, die überhaupt vergeben wird — nextHalfYearDeadline() springt
+   auf die übernächste Mitternacht, wenn bis zur nächsten weniger als sechs
+   Stunden bleiben. Ein Halbjahr mit dem knappsten möglichen Fenster steht
+   damit von der ersten Sekunde an auf Warnstufe, und das ist richtig so. */
+const DEADLINE_WARN_MS = 6 * 60 * 60 * 1000;
+const DEADLINE_CRIT_MS = 60 * 60 * 1000;
+
+function DeadlineBar({ deadline }: { deadline: string }) {
+  const target = useMemo(() => new Date(deadline).getTime(), [deadline]);
+  const now = useNow();
+  const left = now == null ? DEADLINE_HORIZON_MS : target - now;
+  const tone = left <= DEADLINE_CRIT_MS ? "crit" : left <= DEADLINE_WARN_MS ? "warn" : "";
+  const pct = Math.max(0, Math.min(1, left / DEADLINE_HORIZON_MS)) * 100;
+  /* Nach Fristablauf ist die Abgabe nicht "unsicher", sondern zu: Die
+     RLS-Policy auf turn_submissions verlangt now() < current_half_year_deadline
+     für INSERT wie UPDATE (Migration 20260816120600). Genau derselbe Zeitpunkt,
+     den diese Leiste herunterzählt — die Anzeige beschreibt also die Regel,
+     die tatsächlich greift, und darf entsprechend eindeutig formuliert sein. */
+  const label = left <= 0
+    ? "Abgabe geschlossen — Auswertung steht an"
+    : "Abgabefrist für dieses Halbjahr";
+  return (
+    <div className={"dlbar" + (tone ? " " + tone : "")}>
+      <i className="dlfill" style={{ width: `${pct}%` }} />
+      <span className="dltxt">{label}</span>
+      <span className="dlval mono" role="timer" aria-live="off">
+        {now == null ? "…" : formatRemaining(left)}
+      </span>
+    </div>
+  );
 }
 
 export default function MultiplayerGame({
@@ -697,6 +763,16 @@ export default function MultiplayerGame({
     setPending(false);
     if (insertError) {
       if (insertError.code === "23505") { setSubmitted(true); refreshStatus(); return; }
+      /* 42501 heißt hier: Die WITH CHECK-Bedingung der Policy hat abgelehnt.
+         Sie prüft nur Dinge, die sich nicht durch einen zweiten Versuch
+         ändern — eigenes Profil, laufende Partie, passendes Halbjahr, und vor
+         allem now() < current_half_year_deadline. "Bitte erneut versuchen" war
+         an dieser Stelle also ein Rat, der nie funktionieren kann. */
+      if (insertError.code === "42501") {
+        setError("Die Frist für dieses Halbjahr ist abgelaufen — die Auswertung übernimmt jetzt.");
+        router.refresh();
+        return;
+      }
       setError("Das hat nicht geklappt — bitte versuch es erneut.");
       return;
     }
@@ -756,6 +832,7 @@ export default function MultiplayerGame({
     <div className={"pel" + (dark ? " dark" : "")}>
       <style>{CSS}</style>
       <div className="bar">
+        {deadline && <DeadlineBar deadline={deadline} />}
         <div className="barrow">
           <div>
             <div className="stat">Wertung</div>
