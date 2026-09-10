@@ -170,6 +170,19 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
             humanSlot={humanSlot}
             currentHalfYear={season.current_half_year}
             deadline={season.current_half_year_deadline}
+            /* Erstabgleich der Uhr ohne eigene Anfrage: Diese Seite wird
+               serverseitig gerendert, ihre Uhrzeit ist damit schon da. Der
+               Countdown rechnet den Versatz zur Uhr des Browsers daraus aus
+               und gleicht danach stündlich über /api/time nach.
+
+               Die Regel react-hooks/purity gilt hier bewusst nicht: Sie
+               bewacht wiederholbare Renderdurchläufe im Browser. Dies ist eine
+               Server-Komponente, die je Anfrage genau einmal läuft und deren
+               Aufgabe unter anderem darin besteht, den Zustand des Servers --
+               hier seine Uhr -- an den Browser zu übergeben. Ein Zwischen-
+               speichern findet nicht statt, die Seite ist dynamisch. */
+            // eslint-disable-next-line react-hooks/purity
+            serverNow={Date.now()}
             state={latestState}
             history={history}
             submissionStatus={submissionStatus}

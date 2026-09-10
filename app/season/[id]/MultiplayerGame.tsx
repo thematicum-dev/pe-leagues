@@ -59,6 +59,9 @@ export interface MultiplayerGameProps {
   humanSlot: number;
   currentHalfYear: number;
   deadline: string | null;
+  /* Uhrzeit des Servers beim Rendern dieser Seite, in Millisekunden. Dient
+     als Erstabgleich der Uhr — siehe useServerClock. */
+  serverNow: number;
   state: RuntimeState;
   history: HistoryRow[];
   submissionStatus: { humanCount: number; submittedCount: number; missingCount: number };
@@ -89,25 +92,75 @@ function useNow(): number | null {
   return useSyncExternalStore(clockSubscribe, clockSnapshot, clockServerSnapshot);
 }
 
-/* Restzeit in Worten. Die Genauigkeit richtet sich nach der Größenordnung:
-   Über einer Stunde helfen Sekunden niemandem und lassen die Leiste nur
-   flackern, unter einer Stunde sind sie genau das, worauf man schaut. */
+/* Wie weit die Uhr des Browsers gegenüber der des Servers nachgeht, in
+   Millisekunden. Maßgeblich für die Frist ist die Serverzeit: Die RLS-Policy
+   auf turn_submissions vergleicht now() gegen current_half_year_deadline.
+   Eine falsch gestellte Uhr auf dem Endgerät verspricht sonst Zeit, die es
+   nicht gibt — oder nimmt welche weg.
+
+   Der Erstwert kostet nichts: Die Seite wird serverseitig gerendert und
+   bringt ihre Uhrzeit als Eigenschaft mit. Danach wird stündlich über
+   /api/time nachgezogen, gegen die Drift billiger Endgeräteuhren. */
+const CLOCK_SYNC_MS = 60 * 60 * 1000;
+
+async function measureClockOffset(): Promise<number | null> {
+  const sent = Date.now();
+  const res = await fetch("/api/time", { cache: "no-store" });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { now?: unknown };
+  const received = Date.now();
+  if (typeof body.now !== "number" || !Number.isFinite(body.now)) return null;
+  /* Die gemessene Serverzeit gilt für einen Zeitpunkt irgendwo zwischen
+     Absenden und Empfang. Die halbe Umlaufzeit ist die übliche Schätzung
+     dafür, wie viel davon der Hinweg war. */
+  return body.now + (received - sent) / 2 - received;
+}
+
+function useServerClockOffset(serverNow: number): number {
+  const [offset, setOffset] = useState(() => serverNow - Date.now());
+  useEffect(() => {
+    let alive = true;
+    /* Bewusst asynchron: Ein synchroner setState direkt im Effekt wäre ein
+       zusätzliches Rendern noch vor dem ersten Anzeigen — und der Erstwert
+       aus serverNow steht ohnehin schon. */
+    const sync = async () => {
+      try {
+        const measured = await measureClockOffset();
+        if (alive && measured != null) setOffset(measured);
+      } catch {
+        /* Netz weg, Route nicht erreichbar: Der bisherige Versatz bleibt
+           stehen. Eine Uhr, die um Sekunden danebenliegt, ist besser als
+           eine Anzeige, die verschwindet. */
+      }
+    };
+    const id = setInterval(sync, CLOCK_SYNC_MS);
+    void sync();
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return offset;
+}
+
+/* Restzeit als HH h:MM min:SS sec. Die Stunden laufen über 24 hinaus statt
+   auf Tage umzubrechen — eine Frist von 28 Stunden liest sich als "28 h", und
+   die Anzeige behält über die ganze Laufzeit dieselbe Form und Breite. Dass
+   die Sekunden auch bei viel Restzeit mitlaufen, ist Absicht: Es ist ein
+   Countdown, kein gerundeter Hinweis. Die Ziffernbreite ist fest
+   (font-variant-numeric: tabular-nums über .mono), deshalb wackelt nichts. */
 function formatRemaining(ms: number): string {
   if (ms <= 0) return "Frist abgelaufen";
   const total = Math.floor(ms / 1000);
-  const d = Math.floor(total / 86400);
-  const h = Math.floor((total % 86400) / 3600);
+  const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const sec = total % 60;
-  if (d > 0) return `${d} ${d === 1 ? "Tag" : "Tage"} ${h} Std`;
-  if (h > 0) return `${h} Std ${String(m).padStart(2, "0")} Min`;
-  return `${m}:${String(sec).padStart(2, "0")} Min`;
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${pad(h)} h:${pad(m)} min:${pad(sec)} sec`;
 }
 
-function Countdown({ deadline }: { deadline: string }) {
+function Countdown({ deadline, serverNow }: { deadline: string; serverNow: number }) {
   const target = useMemo(() => new Date(deadline).getTime(), [deadline]);
   const now = useNow();
-  return <span className="mono">{now == null ? "…" : formatRemaining(target - now)}</span>;
+  const offset = useServerClockOffset(serverNow);
+  return <span className="mono">{now == null ? "…" : formatRemaining(target - (now + offset))}</span>;
 }
 
 /* Der Horizont, über den die Leiste leerläuft. Die tatsächliche Frist liegt
@@ -126,20 +179,23 @@ const DEADLINE_HORIZON_MS = 24 * 60 * 60 * 1000;
 const DEADLINE_WARN_MS = 6 * 60 * 60 * 1000;
 const DEADLINE_CRIT_MS = 60 * 60 * 1000;
 
-function DeadlineBar({ deadline }: { deadline: string }) {
+function DeadlineBar({ deadline, serverNow }: { deadline: string; serverNow: number }) {
   const target = useMemo(() => new Date(deadline).getTime(), [deadline]);
   const now = useNow();
-  const left = now == null ? DEADLINE_HORIZON_MS : target - now;
+  const offset = useServerClockOffset(serverNow);
+  const left = now == null ? DEADLINE_HORIZON_MS : target - (now + offset);
   const tone = left <= DEADLINE_CRIT_MS ? "crit" : left <= DEADLINE_WARN_MS ? "warn" : "";
   const pct = Math.max(0, Math.min(1, left / DEADLINE_HORIZON_MS)) * 100;
   /* Nach Fristablauf ist die Abgabe nicht "unsicher", sondern zu: Die
      RLS-Policy auf turn_submissions verlangt now() < current_half_year_deadline
      für INSERT wie UPDATE (Migration 20260816120600). Genau derselbe Zeitpunkt,
      den diese Leiste herunterzählt — die Anzeige beschreibt also die Regel,
-     die tatsächlich greift, und darf entsprechend eindeutig formuliert sein. */
-  const label = left <= 0
-    ? "Abgabe geschlossen — Auswertung steht an"
-    : "Abgabefrist für dieses Halbjahr";
+     die tatsächlich greift, und darf entsprechend eindeutig formuliert sein.
+
+     Kurz gehalten, weil die Restzeit im Format HH h:MM min:SS sec breit baut:
+     Bei 320 px blieb von einer längeren Beschriftung ohnehin nur eine Ellipse
+     übrig. Welches Halbjahr gemeint ist, steht eine Zeile darunter. */
+  const label = left <= 0 ? "Abgabe geschlossen" : "Abgabefrist";
   return (
     <div className={"dlbar" + (tone ? " " + tone : "")}>
       <i className="dlfill" style={{ width: `${pct}%` }} />
@@ -152,7 +208,7 @@ function DeadlineBar({ deadline }: { deadline: string }) {
 }
 
 export default function MultiplayerGame({
-  seasonId, humanSlot, currentHalfYear, deadline, state, history, submissionStatus, alreadySubmitted,
+  seasonId, humanSlot, currentHalfYear, deadline, serverNow, state, history, submissionStatus, alreadySubmitted,
 }: MultiplayerGameProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -798,7 +854,7 @@ export default function MultiplayerGame({
             <div className="pad" style={{ paddingTop: 16 }}>
               {deadline && (
                 <p className="hint">
-                  Frist in <Countdown deadline={deadline} /> — ausgewertet wird, sobald alle abgegeben haben
+                  Frist in <Countdown deadline={deadline} serverNow={serverNow} /> — ausgewertet wird, sobald alle abgegeben haben
                   oder spätestens zur Frist.
                 </p>
               )}
@@ -832,7 +888,7 @@ export default function MultiplayerGame({
     <div className={"pel" + (dark ? " dark" : "")}>
       <style>{CSS}</style>
       <div className="bar">
-        {deadline && <DeadlineBar deadline={deadline} />}
+        {deadline && <DeadlineBar deadline={deadline} serverNow={serverNow} />}
         <div className="barrow">
           <div>
             <div className="stat">Wertung</div>
