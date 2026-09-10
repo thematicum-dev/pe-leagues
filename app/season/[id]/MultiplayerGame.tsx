@@ -200,6 +200,44 @@ const DEADLINE_HORIZON_MS = 24 * 60 * 60 * 1000;
 const DEADLINE_WARN_MS = 6 * 60 * 60 * 1000;
 const DEADLINE_CRIT_MS = 60 * 60 * 1000;
 
+/* Veränderung eines Werts gegenüber dem zuletzt ausgewerteten Halbjahr.
+
+   Drei Fälle, die sich nicht über einen Kamm scheren lassen:
+
+   Regelfall (Wertung, TVPI, IRR, DPI) — mehr ist besser: Pfeil hoch, teal.
+
+   invert (Platz) — die kleinere Zahl ist die bessere. Von Platz 5 auf Platz 2
+   ist ein Aufstieg, also Pfeil hoch und teal, obwohl die Zahl fällt. Der Pfeil
+   zeigt hier die Bewegung in der Tabelle, nicht das Vorzeichen der Differenz.
+
+   neutral (PortCos) — hat keine Richtung. Ein Zukauf ist so wenig gut wie ein
+   Exit schlecht ist; beides ist normales Geschäft. Die Veränderung wird
+   angezeigt, aber nicht bewertet, weil eine Färbung hier eine Aussage
+   behaupten würde, die es nicht gibt.
+
+   eps ist jeweils die Anzeigegenauigkeit des Werts daneben: Alles darunter
+   würde den Pfeil kippen lassen, ohne dass sich die angezeigte Zahl ändert. */
+function Delta({ value, eps, format, invert, neutral }: {
+  value: number | null; eps: number; format: (v: number) => string;
+  invert?: boolean; neutral?: boolean;
+}) {
+  if (value == null || Math.abs(value) < eps) return null;
+  const up = invert ? value < 0 : value > 0;
+  const cls = neutral ? "" : up ? "up" : "dn";
+  return (
+    <span className={"delta" + (cls ? " " + cls : "")}>
+      {up ? "▲" : "▼"} {format(Math.abs(value))}
+    </span>
+  );
+}
+
+/* Bewertung einer Veränderung für die Färbung des Werts selbst — dieselbe
+   Regel wie in Delta, damit Zahl und Pfeil nie auseinanderlaufen. */
+function dirOf(value: number | null, eps: number, invert?: boolean): string {
+  if (value == null || Math.abs(value) < eps) return "";
+  return (invert ? value < 0 : value > 0) ? "up" : "dn";
+}
+
 /* Zeitgruppe der Kopfleiste: welches Halbjahr, wie lange noch, und die beiden
    Fortschrittslinien dazu. Dazu die Navigation an den Rändern — sie hat mit
    Zeit nichts zu tun, braucht aber einen festen Platz, und die Ränder der
@@ -822,19 +860,38 @@ export default function MultiplayerGame({
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
-  /* Veränderung der Wertung über das zuletzt ausgewertete Halbjahr. prevFund
-     ist derselbe Fonds im Zustand davor, bewertet zu den damaligen Marktständen
-     — nicht der heutige Fonds mit alten Preisen, sonst wäre die Differenz eine
-     Mischung aus Marktbewegung und eigener Leistung.
-
-     Die Schwelle von 0,005 ist die Anzeigegenauigkeit: Die Wertung steht mit
-     zwei Nachkommastellen, alles darunter würde den Pfeil kippen lassen, ohne
-     dass sich die angezeigte Zahl ändert. */
-  const prevScore = prevFund && prevRow ? scoreOf(prevFund, prevRow.market, prevRow.halfYear) : null;
-  const scoreDelta = prevScore == null ? null : score - prevScore;
-  const scoreDir = scoreDelta == null || Math.abs(scoreDelta) < 0.005
-    ? "" : scoreDelta > 0 ? "up" : "dn";
   const myRank = rank.findIndex((f) => f.me) + 1;
+  /* Stand am Ende des zuletzt ausgewerteten Halbjahres, als Bezugspunkt für
+     die Veränderungspfeile in der Kopfleiste. prevFund ist derselbe Fonds im
+     Zustand davor, bewertet zu den damaligen Marktständen — nicht der heutige
+     Fonds mit alten Preisen, sonst wäre die Differenz eine Mischung aus
+     Marktbewegung und eigener Leistung.
+
+     Der Platz wird für den Vorstand neu ausgerechnet statt gespeichert: Die
+     Rangfolge der Kohorte ist eine Funktion aller Fonds, und die standen
+     damals anders.
+
+     Bewusst ohne useMemo: Die Berechnung sitzt hinter dem frühen Return für den
+     Abgabebildschirm, dort wäre ein Hook eine Regelverletzung. Teuer ist sie
+     auch nicht — die Sekundenanzeige der Frist rendert nur die Zeitleiste neu,
+     nicht diese Komponente, und die Kennzahlen des eigenen Fonds werden
+     daneben ohnehin bei jedem Rendern frisch gerechnet. */
+  const prev = prevRow && prevFund ? (() => {
+    const mk = prevRow.market, q = prevRow.halfYear;
+    const order = (prevRow.funds as Any[])
+      .map((f) => ({ slot: f.slot, score: scoreOf(f, mk, q) }))
+      .sort((a, b) => b.score - a.score);
+    return {
+      score: scoreOf(prevFund, mk, q),
+      tvpi: tvpiOf(prevFund, mk, q),
+      dpi: dpiOf(prevFund, mk, q),
+      irr: irrOf(prevFund, mk, q),
+      rank: order.findIndex((r) => r.slot === humanSlot) + 1,
+      portcos: ((prevFund as Any).holdings as Any[]).length,
+    };
+  })() : null;
+  const d = (now: number, was: number | undefined) => (prev == null || was == null ? null : now - was);
+  const tone = (dir: string) => (dir ? " " + dir : "");
   const landmark = state.landmark as Any;
 
   // News (aus components/pel/ui.tsx) erwartet dieselben Kurzfeldnamen wie im
@@ -955,24 +1012,27 @@ export default function MultiplayerGame({
           <div className="barrow">
             <div>
               <div className="stat">Wertung</div>
-              <div className={"statv mono" + (scoreDir ? " " + scoreDir : "")}>
+              <div className={"statv mono" + tone(dirOf(d(score, prev?.score), 0.005))}>
                 <AnimatedNumber value={score} format={(v: number) => v.toFixed(2)} className={undefined} style={undefined} />
-                {scoreDir && (
-                  <span className={"delta " + scoreDir}>
-                    {scoreDir === "up" ? "▲" : "▼"} {Math.abs(scoreDelta as number).toFixed(2)}
-                  </span>
-                )}
+                <Delta value={d(score, prev?.score)} eps={0.005} format={(v) => v.toFixed(2)} />
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div className="stat">Platz</div>
-              <div className="statv mono">{myRank}<span style={{ opacity: .5 }}>/{state.funds.length}</span></div>
+              <div className={"statv mono" + tone(dirOf(d(myRank, prev?.rank), 0.5, true))}>
+                {myRank}<span style={{ opacity: .5 }}>/{state.funds.length}</span>
+                <Delta value={d(myRank, prev?.rank)} eps={0.5} invert format={(v) => String(Math.round(v))} />
+              </div>
             </div>
           </div>
           <div className="cockkpi mono">
-            <span>TVPI {tvpi.toFixed(2)}×</span>
-            <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %</span>
-            <span>DPI {dpi.toFixed(2)}×</span>
+            <span>TVPI {tvpi.toFixed(2)}×
+              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+            <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
+              <Delta value={d(irr, prev?.irr)} eps={0.0005}
+                format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
+            <span>DPI {dpi.toFixed(2)}×
+              <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
         </div>
         {/* Kapital: womit lässt sich arbeiten. */}
@@ -984,7 +1044,11 @@ export default function MultiplayerGame({
             </div>
             <div style={{ textAlign: "right" }}>
               <div className="stat">PortCos</div>
-              <div className="statv mono">{me.holdings.length}<span style={{ opacity: .5 }}>/{MAX_SLOTS}</span></div>
+              <div className="statv mono">
+                {me.holdings.length}<span style={{ opacity: .5 }}>/{MAX_SLOTS}</span>
+                <Delta value={d(me.holdings.length, prev?.portcos)} eps={0.5} neutral
+                  format={(v) => String(Math.round(v))} />
+              </div>
             </div>
           </div>
           <div className="cockkpi mono">

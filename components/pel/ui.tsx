@@ -112,7 +112,14 @@ export const CSS = `
 .pel .cockgrp + .cockgrp{border-top:1px solid rgba(255,255,255,.07);margin-top:9px;}
 /* Zweitrangige Kennzahlen einer Gruppe: gehören zur Überschrift darüber, sollen
    ihr aber nicht die Aufmerksamkeit nehmen. */
-.pel .cockkpi{margin-top:5px;font-size:10.5px;opacity:.6;display:flex;gap:10px;flex-wrap:wrap;}
+/* Der Abstand zwischen den Kennzahlen muss deutlich größer sein als der
+   zwischen Zahl und ihrer Veränderung, sonst ist nicht zu sehen, zu welchem
+   Wert ein Pfeil gehört. */
+.pel .cockkpi{margin-top:5px;font-size:10.5px;opacity:.6;display:flex;gap:15px;flex-wrap:wrap;}
+/* In der zweitrangigen Zeile richtet sich die Veränderung nach der Schriftgröße
+   ihres Werts. Mit der Größe aus der Überschriftenzeile stand der Pfeil größer
+   da als die Zahl, auf die er sich bezieht. */
+.pel .cockkpi .delta{font-size:10.5px;margin-left:4px;}
 /* Veränderung der Wertung gegenüber dem zuletzt ausgewerteten Halbjahr. Färbt
    den Wert mit, nicht nur den Pfeil: Der Blick soll beim Aufschlagen der
    Ansicht ohne Lesen erfassen, in welche Richtung das letzte Halbjahr lief. */
