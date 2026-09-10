@@ -140,20 +140,41 @@ function useServerClockOffset(serverNow: number): number {
   return offset;
 }
 
-/* Restzeit als HH h:MM min:SS sec. Die Stunden laufen über 24 hinaus statt
+/* Restzeit als HH h : MM min : SS sec. Die Stunden laufen über 24 hinaus statt
    auf Tage umzubrechen — eine Frist von 28 Stunden liest sich als "28 h", und
    die Anzeige behält über die ganze Laufzeit dieselbe Form und Breite. Dass
    die Sekunden auch bei viel Restzeit mitlaufen, ist Absicht: Es ist ein
    Countdown, kein gerundeter Hinweis. Die Ziffernbreite ist fest
-   (font-variant-numeric: tabular-nums über .mono), deshalb wackelt nichts. */
-function formatRemaining(ms: number): string {
-  if (ms <= 0) return "Frist abgelaufen";
+   (font-variant-numeric: tabular-nums über .mono), deshalb wackelt nichts.
+
+   Die Doppelpunkte stehen frei. Ohne Abstand band der Doppelpunkt die
+   vorangehende Einheit an die folgende Zahl ("h:04"), und die drei Gruppen
+   liefen zu einem Block zusammen — die Abstände waren zwischen Zahl und
+   Einheit anders als zwischen den Gruppen, obwohl die Gruppengrenze die
+   stärkere ist. */
+function remainingParts(ms: number): { h: string; m: string; s: string } | null {
+  if (ms <= 0) return null;
   const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
   const pad = (v: number) => String(v).padStart(2, "0");
-  return `${pad(h)} h:${pad(m)} min:${pad(sec)} sec`;
+  return { h: pad(Math.floor(total / 3600)), m: pad(Math.floor((total % 3600) / 60)), s: pad(total % 60) };
+}
+
+function formatRemaining(ms: number): string {
+  const p = remainingParts(ms);
+  return p ? `${p.h} h : ${p.m} min : ${p.s} sec` : "Frist abgelaufen";
+}
+
+/* Dieselbe Zahl, aber mit zurückgenommenen Einheiten: Die Ziffern sind der
+   Wert, "h", "min" und "sec" nur ihre Beschriftung. In der Leiste, wo die
+   Restzeit als Anzeige steht statt im Satz, trägt das die Lesbarkeit. */
+function RemainingTime({ ms }: { ms: number }) {
+  const p = remainingParts(ms);
+  if (!p) return <>Frist abgelaufen</>;
+  return (
+    <>
+      {p.h}<span className="cdu">h</span> : {p.m}<span className="cdu">min</span> : {p.s}<span className="cdu">sec</span>
+    </>
+  );
 }
 
 function Countdown({ deadline, serverNow }: { deadline: string; serverNow: number }) {
@@ -201,7 +222,7 @@ function DeadlineBar({ deadline, serverNow }: { deadline: string; serverNow: num
       <i className="dlfill" style={{ width: `${pct}%` }} />
       <span className="dltxt">{label}</span>
       <span className="dlval mono" role="timer" aria-live="off">
-        {now == null ? "…" : formatRemaining(left)}
+        {now == null ? "…" : <RemainingTime ms={left} />}
       </span>
     </div>
   );

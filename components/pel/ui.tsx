@@ -79,6 +79,8 @@ export const CSS = `
 .pel .dltxt{position:relative;font-size:10.5px;letter-spacing:.05em;color:var(--onpanel);opacity:.75;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .dlval{position:relative;font-size:11px;font-weight:600;color:var(--pteal);white-space:nowrap;}
+/* Einheit einer Countdown-Gruppe: gehört zur Zahl, ist aber nicht die Zahl. */
+.pel .cdu{opacity:.55;font-weight:400;margin-left:2px;}
 .pel .dlbar.warn .dlval{color:var(--pgold);}
 .pel .dlbar.crit .dlval{color:var(--pox);}
 .pel .dlbar.crit .dlval{animation:dlpulse 1.6s ease-in-out infinite;}
