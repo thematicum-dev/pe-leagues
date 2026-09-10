@@ -200,30 +200,51 @@ const DEADLINE_HORIZON_MS = 24 * 60 * 60 * 1000;
 const DEADLINE_WARN_MS = 6 * 60 * 60 * 1000;
 const DEADLINE_CRIT_MS = 60 * 60 * 1000;
 
-function DeadlineBar({ deadline, serverNow }: { deadline: string; serverNow: number }) {
-  const target = useMemo(() => new Date(deadline).getTime(), [deadline]);
+/* Zeitgruppe der Kopfleiste: welches Halbjahr, wie lange noch, und die beiden
+   Fortschrittslinien dazu. Dazu die Navigation an den Rändern — sie hat mit
+   Zeit nichts zu tun, braucht aber einen festen Platz, und die Ränder der
+   obersten Zeile sind der gewohnte.
+
+   Die Leiste erscheint auch ohne gesetzte Frist: Das Halbjahr steht immer an,
+   nur der Countdown entfällt. Server und Policy behandeln eine fehlende Frist
+   als offenes Fenster (Partie gerade gestartet, erste Auswertung steht aus) —
+   dann gibt es schlicht nichts herunterzuzählen. */
+function TimeBar({
+  deadline, serverNow, halfYear, dark, onToggleDark,
+}: {
+  deadline: string | null; serverNow: number; halfYear: number;
+  dark: boolean; onToggleDark: () => void;
+}) {
+  const target = useMemo(() => (deadline ? new Date(deadline).getTime() : null), [deadline]);
   const now = useNow();
   const offset = useServerClockOffset(serverNow);
-  const left = now == null ? DEADLINE_HORIZON_MS : target - (now + offset);
-  const tone = left <= DEADLINE_CRIT_MS ? "crit" : left <= DEADLINE_WARN_MS ? "warn" : "";
-  const pct = Math.max(0, Math.min(1, left / DEADLINE_HORIZON_MS)) * 100;
-  /* Nach Fristablauf ist die Abgabe nicht "unsicher", sondern zu: Die
-     RLS-Policy auf turn_submissions verlangt now() < current_half_year_deadline
-     für INSERT wie UPDATE (Migration 20260816120600). Genau derselbe Zeitpunkt,
-     den diese Leiste herunterzählt — die Anzeige beschreibt also die Regel,
-     die tatsächlich greift, und darf entsprechend eindeutig formuliert sein.
-
-     Kurz gehalten, weil die Restzeit im Format HH h:MM min:SS sec breit baut:
-     Bei 320 px blieb von einer längeren Beschriftung ohnehin nur eine Ellipse
-     übrig. Welches Halbjahr gemeint ist, steht eine Zeile darunter. */
-  const label = left <= 0 ? "Abgabe geschlossen" : "Abgabefrist";
+  const left = target == null || now == null ? null : target - (now + offset);
+  const tone = left == null ? "" : left <= DEADLINE_CRIT_MS ? "crit" : left <= DEADLINE_WARN_MS ? "warn" : "";
+  const pct = left == null ? 100 : Math.max(0, Math.min(1, left / DEADLINE_HORIZON_MS)) * 100;
   return (
-    <div className={"dlbar" + (tone ? " " + tone : "")}>
-      <i className="dlfill" style={{ width: `${pct}%` }} />
-      <span className="dltxt">{label}</span>
-      <span className="dlval mono" role="timer" aria-live="off">
-        {now == null ? "…" : <RemainingTime ms={left} />}
+    <div className={"cockzeit" + (tone ? " " + tone : "")}>
+      {/* Gegenläufig: Die Saison füllt sich, die Frist läuft leer. */}
+      <i className="cockseason" style={{ width: `${((halfYear - 1) / PERIODS) * 100}%` }} />
+      {target != null && <i className="cockline" style={{ width: `${pct}%` }} />}
+      <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">←</Link>
+      <span className="cockhj">
+        <span className="lang">HALBJAHR </span><span className="kurz">HJ </span>
+        {halfYear}<s>/{PERIODS}</s>
       </span>
+      <span className="cockspacer" />
+      {target != null && (
+        <span className="cockdl mono" role="timer" aria-live="off">
+          {/* Nach Fristablauf ist die Abgabe nicht "unsicher", sondern zu: Die
+              RLS-Policy auf turn_submissions verlangt
+              now() < current_half_year_deadline für INSERT wie UPDATE
+              (Migration 20260816120600). Genau derselbe Zeitpunkt, den diese
+              Leiste herunterzählt — die Anzeige darf also eindeutig sein. */}
+          {left == null ? "…" : left <= 0 ? "Abgabe geschlossen" : <RemainingTime ms={left} />}
+        </span>
+      )}
+      <button className="theme" onClick={() => { haptic(6); onToggleDark(); }} aria-label="Darstellung wechseln">
+        {dark ? "☀" : "☾"}
+      </button>
     </div>
   );
 }
@@ -801,6 +822,18 @@ export default function MultiplayerGame({
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
+  /* Veränderung der Wertung über das zuletzt ausgewertete Halbjahr. prevFund
+     ist derselbe Fonds im Zustand davor, bewertet zu den damaligen Marktständen
+     — nicht der heutige Fonds mit alten Preisen, sonst wäre die Differenz eine
+     Mischung aus Marktbewegung und eigener Leistung.
+
+     Die Schwelle von 0,005 ist die Anzeigegenauigkeit: Die Wertung steht mit
+     zwei Nachkommastellen, alles darunter würde den Pfeil kippen lassen, ohne
+     dass sich die angezeigte Zahl ändert. */
+  const prevScore = prevFund && prevRow ? scoreOf(prevFund, prevRow.market, prevRow.halfYear) : null;
+  const scoreDelta = prevScore == null ? null : score - prevScore;
+  const scoreDir = scoreDelta == null || Math.abs(scoreDelta) < 0.005
+    ? "" : scoreDelta > 0 ? "up" : "dn";
   const myRank = rank.findIndex((f) => f.me) + 1;
   const landmark = state.landmark as Any;
 
@@ -909,46 +942,65 @@ export default function MultiplayerGame({
     <div className={"pel" + (dark ? " dark" : "")}>
       <style>{CSS}</style>
       <div className="bar">
-        {deadline && <DeadlineBar deadline={deadline} serverNow={serverNow} />}
-        <div className="barrow">
-          <div>
-            <div className="stat">Wertung</div>
-            <AnimatedNumber className="statv mono" value={score} format={(v: number) => v.toFixed(2)} style={undefined} />
+        {/* Das Halbjahr, über das gerade entschieden wird (1-basiert) — nicht
+            die Zahl der bereits ausgewerteten. Vorher stand hier im ersten
+            Halbjahr "0/20", während der Abgabebildschirm "Halbjahr 1
+            abgegeben" meldete. */}
+        <TimeBar
+          deadline={deadline} serverNow={serverNow} halfYear={currentHalfYear}
+          dark={dark} onToggleDark={() => setDark(!dark)}
+        />
+        {/* Leistung: wo stehe ich, und wohin ging es zuletzt. */}
+        <div className="cockgrp">
+          <div className="barrow">
+            <div>
+              <div className="stat">Wertung</div>
+              <div className={"statv mono" + (scoreDir ? " " + scoreDir : "")}>
+                <AnimatedNumber value={score} format={(v: number) => v.toFixed(2)} className={undefined} style={undefined} />
+                {scoreDir && (
+                  <span className={"delta " + scoreDir}>
+                    {scoreDir === "up" ? "▲" : "▼"} {Math.abs(scoreDelta as number).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div className="stat">Platz</div>
+              <div className="statv mono">{myRank}<span style={{ opacity: .5 }}>/{state.funds.length}</span></div>
+            </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="stat">Dry Powder</div>
-            <AnimatedNumber className="statv mono" value={investableOf(me, quarter)} format={eur} style={undefined} />
+          <div className="cockkpi mono">
+            <span>TVPI {tvpi.toFixed(2)}×</span>
+            <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %</span>
+            <span>DPI {dpi.toFixed(2)}×</span>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="stat">Halbjahr</div>
-            {/* Das Halbjahr, über das gerade entschieden wird (1-basiert) — nicht
-                die Zahl der bereits ausgewerteten. Vorher stand hier im ersten
-                Halbjahr "0/20", während der Abgabebildschirm "Halbjahr 1
-                abgegeben" meldete. */}
-            <div className="statv mono">{currentHalfYear}<span style={{ opacity: .5 }}>/{PERIODS}</span></div>
+        </div>
+        {/* Kapital: womit lässt sich arbeiten. */}
+        <div className="cockgrp">
+          <div className="barrow">
+            <div>
+              <div className="stat">Dry Powder</div>
+              <AnimatedNumber className="statv mono" value={investableOf(me, quarter)} format={eur} style={undefined} />
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div className="stat">PortCos</div>
+              <div className="statv mono">{me.holdings.length}<span style={{ opacity: .5 }}>/{MAX_SLOTS}</span></div>
+            </div>
           </div>
-          <Link href="/dashboard" className="theme" aria-label="Zum Dashboard">
-            ←
-          </Link>
-          <button className="theme" onClick={() => { haptic(6); setDark(!dark); }} aria-label="Darstellung wechseln">
-            {dark ? "☀" : "☾"}
-          </button>
+          <div className="cockkpi mono">
+            <span>
+              {eur(me.undrawn ?? CAPITAL)} offenes Commitment{(me.recyc || 0) > 0.5 ? ` + ${eur(me.recyc)} einbehalten` : ""}
+            </span>
+            {(me.accrued || 0) > 0.5 && <span className="ox">{eur(me.accrued)} aufgelaufene Gebühren</span>}
+          </div>
         </div>
-        <div className="barrow" style={{ marginTop: 6, fontSize: 10.5, opacity: .55 }}>
-          <span className="mono">TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}×</span>
-          <span className="mono">Platz {myRank}/{state.funds.length} · {me.holdings.length}/{MAX_SLOTS} PortCos</span>
-        </div>
-        <div className="barrow" style={{ marginTop: 2, fontSize: 10.5, opacity: .45 }}>
-          <span className="mono">
-            {eur(me.undrawn ?? CAPITAL)} offenes Commitment{(me.recyc || 0) > 0.5 ? ` + ${eur(me.recyc)} einbehalten` : ""}
-          </span>
-          {(me.accrued || 0) > 0.5 && <span className="mono ox">{eur(me.accrued)} aufgelaufene Gebühren</span>}
-        </div>
-        <div className="prog"><i style={{ width: `${(quarter / PERIODS) * 100}%` }} /></div>
-        <div className="barrow" style={{ marginTop: 6, fontSize: 10.5 }}>
+        <div className="cockgrp"><div className="barrow" style={{ fontSize: 10.5, paddingBottom: 2 }}>
           <button
             className="mono"
-            style={{ background: "none", border: "none", padding: 0, color: "var(--ink2)", textDecoration: "underline", cursor: "pointer" }}
+            /* textAlign: Schaltflächen zentrieren ihren Text von sich aus. Bei
+               320 px bricht die Beschriftung um, und die zweite Zeile stand
+               dann mittig unter der ersten statt bündig darunter. */
+            style={{ background: "none", border: "none", padding: 0, color: "var(--ink2)", textDecoration: "underline", cursor: "pointer", textAlign: "left" }}
             onClick={handleManualAdvance}
             disabled={checking}
           >
@@ -956,10 +1008,11 @@ export default function MultiplayerGame({
           </button>
         </div>
         {notReadyYet && (
-          <div className="barrow" style={{ marginTop: 2, fontSize: 10.5, opacity: .6 }}>
+          <div className="barrow" style={{ marginTop: 2, fontSize: 10.5, opacity: .6, paddingBottom: 2 }}>
             <span>Noch kein neues Halbjahr — läuft weiter, bis alle abgegeben haben oder die Frist erreicht ist.</span>
           </div>
         )}
+        </div>
       </div>
 
       <Toasts items={[]} />
