@@ -95,6 +95,14 @@ export default function LobbyRoom({
   const aiCount = Math.max(0, 5 - humanCount);
 
   const usedPoints = Object.values(attrs).reduce((a, b) => a + b, 0);
+  const pointsLeft = FUND_PROFILE_POINTS - usedPoints;
+  const pointsComplete = pointsLeft === 0;
+  /* Genau eine Schaltfläche trägt zu jedem Zeitpunkt die Hauptfarbe — sie ist
+     die Antwort auf "wo tippe ich jetzt hin?". Solange das Fondsprofil offen
+     ist, ist das Speichern der nächste Schritt; ist es erledigt (oder spielt
+     der Ersteller gar nicht mit), rückt der Start nach vorn. Alles andere
+     bleibt ruhig, und das Entfernen der Partie trägt die Warnfarbe.        */
+  const startIsNext = !isMember || profileSaved;
 
   const setAttrs = useCallback((updater: (a: Attrs) => Attrs) => {
     setAttrsRaw(updater);
@@ -246,11 +254,6 @@ export default function LobbyRoom({
         {humanCount} / 5 Plätzen belegt · Start spätestens in <Countdown lobbyOpenedAt={lobbyOpenedAt} />
       </p>
       {isMember && (
-        <button className="btn-secondary" onClick={handleLeave} disabled={pending}>
-          {pending ? "Einen Moment …" : "Lobby verlassen"}
-        </button>
-      )}
-      {isMember && (
         <div className="fundprofile">
           <h3>Fondsprofil</h3>
           <p className="dashsub">
@@ -282,33 +285,66 @@ export default function LobbyRoom({
               </div>
             </div>
           ))}
+          {/* Statuszeile statt Schaltflächenzeile: Die Punktezahl sagt, wo man
+              steht, die Schaltfläche darunter, was als Nächstes zu tun ist.
+              Vorher standen beide nebeneinander — die wichtigste Aktion der
+              Karte war damit halb so breit wie jede andere und saß rechts in
+              einer Zeile, die wie eine Beschriftung aussieht. */}
           <div className="fpfoot">
-            <span className={"fppoints" + (usedPoints === FUND_PROFILE_POINTS ? " ok" : "")}>
+            <span className={"fppoints" + (pointsComplete ? " ok" : "")}>
               {usedPoints} / {FUND_PROFILE_POINTS} Punkte
             </span>
+            <span className="fpstate">
+              {!pointsComplete
+                ? `noch ${pointsLeft} zu verteilen`
+                : profileSaved ? "gespeichert" : "noch nicht gespeichert"}
+            </span>
+          </div>
+          {profileSaved ? (
+            <p className="fpdone">Fondsprofil gespeichert — bis zum Start jederzeit änderbar.</p>
+          ) : (
             <button
               className="btn-primary"
-              disabled={usedPoints !== FUND_PROFILE_POINTS || savingProfile || profileSaved}
+              disabled={!pointsComplete || savingProfile}
               onClick={handleSaveProfile}
             >
-              {savingProfile ? "Speichert …" : profileSaved ? "Gespeichert ✓" : "Fondsprofil speichern"}
+              {savingProfile ? "Speichert …" : "Fondsprofil speichern"}
             </button>
-          </div>
+          )}
           {profileError && <p className="autherror">{profileError}</p>}
           {!profileSaved && (
-            <p className="dashsub fpnote">Ohne eigene Wahl startest du mit der Standardverteilung.</p>
+            <p className="dashsub fpnote">
+              {pointsComplete
+                ? "Ohne Speichern startest du mit der Standardverteilung."
+                : `Erst wenn alle ${FUND_PROFILE_POINTS} Punkte verteilt sind, lässt sich das Profil speichern.`}
+            </p>
           )}
         </div>
       )}
-      {isCreator && (
-        <>
-          <button className="btn-secondary" onClick={handleForceStart} disabled={pending}>
+      {/* Nur rendern, wenn es hier auch etwas zu tun gibt — sonst zöge die
+          Gruppe für einen Zuschauer eine Trennlinie ohne Inhalt darunter. */}
+      {(isMember || isCreator) && (
+      <div className="lobbyactions">
+        {isCreator && (
+          <button
+            className={startIsNext ? "btn-primary" : "btn-secondary"}
+            onClick={handleForceStart}
+            disabled={pending}
+          >
             {pending ? "Einen Moment …" : `Sofort starten (${humanCount} Spieler, ${aiCount} KI-Fonds)`}
           </button>
-          <button className="btn-secondary" onClick={handleDelete} disabled={pending}>
+        )}
+        {isMember && (
+          <button className="btn-secondary" onClick={handleLeave} disabled={pending}>
+            {pending ? "Einen Moment …" : "Lobby verlassen"}
+          </button>
+        )}
+        {isCreator && (
+          <button className="btn-danger" onClick={handleDelete} disabled={pending}>
             {pending ? "Einen Moment …" : "Season entfernen"}
           </button>
-        </>
+        )}
+      </div>
       )}
     </div>
   );
