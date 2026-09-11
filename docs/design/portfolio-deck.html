@@ -1,0 +1,901 @@
+<title>Dealroom Deck</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --void:#070b0d;
+  --deep:#0b1114;
+  --plate:#111a1e;
+  --plate2:#18242a;
+  --rule:#22323a;
+  --rule2:#2e4149;
+  --ink:#e9f0ed;
+  --ink2:#7f9295;
+  --ink3:#5a6b6e;
+  --go:#5fc4b1;
+  --foil:#dcb264;
+  --risk:#e3897f;
+  --sec:#7C8B96;
+  --secHi:#A9C2CE;
+  --disp:"Chakra Petch","Inter",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--void);
+  color:var(--ink);
+  font-family:var(--body);
+  letter-spacing:-0.005em;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+/* Rasterhintergrund: das Terminal, auf dem das Deck liegt. */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(95,196,177,.07), transparent 60%),
+    linear-gradient(rgba(34,50,58,.35) 1px, transparent 1px) 0 0/100% 46px,
+    linear-gradient(90deg, rgba(34,50,58,.35) 1px, transparent 1px) 0 0/46px 100%;
+  mask-image:radial-gradient(120% 90% at 50% 0%, #000 20%, transparent 78%);
+}
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:0 72px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------------- Kopf ---------------- */
+.top{padding-block:34px 22px;display:flex;flex-wrap:wrap;gap:26px;align-items:flex-end;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.brand .mark{width:22px;height:22px;flex:none}
+.brand b{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.18em;text-transform:uppercase}
+.eyebrow{font-family:var(--disp);font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink2)}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(28px,5vw,46px);line-height:1.04;margin:10px 0 0;text-wrap:balance;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--go)}
+.lede{max-width:56ch;color:var(--ink2);font-size:14.5px;line-height:1.6;margin:14px 0 0}
+
+/* Kapazitätsanzeige – dieselbe Schranke wie im Spiel: 4 Werkbänke fürs ganze Portfolio */
+.cap{border:1px solid var(--rule);background:var(--deep);padding:12px 14px;min-width:206px}
+.cap .lab{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.cap .lab span:last-child{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.slots{display:flex;gap:5px;margin-top:9px}
+.slots i{height:7px;flex:1;background:var(--rule2);display:block}
+.slots i.on{background:var(--go)}
+.cap p{margin:9px 0 0;font-size:10.5px;line-height:1.45;color:var(--ink3)}
+
+/* ---------------- Konzeptwahl ---------------- */
+.switch{display:flex;flex-wrap:wrap;gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:30px}
+.switch button{
+  flex:1 1 190px;background:var(--deep);border:0;color:var(--ink2);text-align:left;
+  padding:13px 16px;font-family:var(--disp);cursor:pointer;transition:background .15s,color .15s;
+}
+.switch button .n{display:block;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:inherit}
+.switch button .d{display:block;font-family:var(--body);font-size:11.5px;color:var(--ink3);margin-top:3px;letter-spacing:0}
+.switch button[aria-selected="true"]{background:var(--plate2);color:var(--ink);box-shadow:inset 0 -2px 0 var(--go)}
+.switch button:hover{color:var(--ink)}
+
+/* ---------------- Deck / Wischbahn ---------------- */
+.stage{margin-top:26px}
+.stagehead{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.nav{display:flex;gap:8px;align-items:center}
+.nav button{
+  width:38px;height:38px;background:var(--deep);border:1px solid var(--rule);color:var(--ink);
+  cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;transition:border-color .15s,color .15s;
+}
+.nav button:hover:not(:disabled){border-color:var(--go);color:var(--go)}
+.nav button:disabled{color:var(--ink3);cursor:default}
+.swipehint{font-family:var(--disp);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3)}
+
+.rail{
+  display:flex;gap:20px;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;scroll-padding-inline:0;
+  padding-block:4px 18px;margin-inline:-20px;padding-inline:20px;
+  overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab;
+}
+.rail::-webkit-scrollbar{display:none}
+.rail.drag{cursor:grabbing;scroll-snap-type:none}
+.rail>*{scroll-snap-align:center;flex:none}
+
+/* Bandanzeige statt Punkte: die Namen sind die Navigation */
+.ribbon{display:flex;gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:2px}
+.ribbon button{
+  flex:1;background:var(--deep);border:0;cursor:pointer;padding:9px 8px;text-align:left;
+  font-family:var(--disp);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s,background .15s;
+}
+.ribbon button[aria-current="true"]{background:var(--plate2);color:var(--ink)}
+.ribbon button i{display:block;height:2px;background:var(--sc,var(--rule2));margin-bottom:7px}
+
+/* ---------------- Karte: gemeinsames Fundament ---------------- */
+.card{
+  --chip:18px;
+  position:relative;padding:1px;
+  background:linear-gradient(150deg,var(--secHi) 0%,var(--rule) 34%,var(--rule) 66%,color-mix(in srgb,var(--secHi) 55%,transparent) 100%);
+  clip-path:polygon(var(--chip) 0,100% 0,100% calc(100% - var(--chip)),calc(100% - var(--chip)) 100%,0 100%,0 var(--chip));
+  width:min(420px,84vw);
+}
+.card .body{
+  background:linear-gradient(178deg,var(--plate) 0%,var(--deep) 62%);
+  clip-path:polygon(calc(var(--chip) - 1px) 0,100% 0,100% calc(100% - var(--chip) + 1px),calc(100% - var(--chip) + 1px) 100%,0 100%,0 calc(var(--chip) - 1px));
+  height:100%;display:flex;flex-direction:column;
+}
+.card.att{background:linear-gradient(150deg,var(--risk) 0%,var(--rule) 40%,var(--rule) 64%,color-mix(in srgb,var(--risk) 50%,transparent) 100%)}
+
+/* Kopfband der Karte */
+.chead{display:flex;gap:13px;padding:15px 16px 13px;border-bottom:1px solid var(--rule);
+  background:linear-gradient(100deg,color-mix(in srgb,var(--sec) 24%,transparent),transparent 62%)}
+.sigil{width:54px;height:54px;flex:none;border:1px solid var(--rule2);background:#060a0c}
+.idblock{min-width:0;flex:1}
+.idx{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.1em}
+.cname{font-family:var(--disp);font-weight:700;font-size:19px;line-height:1.15;margin:2px 0 0;text-wrap:balance}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.tag{font-family:var(--disp);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--rule2);color:var(--ink2);padding:3px 6px;display:inline-flex;align-items:center;gap:5px}
+.tag .dot{width:6px;height:6px;background:var(--sec);display:block}
+.tag.angle{border-color:color-mix(in srgb,var(--foil) 60%,transparent);color:var(--foil)}
+.tag.flag{border-color:color-mix(in srgb,var(--risk) 55%,transparent);color:var(--risk)}
+.state{font-family:var(--disp);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--go);white-space:nowrap;align-self:flex-start;display:flex;align-items:center;gap:5px}
+.state.att{color:var(--risk)}
+
+/* Quartett-Trumpfzeile */
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:14px 16px 12px}
+.hero .big{font-family:var(--mono);font-weight:700;font-size:36px;line-height:.95;letter-spacing:-.02em}
+.hero .big.up{color:var(--go)} .hero .big.down{color:var(--risk)}
+.hero .sub{font-size:11px;color:var(--ink2);margin-top:6px;line-height:1.4}
+.spark{width:106px;height:42px;flex:none}
+
+/* Statleiter */
+.ladder{border-top:1px solid var(--rule);flex:1}
+.srow{display:grid;grid-template-columns:1fr 74px 16px;gap:10px;align-items:center;padding:9px 16px;
+  border-bottom:1px solid rgba(34,50,58,.55)}
+.srow:last-child{border-bottom:0}
+.srow .l{font-size:11.5px;color:var(--ink2);line-height:1.3}
+.srow .l b{display:block;color:var(--ink3);font-family:var(--mono);font-size:9.5px;font-weight:400;margin-top:2px;letter-spacing:.04em}
+.srow .v{font-family:var(--mono);font-size:14px;font-weight:500;text-align:right}
+.srow .j{font-size:11px;text-align:center;font-weight:700}
+.j.up{color:var(--go)} .j.down{color:var(--risk)} .j.flat{color:var(--ink3)}
+.bar{grid-column:1/-1;height:3px;background:var(--rule);position:relative;margin-top:-2px}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--sec);display:block}
+.bar u{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--ink2);text-decoration:none}
+.bar.up i{background:var(--go)} .bar.down i{background:var(--risk)}
+
+/* Säulen: People / Performance / Growth */
+.pillars{padding:12px 16px;border-top:1px solid var(--rule);display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:84px 1fr auto;gap:10px;align-items:center}
+.prow .pl{font-family:var(--disp);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.pips{display:flex;gap:3px}
+.pips i{flex:1;height:8px;background:var(--rule);display:block;
+  clip-path:polygon(3px 0,100% 0,100% calc(100% - 3px),calc(100% - 3px) 100%,0 100%,0 3px)}
+.pips i.on{background:var(--pc,var(--go))}
+.pips i.half{background:linear-gradient(90deg,var(--pc,var(--go)) 50%,var(--rule) 50%)}
+.prow .ps{font-family:var(--mono);font-size:10px;color:var(--ink3);white-space:nowrap}
+.prow .ps.run{color:var(--foil)} .prow .ps.warn{color:var(--risk)}
+
+/* Aktionskonsole – Management / Performance / Growth */
+.console{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border-top:1px solid var(--rule);margin-top:auto}
+.act{
+  background:var(--plate2);border:0;color:var(--ink);cursor:pointer;text-align:left;
+  padding:11px 12px 12px;font-family:var(--disp);transition:background .15s,color .15s;position:relative;
+}
+.act:hover:not(:disabled){background:#1f2f36}
+.act .an{display:block;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+.act .as{display:block;font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:4px;letter-spacing:.02em;line-height:1.3}
+.act[data-on="true"]{background:#14242a;color:var(--foil);box-shadow:inset 0 2px 0 var(--foil)}
+.act[data-on="true"] .as{color:var(--foil)}
+.act[data-vac="true"]{box-shadow:inset 0 2px 0 var(--risk);color:var(--risk)}
+.act:disabled{color:var(--ink3);cursor:not-allowed}
+.act:disabled .as{color:var(--ink3)}
+
+/* Besetzungs-Schublade */
+.tray{border-top:1px solid var(--rule);background:#0a1013;display:grid;grid-template-columns:repeat(3,1fr);gap:1px}
+.seat{background:var(--deep);border:0;color:var(--ink);padding:10px 8px;cursor:pointer;text-align:center;font-family:var(--disp);transition:background .15s}
+.seat:hover{background:var(--plate2)}
+.seat .rn{font-size:9px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+.seat .sk{font-family:var(--mono);font-size:17px;font-weight:700;line-height:1.5}
+.seat .st{font-size:9px;color:var(--ink3);font-family:var(--mono)}
+.seat.vac .sk{color:var(--risk)}
+.seat.busy .sk{color:var(--foil)}
+
+/* ---------------- Konzept B: Battle ---------------- */
+.bcard{width:min(430px,86vw)}
+.arena{position:relative;padding:4px 16px 0;display:grid;gap:12px}
+.radarcol{justify-self:center;width:min(292px,100%)}
+.arena .col{display:grid;grid-template-columns:1fr 1fr;gap:11px 16px}
+.mrow{min-width:0}
+.mrow .ml{font-family:var(--disp);font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .mv{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+.mrow .mv span{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap}
+.mrow .mv em{font-family:var(--mono);font-size:8.5px;font-style:normal;color:var(--ink3);white-space:nowrap}
+.meter{height:5px;background:var(--rule);margin-top:4px;position:relative}
+.meter i{position:absolute;inset:0 auto 0 0;display:block;background:var(--go)}
+.meter.bad i{background:var(--risk)}
+.meter.mid i{background:var(--foil)}
+.radar{width:100%;height:auto;display:block}
+.vertex{cursor:pointer}
+.vertex:hover .vring{stroke:var(--go);stroke-width:2}
+.vertex text{font-family:"Chakra Petch",sans-serif;font-size:8.5px;font-weight:700;letter-spacing:.1em;fill:var(--ink2)}
+.vertex:hover text{fill:var(--ink)}
+.vertex.on text{fill:var(--foil)}
+.battlefoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--rule);margin-top:8px}
+.bscore{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1}
+.bhint{font-size:10.5px;color:var(--ink3);line-height:1.45;max-width:23ch}
+
+/* ---------------- Konzept C: Konsole ---------------- */
+.ccard{width:min(840px,90vw);--chip:22px}
+.cgrid{display:grid;grid-template-columns:58px 1fr 208px}
+.crail{border-right:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px 0;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sec) 26%,transparent),transparent 55%)}
+.crail .vert{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--disp);font-size:10px;font-weight:700;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
+.crail .num{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.cmain{min-width:0;display:flex;flex-direction:column}
+.ctop{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--rule)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);border-bottom:1px solid var(--rule)}
+.kpi{background:var(--deep);padding:10px 12px 11px}
+.kpi .k{font-family:var(--disp);font-size:9px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3)}
+.kpi .n{font-family:var(--mono);font-size:16px;font-weight:500;margin-top:4px}
+.kpi .r{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:3px}
+.kpi .n.up{color:var(--go)} .kpi .n.down{color:var(--risk)}
+.cwells{border-left:1px solid var(--rule);display:grid;grid-template-rows:repeat(3,1fr)}
+.well{border-bottom:1px solid var(--rule);background:var(--plate2);border-right:0;border-top:0;border-left:0;
+  color:var(--ink);cursor:pointer;text-align:left;padding:12px 14px;font-family:var(--disp);transition:background .15s;
+  display:flex;flex-direction:column;justify-content:center;gap:6px;min-height:74px}
+.well:last-child{border-bottom:0}
+.well:hover:not(:disabled){background:#1f2f36}
+.well .wn{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.well .wn u{text-decoration:none;font-family:var(--mono);font-size:9.5px;font-weight:400;color:var(--ink3);letter-spacing:0}
+.well .ws{font-family:var(--mono);font-size:10px;color:var(--ink3);line-height:1.35}
+.well[data-on="true"]{background:#14242a;box-shadow:inset 3px 0 0 var(--foil)}
+.well[data-on="true"] .wn{color:var(--foil)}
+.well[data-vac="true"]{box-shadow:inset 3px 0 0 var(--risk)}
+.well[data-vac="true"] .wn{color:var(--risk)}
+.well:disabled{color:var(--ink3);cursor:not-allowed}
+.cbottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 110px;gap:18px;align-items:center;
+  padding:11px 16px;font-size:10.5px;color:var(--ink3);line-height:1.45}
+.cbottom .prow{grid-template-columns:1fr auto;grid-template-areas:"l s" "p p";gap:5px 8px}
+.cbottom .prow .pl{grid-area:l}
+.cbottom .prow .ps{grid-area:s;text-align:right}
+.cbottom .prow .pips{grid-area:p}
+.cbottom .sparkcell{justify-self:end;overflow:hidden}
+
+/* ---------------- Notizen ---------------- */
+.notes{margin-top:56px;border-top:1px solid var(--rule);padding-top:34px}
+.notes h2{font-family:var(--disp);font-size:20px;font-weight:700;letter-spacing:.02em;margin:0 0 6px}
+.notes .sec{margin-bottom:38px}
+.notes p{color:var(--ink2);font-size:13.5px;line-height:1.65;max-width:66ch;margin:10px 0 0}
+.notes p b{color:var(--ink);font-weight:600}
+.ngrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);margin-top:20px}
+.ncell{background:var(--deep);padding:16px 16px 18px}
+.ncell h3{font-family:var(--disp);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--ink)}
+.ncell .tagline{font-family:var(--mono);font-size:10px;color:var(--go);margin:6px 0 0;letter-spacing:.02em}
+.ncell ul{margin:12px 0 0;padding-left:16px;color:var(--ink2);font-size:12.5px;line-height:1.6}
+.ncell li{margin-bottom:7px}
+.ncell li::marker{color:var(--rule2)}
+code{font-family:var(--mono);font-size:11.5px;color:var(--foil);background:rgba(220,178,100,.08);padding:1px 4px}
+footer{margin-top:40px;color:var(--ink3);font-size:11.5px;line-height:1.6;border-top:1px solid var(--rule);padding-top:18px}
+
+:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media (max-width:640px){
+  .top{padding-block:26px 16px}
+  .cgrid{grid-template-columns:1fr}
+  .crail{flex-direction:row;justify-content:space-between;padding:9px 14px;border-right:0;border-bottom:1px solid var(--rule)}
+  .crail .vert{writing-mode:horizontal-tb;transform:none}
+  .cwells{border-left:0;border-top:1px solid var(--rule);grid-template-rows:none}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .cbottom{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+  .cbottom .sparkcell{justify-self:start}
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 1.6 22 7v10L12 22.4 2 17V7z" fill="none" stroke="#5fc4b1" stroke-width="1.3"></path>
+          <path d="M12 7.2 17 10v4.6L12 17.4 7 14.6V10z" fill="#5fc4b1" opacity=".22"></path>
+          <path d="M12 7.2 17 10v4.6L12 17.4 7 14.6V10z" fill="none" stroke="#dcb264" stroke-width="1.1"></path>
+        </svg>
+        <b>PE Leagues</b>
+      </div>
+      <div class="eyebrow">Frontend-Entwurf · Portfolio-Ansicht</div>
+      <h1>Drei Decks für die <em>Beteiligungen</em></h1>
+      <p class="lede">Jede Beteiligung wird eine Karte: Kennzahl gegen Sektor-Benchmark, wie bei einem Quartett.
+        Navigiert wird seitwärts — wischen, Pfeiltasten oder die Namensleiste unter dem Deck. Management,
+        Performance und Growth sitzen auf der Karte selbst, nicht in einem Menü darunter.</p>
+    </div>
+    <div class="cap">
+      <div class="lab"><span class="eyebrow">Operating-Kapazität</span><span id="capNum">2 / 4</span></div>
+      <div class="slots" id="capSlots" aria-hidden="true"></div>
+      <p>Werkbänke fürs ganze Portfolio, pro Halbjahr. Ist sie voll, sperren die Karten ihre Programmknöpfe.</p>
+    </div>
+  </header>
+
+  <div class="switch" role="tablist" aria-label="Kartenkonzept">
+    <button role="tab" id="tab-dossier" aria-selected="true" data-c="dossier">
+      <span class="n">A · Dossier</span><span class="d">Quartett-Statleiter, Konsole am Fuß</span></button>
+    <button role="tab" id="tab-battle" aria-selected="false" data-c="battle">
+      <span class="n">B · Battle</span><span class="d">Dreieck gegen den Sektor, Knöpfe sind die Ecken</span></button>
+    <button role="tab" id="tab-konsole" aria-selected="false" data-c="konsole">
+      <span class="n">C · Konsole</span><span class="d">Querformat, Werkbänke als Schächte rechts</span></button>
+  </div>
+
+  <section class="stage" aria-label="Kartendeck">
+    <div class="stagehead">
+      <span class="swipehint" id="stageLabel">Karte 1 von 5 · ← → oder wischen</span>
+      <div class="nav">
+        <button id="prev" aria-label="Vorherige Beteiligung">◀</button>
+        <button id="next" aria-label="Nächste Beteiligung">▶</button>
+      </div>
+    </div>
+    <div class="rail" id="rail" tabindex="0" role="group" aria-label="Beteiligungen, seitlich navigierbar"></div>
+    <div class="ribbon" id="ribbon"></div>
+  </section>
+
+  <section class="notes">
+    <div class="sec">
+      <h2>Was die drei Entwürfe voneinander unterscheidet</h2>
+      <p>Alle drei zeigen dieselbe Beteiligung mit denselben Zahlen aus <code>components/pel/ui.tsx</code>.
+        Sie unterscheiden sich darin, <b>wovon die Karte erzählt</b> — vom Datenblatt, vom Duell oder vom Eingriff.</p>
+      <div class="ngrid">
+        <div class="ncell">
+          <h3>A · Dossier</h3>
+          <p class="tagline">Die Karte als Datenblatt</p>
+          <ul>
+            <li>Sechs Trumpfzeilen, jede mit eigener Referenz: Marge gegen Benchmark, Wachstum gegen Markt, Leverage gegen Covenant. Der Balken zeigt den Ist-Wert, der helle Strich die Referenz.</li>
+            <li>Das ▲ / ▼ rechts ist die Quartett-Mechanik: geschlagen oder unterlegen, ohne dass man rechnen muss.</li>
+            <li>Management, Performance und Growth als dreigeteilte Konsole am Fuß. Management klappt die Besetzung auf — vakante Sitze pulsen rot durch den Knopf hindurch.</li>
+            <li>Nächste an der heutigen Ansicht, trägt die meisten Zahlen, funktioniert bis 360 px Breite.</li>
+          </ul>
+        </div>
+        <div class="ncell">
+          <h3>B · Battle</h3>
+          <p class="tagline">Die Karte als Duell</p>
+          <ul>
+            <li>Das Dreieck spannt genau die drei Hebel auf. Die gefüllte Fläche ist die Beteiligung, die gepunktete der Sektorschnitt — der Abstand ist die These.</li>
+            <li>Die drei Knöpfe <i>sind</i> die Ecken: auf eine Ecke tippen heißt, diese Achse zu bespielen. Läuft ein Programm, pulst die Ecke golden bis zum Ergebnis.</li>
+            <li>Links Angriffswerte, rechts Deckung — Leverage-Puffer und Cash Conversion als Leisten, die bei Covenant-Nähe kippen.</li>
+            <li>Am stärksten im Direktvergleich zweier Karten; am weitesten weg von der heutigen Tabellenlogik.</li>
+          </ul>
+        </div>
+        <div class="ncell">
+          <h3>C · Konsole</h3>
+          <p class="tagline">Die Karte als Werkbank</p>
+          <ul>
+            <li>Querformat: links Kennung und Sektorfarbe, in der Mitte acht Kennzahlen mit Referenz, rechts die drei Schächte.</li>
+            <li>Die Schächte sind die Kapazität, nicht nur Knöpfe: belegt, frei oder gesperrt, mit Restlaufzeit in Halbjahren.</li>
+            <li>Zeigt am meisten pro Karte und bleibt auf dem Desktop ruhig; auf dem Telefon stapelt sich das Raster.</li>
+            <li>Kein Aufklappen, kein zweiter Zustand — alles steht gleichzeitig da.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Seitwärts statt abwärts</h2>
+      <p>Das Deck ist eine Schiene mit <code>scroll-snap-type: x mandatory</code>. Eine Karte ist eine Beteiligung,
+        und sie endet, wo sie endet — es gibt nichts, wohin man in ihr scrollen müsste.</p>
+      <div class="ngrid">
+        <div class="ncell">
+          <h3>Bedienung</h3>
+          <ul>
+            <li>Wischen und Ziehen mit Maus oder Finger, mit Trägheit bis zum nächsten Rastpunkt.</li>
+            <li><code>←</code> / <code>→</code> im Deck, Pfeilknöpfe oben rechts, Sprung über die Namensleiste.</li>
+            <li>Auf dem Desktop lugen die Nachbarkarten hervor — das ist der Hinweis, dass es weitergeht.</li>
+          </ul>
+        </div>
+        <div class="ncell">
+          <h3>Orientierung</h3>
+          <ul>
+            <li>Die Namensleiste ersetzt Punkte: Sektorfarbe plus Name, damit man weiß, was kommt.</li>
+            <li>Karte n von m oben, damit die Länge des Portfolios sichtbar bleibt.</li>
+            <li><code>overscroll-behavior-x: contain</code> verhindert, dass das Wischen die Seite zurückblättert.</li>
+          </ul>
+        </div>
+        <div class="ncell">
+          <h3>Umsetzung im Projekt</h3>
+          <ul>
+            <li>Die Kartenteile sitzen bereits als <code>Stages</code>, <code>Pips</code> und <code>PerformanceCompare</code> in <code>components/pel/ui.tsx</code> — das Deck umhüllt sie, es ersetzt sie nicht.</li>
+            <li>Farbe kommt weiter aus <code>SECCOLOR</code>, gesetzt als <code>--sec</code> auf der Karte; die hellere Kante ist ein zweiter Ton je Sektor.</li>
+            <li>Die Sperre der Programmknöpfe ist dieselbe wie heute: <code>INIT_SLOTS = 4</code> fürs ganze Portfolio.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Woher das Futuristische kommt</h2>
+      <p>Nicht aus Neon: aus <b>angeschrägten Kanten</b> (die Karte ist eine gefräste Platte, keine abgerundete Kachel),
+        einer <b>Sektorfolie</b> in der Kopfzeile, dem <b>Signet</b> — einem Emblem, das sich aus Name, Sektor und
+        Assetqualität jeder Beteiligung selbst zeichnet — und durchgehend <b>Chakra Petch</b> für Beschriftungen,
+        deren gekappte Ecken die Kartenform aufnehmen. Zahlen bleiben in JetBrains Mono, Fließtext in Inter:
+        dieselben Schriften wie im Spiel. Farben sind die des Spiels, nur eine Stufe tiefer gelegt —
+        Teal für „läuft nach Plan", Gold für „ein Programm läuft", Oxblut für „braucht Aufmerksamkeit".</p>
+    </div>
+
+    <footer>
+      Entwurf, kein fertiger Code. Zahlen sind erfundene Beispielbeteiligungen in den Bändern der Engine
+      (<code>lib/engine/engine.ts</code>) — Covenant 6,5×, Mindesthaltedauer 6 Halbjahre, vier Werkbänke.
+    </footer>
+  </section>
+</div>
+
+<script>
+const SEC = {
+  Industrials:{hi:"#A9C2CE",base:"#7C8B96",g:4.0,m:8.5,label:"Industrials"},
+  Healthcare :{hi:"#63D6C0",base:"#3E9B8F",g:6.0,m:11.0,label:"Healthcare"},
+  Software   :{hi:"#A99BEC",base:"#8478BE",g:9.0,m:13.0,label:"Software & IT"},
+  Services   :{hi:"#E0B471",base:"#B4894C",g:4.5,m:9.0,label:"Business Services"},
+  Consumer   :{hi:"#EE8B80",base:"#C4635C",g:3.0,m:8.0,label:"Consumer & Retail"}
+};
+
+const DECK = [
+  { name:"Brenner Antriebstechnik", sector:"Industrials",
+    desc:"Servoantriebe für Verpackungsmaschinen", rev:84.0, ebitda:8.2, margin:9.8, bench:8.5,
+    growth:5.2, lev:4.2, cov:6.5, rate:7.4, conv:61, qual:68, hold:4, moic:1.42,
+    people:3.0, perf:2.5, grow:1.5, flag:null, seats:[["CEO",7.2,"ok"],["CFO",6.4,"ok"],["COO",5.8,"ok"]],
+    hist:[6.1,6.4,6.9,7.0,7.4,7.7,8.0,8.2] },
+  { name:"Auravit Kliniken", sector:"Healthcare",
+    desc:"Fachkliniken für Orthopädie, sieben Standorte", rev:126.0, ebitda:15.6, margin:12.4, bench:11.0,
+    growth:7.1, lev:5.1, cov:6.5, rate:8.1, conv:48, qual:74, hold:6, moic:1.88,
+    people:3.5, perf:3.5, grow:2.0, flag:{t:"Buy-&-Build-Plattform",angle:true},
+    seats:[["CEO",8.1,"ok"],["CFO",7.3,"ok"],["CMO",6.9,"ok"]],
+    hist:[9.8,10.6,11.4,12.1,13.0,14.1,15.0,15.6], run:{k:"grow",left:2} },
+  { name:"Kaltmann Systeme", sector:"Software",
+    desc:"ERP-Module für Zulieferer, 91 % wiederkehrend", rev:41.5, ebitda:6.7, margin:16.2, bench:13.0,
+    growth:12.4, lev:3.4, cov:6.0, rate:7.9, conv:72, qual:81, hold:2, moic:1.15,
+    people:2.0, perf:2.0, grow:3.0, flag:null,
+    seats:[["CEO",7.6,"ok"],["CFO",0,"vac"],["CTO",8.4,"ok"]],
+    hist:[4.2,4.6,5.0,5.4,5.8,6.1,6.4,6.7] },
+  { name:"Steinwerk Logistik", sector:"Services",
+    desc:"Kontraktlogistik, zwei Großkunden", rev:97.3, ebitda:7.2, margin:7.4, bench:9.0,
+    growth:2.1, lev:6.8, cov:6.5, rate:9.6, conv:31, qual:52, hold:8, moic:0.86,
+    people:1.5, perf:1.0, grow:1.5, flag:{t:"Kundenkonzentration",angle:false},
+    seats:[["CEO",5.1,"ok"],["CFO",4.2,"search"],["COO",0,"vac"]],
+    hist:[9.1,8.8,8.4,8.2,7.9,7.6,7.3,7.2] },
+  { name:"Travekost Feinkost", sector:"Consumer",
+    desc:"Private-Label-Delikatessen für den LEH", rev:63.8, ebitda:5.7, margin:8.9, bench:8.0,
+    growth:3.4, lev:4.6, cov:6.5, rate:7.7, conv:55, qual:63, hold:5, moic:1.27,
+    people:2.5, perf:3.0, grow:2.0, flag:null,
+    seats:[["CEO",6.8,"ok"],["CFO",6.1,"ok"],["CSO",5.4,"ok"]],
+    hist:[4.6,4.8,5.0,5.1,5.3,5.5,5.6,5.7], run:{k:"perf",left:1} }
+];
+
+/* ---- Formatierung wie in lib/engine/engine.ts ---- */
+const de = (v,d=1)=>v.toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
+const eur = v => (v>=100?Math.round(v):Math.round(v*10)/10).toLocaleString("de-DE")+" Mio. €";
+const pct = v => de(Math.round(v*10)/10)+" %";
+const pctS = v => (v>0?"+":"−")+pct(Math.abs(v));
+const xx  = v => de(v)+"×";
+const hj  = n => n===1?"1 HJ":n+" HJ";
+
+/* Zustand je Beteiligung: laufende Programme und offene Schublade */
+DECK.forEach(c=>{
+  c.state = { tray:false, perf:c.run&&c.run.k==="perf"?c.run.left:0, grow:c.run&&c.run.k==="grow"?c.run.left:0 };
+  c.vac = c.seats.filter(s=>s[2]==="vac").length;
+  c.att = c.lev>c.cov || c.margin<c.bench || c.vac>0;
+});
+const SLOTS = 4;
+const used = () => DECK.reduce((n,c)=>n+(c.state.perf?1:0)+(c.state.grow?1:0),0);
+
+/* ---- Signet: zeichnet sich aus Name, Sektor und Assetqualität ---- */
+function hash(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return h>>>0; }
+function drawSigil(cv,c,size){
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  cv.width=size*dpr; cv.height=size*dpr; cv.style.width=size+"px"; cv.style.height=size+"px";
+  const g=cv.getContext("2d"); g.scale(dpr,dpr);
+  const S=SEC[c.sector], R=size/2, h=hash(c.name);
+  g.clearRect(0,0,size,size);
+  g.translate(R,R);
+  // Ringsegmente: Zahl und Dichte folgen der Assetqualität
+  const segs = 6 + Math.round(c.qual/14);
+  g.strokeStyle=S.hi; g.lineWidth=1.4;
+  for(let i=0;i<segs;i++){
+    if(((h>>i)&1)===0 && i%3!==0) continue;
+    const a0 = (i/segs)*Math.PI*2 + (h%17)/17, a1 = a0 + (Math.PI*2/segs)*0.62;
+    g.globalAlpha = 0.35 + 0.55*(c.qual/100);
+    g.beginPath(); g.arc(0,0,R*0.78,a0,a1); g.stroke();
+  }
+  // Kern: gekapptes Quadrat, dieselbe Fase wie die Karte
+  g.globalAlpha=1; const k=R*0.38, ch=k*0.42;
+  g.beginPath();
+  g.moveTo(-k+ch,-k); g.lineTo(k,-k); g.lineTo(k,k-ch); g.lineTo(k-ch,k); g.lineTo(-k,k); g.lineTo(-k,-k+ch); g.closePath();
+  g.fillStyle=S.base+"55"; g.fill(); g.strokeStyle=S.hi; g.lineWidth=1.2; g.stroke();
+  // Speichen: drei Hebel, Länge = Stufe
+  [[c.people,-Math.PI/2],[c.perf,Math.PI/6],[c.grow,Math.PI*5/6]].forEach(([v,a])=>{
+    g.beginPath(); g.moveTo(Math.cos(a)*k*1.25, Math.sin(a)*k*1.25);
+    g.lineTo(Math.cos(a)*(k*1.25+R*0.34*(v/4)), Math.sin(a)*(k*1.25+R*0.34*(v/4)));
+    g.strokeStyle="#dcb264"; g.lineWidth=1.6; g.stroke();
+  });
+}
+
+/* ---- Bausteine ---- */
+const el = (t,cls,html)=>{ const n=document.createElement(t); if(cls)n.className=cls; if(html!=null)n.innerHTML=html; return n; };
+
+function sparkSVG(c){
+  const S=SEC[c.sector], w=106,h=42, lo=Math.min(...c.hist), hi=Math.max(...c.hist), sp=Math.max(0.001,hi-lo);
+  const pts = c.hist.map((v,i)=>[4+i*(w-8)/(c.hist.length-1), h-5-((v-lo)/sp)*(h-14)]);
+  const d = pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const area = d+` L${pts[pts.length-1][0].toFixed(1)} ${h-2} L${pts[0][0].toFixed(1)} ${h-2} Z`;
+  const up = c.hist[c.hist.length-1] >= c.hist[0];
+  const col = up ? "#5fc4b1" : "#e3897f";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="Adj. EBITDA über acht Halbjahre">
+    <path d="${area}" fill="${col}" opacity=".12"></path>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="1.4" stroke-linejoin="round"></path>
+    <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="2.4" fill="${col}"></circle>
+    <text x="4" y="9" font-family="Chakra Petch" font-size="7" letter-spacing="1" fill="#5a6b6e">ADJ. EBITDA · 8 HJ</text>
+  </svg>`;
+}
+
+function pips(v,color){
+  let s='<span class="pips" style="--pc:'+color+'">';
+  for(let i=0;i<4;i++){ const f=v-i; s+='<i class="'+(f>=1?"on":f>0?"on half":"")+'"></i>'; }
+  return s+"</span>";
+}
+
+function pillarRow(c,key,label,color){
+  const v = key==="people"?c.people:key==="perf"?c.perf:c.grow;
+  const run = key==="perf"?c.state.perf:key==="grow"?c.state.grow:0;
+  let st="", cls="";
+  if(key==="people"){ if(c.vac){st=c.vac+" vakant";cls="warn";} else st=de(v); }
+  else if(run){ st=hj(run); cls="run"; }
+  else st = v<1.5?"unter Bench":v<2.5?"Benchmark":v<3.5?"über Bench":"Best-in-Class";
+  if(key==="people" && !c.vac) st=de(v);
+  return `<div class="prow"><span class="pl">${label}</span>${pips(v,color)}<span class="ps ${cls}">${st}</span></div>`;
+}
+
+/* Kopfband, in allen drei Konzepten gleich */
+function head(c,i){
+  const S=SEC[c.sector];
+  const flag = c.flag ? `<span class="tag ${c.flag.angle?"angle":"flag"}">${c.flag.angle?"◆":"⚑"} ${c.flag.t}</span>` : "";
+  return `<div class="chead">
+    <canvas class="sigil" data-sig="${i}" aria-hidden="true"></canvas>
+    <div class="idblock">
+      <div class="idx">${String(i+1).padStart(2,"0")} / ${String(DECK.length).padStart(2,"0")}</div>
+      <h3 class="cname">${c.name}</h3>
+      <div class="meta">
+        <span class="tag"><i class="dot"></i>${S.label}</span>
+        <span class="tag">⏱ ${c.hold} HJ</span>${flag}
+      </div>
+    </div>
+    <span class="state ${c.att?"att":""}">${c.att?"◉ Prüfen":"○ Nach Plan"}</span>
+  </div>`;
+}
+
+/* Konsolenknöpfe – dieselbe Logik in A und C */
+function actionState(c,key){
+  const full = used()>=SLOTS;
+  if(key==="mgmt") return { on:c.state.tray, vac:c.vac>0, dis:false,
+    sub: c.vac ? c.vac+" Sitz"+(c.vac>1?"e":"")+" vakant" : c.seats.some(s=>s[2]==="search") ? "Search läuft" : "3 Sitze besetzt" };
+  const run = key==="perf"?c.state.perf:c.state.grow;
+  return { on:!!run, vac:false, dis:!run&&full,
+    sub: run ? "läuft · "+hj(run) : full ? "Kapazität voll" : "Werkbank frei" };
+}
+
+/* ---------- Konzept A: Dossier ---------- */
+function ladderRow(label,ref,val,refVal,frac,refFrac,better){
+  const j = better>0?"up":better<0?"down":"flat";
+  return `<div class="srow"><div class="l">${label}<b>${ref}</b></div>
+      <div class="v ${j==="up"?"":""}">${val}</div><div class="j ${j}">${j==="up"?"▲":j==="down"?"▼":"—"}</div>
+      <div class="bar ${j}"><i style="width:${Math.max(2,Math.min(100,frac*100)).toFixed(0)}%"></i><u style="left:${Math.max(0,Math.min(100,refFrac*100)).toFixed(0)}%"></u></div></div>`;
+}
+
+function cardDossier(c,i){
+  const S=SEC[c.sector], M=SEC[c.sector];
+  const covHead = c.cov-c.lev;
+  const rows =
+    ladderRow("EBITDA-Marge","Benchmark "+pct(c.bench), pct(c.margin), 0, c.margin/22, c.bench/22, c.margin-c.bench) +
+    ladderRow("Wachstum p. a.","Markt "+pctS(M.g), pctS(c.growth), 0, c.growth/15, M.g/15, c.growth-M.g) +
+    ladderRow("Leverage","Covenant "+xx(c.cov), xx(c.lev), 0, c.lev/8, c.cov/8, c.cov-c.lev-0.5) +
+    ladderRow("Cash Conversion","Schwelle 50 %", pct(c.conv), 0, c.conv/100, 0.5, c.conv-50) +
+    ladderRow("Assetqualität","Portfolioschnitt 68", Math.round(c.qual), 0, c.qual/100, 0.68, c.qual-68) +
+    ladderRow("Haltedauer","Mindesthaltedauer 6 HJ", c.hold+" HJ", 0, c.hold/12, 0.5, c.hold-6);
+
+  const A=actionState(c,"mgmt"), P=actionState(c,"perf"), G=actionState(c,"grow");
+  const tray = c.state.tray ? `<div class="tray">${c.seats.map(s=>
+      `<button class="seat ${s[2]==="vac"?"vac":s[2]==="search"?"busy":""}" data-seat="${i}">
+        <div class="rn">${s[0]}</div><div class="sk">${s[2]==="search"?"🔍":s[1]>0?de(s[1]):"—"}</div>
+        <div class="st">${s[2]==="search"?"Shortlist":s[2]==="vac"?"vakant":"besetzt"}</div></button>`).join("")}</div>` : "";
+
+  const n = el("article","card"+(c.att?" att":""));
+  n.style.setProperty("--sec",S.base); n.style.setProperty("--secHi",S.hi);
+  n.innerHTML = `<div class="body">
+    ${head(c,i)}
+    <div class="hero">
+      <div>
+        <div class="big ${c.moic>=1?"up":"down"}">${de(c.moic,2)}×</div>
+        <div class="sub">Total Value · ${eur(c.rev)} Umsatz · ${eur(c.ebitda)} adj. EBITDA</div>
+      </div>
+      ${sparkSVG(c)}
+    </div>
+    <div class="ladder">${rows}</div>
+    <div class="pillars">
+      ${pillarRow(c,"people","People","#8478BE")}
+      ${pillarRow(c,"perf","Performance","#5fc4b1")}
+      ${pillarRow(c,"grow","Growth","#dcb264")}
+    </div>
+    ${tray}
+    <div class="console">
+      <button class="act" data-act="mgmt" data-i="${i}" data-on="${A.on}" data-vac="${A.vac}">
+        <span class="an">Management</span><span class="as">${A.sub}</span></button>
+      <button class="act" data-act="perf" data-i="${i}" data-on="${P.on}" ${P.dis?"disabled":""}>
+        <span class="an">Performance</span><span class="as">${P.sub}</span></button>
+      <button class="act" data-act="grow" data-i="${i}" data-on="${G.on}" ${G.dis?"disabled":""}>
+        <span class="an">Growth</span><span class="as">${G.sub}</span></button>
+    </div>
+  </div>`;
+  return n;
+}
+
+/* ---------- Konzept B: Battle ---------- */
+function radarSVG(c){
+  const S=SEC[c.sector], cx=130, cy=108, R=72;
+  const ang=[-Math.PI/2, Math.PI/6, Math.PI*5/6];
+  const vals=[c.people,c.perf,c.grow], bench=[2.4,2.5,2.3];
+  const pt=(v,a,r=R)=>[cx+Math.cos(a)*r*(v/4), cy+Math.sin(a)*r*(v/4)];
+  const poly = a => a.map((v,k)=>pt(v,ang[k]).map(n=>n.toFixed(1)).join(",")).join(" ");
+  const grid = [1,2,3,4].map(s=>`<polygon points="${poly([s,s,s])}" fill="none" stroke="#22323a" stroke-width="1"></polygon>`).join("");
+  const spokes = ang.map(a=>`<line x1="${cx}" y1="${cy}" x2="${(cx+Math.cos(a)*R).toFixed(1)}" y2="${(cy+Math.sin(a)*R).toFixed(1)}" stroke="#22323a" stroke-width="1"></line>`).join("");
+  const labels=["Management","Performance","Growth"], keys=["mgmt","perf","grow"];
+  const running=[c.vac>0,!!c.state.perf,!!c.state.grow];
+  const full = used()>=SLOTS;
+  const verts = ang.map((a,k)=>{
+    const p=pt(4.4,a);
+    // Beschriftung oben über, unten unter dem Ring – so bleibt sie im viewBox
+    const ly = k===0 ? p[1]-18 : p[1]+25;
+    const on = running[k];
+    const col = k===0 ? (c.vac?"#e3897f":"#8478BE") : on ? "#dcb264" : "#5fc4b1";
+    const dis = k>0 && !on && full;
+    return `<g class="vertex ${on?"on":""}" data-act="${keys[k]}" data-i="${c._i}" role="button" tabindex="0"
+        aria-label="${labels[k]}" ${dis?'opacity="0.42"':''}>
+      <circle class="vring" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="13" fill="#0b1114" stroke="${col}" stroke-width="1.3"></circle>
+      <text x="${p[0].toFixed(1)}" y="${(p[1]+3.4).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="10">${on?(k===0?"!":"◷"):"+"}</text>
+      <text x="${p[0].toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle">${labels[k].toUpperCase()}</text>
+    </g>`;
+  }).join("");
+  return `<svg class="radar" viewBox="0 0 260 196" role="img" aria-label="Management, Performance und Growth gegen den Sektorschnitt">
+    ${grid}${spokes}
+    <polygon points="${poly(bench)}" fill="none" stroke="#7f9295" stroke-width="1.2" stroke-dasharray="3 3"></polygon>
+    <polygon points="${poly(vals)}" fill="${S.hi}" fill-opacity=".22" stroke="${S.hi}" stroke-width="1.8"></polygon>
+    ${verts}
+  </svg>`;
+}
+
+function meter(label,val,ref,frac,tone){
+  return `<div class="mrow"><div class="ml">${label}</div>
+    <div class="mv"><span>${val}</span><em>${ref}</em></div>
+    <div class="meter ${tone}"><i style="width:${Math.max(3,Math.min(100,frac*100)).toFixed(0)}%"></i></div></div>`;
+}
+
+function cardBattle(c,i){
+  c._i=i; const S=SEC[c.sector], M=SEC[c.sector];
+  const covHead=c.cov-c.lev;
+  const score = Math.round((c.qual*0.4) + (c.margin-c.bench)*4 + (c.growth-M.g)*3 + covHead*4 + (c.people+c.perf+c.grow)*3);
+  // Links Angriff, rechts Deckung — das Raster füllt zeilenweise, also im Wechsel
+  const left = [
+    meter("Wachstum vs. Markt", pctS(c.growth), "Markt "+pctS(M.g), c.growth/15, c.growth>=M.g?"":"bad"),
+    meter("Marge vs. Benchmark", pct(c.margin), "Bench "+pct(c.bench), c.margin/22, c.margin>=c.bench?"":"bad"),
+    meter("Adj. EBITDA", eur(c.ebitda), eur(c.rev)+" Umsatz", c.ebitda/18, "")];
+  const right = [
+    meter("Covenant-Puffer", xx(covHead<0?0:covHead), "Limit "+xx(c.cov), Math.max(0,covHead)/3, covHead<=0?"bad":covHead<1.5?"mid":""),
+    meter("Cash Conversion", pct(c.conv), "Schwelle 50 %", c.conv/100, c.conv>=60?"":c.conv>=35?"mid":"bad"),
+    meter("Assetqualität", Math.round(c.qual), "Schnitt 68", c.qual/100, c.qual>=68?"":"mid")];
+  const meters = left.map((m,k)=>m+right[k]).join("");
+
+  const n = el("article","card bcard"+(c.att?" att":""));
+  n.style.setProperty("--sec",S.base); n.style.setProperty("--secHi",S.hi);
+  n.innerHTML = `<div class="body">
+    ${head(c,i)}
+    <div class="hero" style="padding-bottom:4px">
+      <div><div class="big ${c.moic>=1?"up":"down"}">${de(c.moic,2)}×</div>
+        <div class="sub">Total Value · ${c.desc}</div></div>
+      ${sparkSVG(c)}
+    </div>
+    <div class="arena">
+      <div class="radarcol">${radarSVG(c)}</div>
+      <div class="col">${meters}</div>
+    </div>
+    <div class="battlefoot">
+      <div>
+        <div class="eyebrow">Kampfwert</div>
+        <div class="bscore" style="color:${score>=100?"#5fc4b1":score>=70?"#dcb264":"#e3897f"}">${score}</div>
+      </div>
+      <p class="bhint">Auf eine Ecke tippen startet die Achse. ${used()>=SLOTS?"Kapazität ausgeschöpft — erst frei, wenn ein Programm endet.":"Noch "+(SLOTS-used())+" Werkbänke frei."}</p>
+    </div>
+  </div>`;
+  return n;
+}
+
+/* ---------- Konzept C: Konsole ---------- */
+function kpi(k,n,r,tone){ return `<div class="kpi"><div class="k">${k}</div><div class="n ${tone||""}">${n}</div><div class="r">${r}</div></div>`; }
+
+function cardKonsole(c,i){
+  const S=SEC[c.sector], M=SEC[c.sector], covHead=c.cov-c.lev;
+  const A=actionState(c,"mgmt"), P=actionState(c,"perf"), G=actionState(c,"grow");
+  const n = el("article","card ccard"+(c.att?" att":""));
+  n.style.setProperty("--sec",S.base); n.style.setProperty("--secHi",S.hi);
+  n.innerHTML = `<div class="body"><div class="cgrid">
+    <div class="crail">
+      <span class="num">${String(i+1).padStart(2,"0")}</span>
+      <canvas class="sigil" data-sig="${i}" style="width:38px;height:38px" aria-hidden="true"></canvas>
+      <span class="vert">${S.label}</span>
+    </div>
+    <div class="cmain">
+      <div class="ctop">
+        <div style="min-width:0">
+          <h3 class="cname">${c.name}</h3>
+          <div class="meta">
+            <span class="tag">⏱ ${c.hold} HJ gehalten</span>
+            ${c.flag?`<span class="tag ${c.flag.angle?"angle":"flag"}">${c.flag.angle?"◆":"⚑"} ${c.flag.t}</span>`:""}
+          </div>
+          <p style="margin:8px 0 0;font-size:12px;color:var(--ink2);line-height:1.45">${c.desc}</p>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div class="mono" style="font-size:26px;font-weight:700;color:${c.moic>=1?"var(--go)":"var(--risk)"}">${de(c.moic,2)}×</div>
+          <div class="state ${c.att?"att":""}" style="justify-content:flex-end;margin-top:4px">${c.att?"◉ Prüfen":"○ Nach Plan"}</div>
+        </div>
+      </div>
+      <div class="kpis">
+        ${kpi("Umsatz",eur(c.rev),"Wachstum "+pctS(c.growth),"")}
+        ${kpi("Adj. EBITDA",eur(c.ebitda),"Marge "+pct(c.margin),"")}
+        ${kpi("Marge vs. Bench",pctS(c.margin-c.bench),"Bench "+pct(c.bench),c.margin>=c.bench?"up":"down")}
+        ${kpi("Wachstum vs. Markt",pctS(c.growth-M.g),"Markt "+pctS(M.g),c.growth>=M.g?"up":"down")}
+        ${kpi("Leverage",xx(c.lev),"Cov "+xx(c.cov)+" · "+pct(c.rate),c.lev>c.cov?"down":"")}
+        ${kpi("Covenant-Puffer",xx(Math.max(0,covHead)),covHead<=0?"gerissen":"Headroom",covHead<=0?"down":covHead>=1.5?"up":"")}
+        ${kpi("Cash Conversion",pct(c.conv),"Schwelle 50 %",c.conv>=60?"up":c.conv<35?"down":"")}
+        ${kpi("Assetqualität",Math.round(c.qual),"Schnitt 68",c.qual>=68?"up":"")}
+      </div>
+      <div class="cbottom">
+        ${pillarRow(c,"people","People","#8478BE")}
+        ${pillarRow(c,"perf","Performance","#5fc4b1")}
+        ${pillarRow(c,"grow","Growth","#dcb264")}
+        <div class="sparkcell">${sparkSVG(c)}</div>
+      </div>
+    </div>
+    <div class="cwells">
+      <button class="well" data-act="mgmt" data-i="${i}" data-on="${A.on}" data-vac="${A.vac}">
+        <span class="wn">Management<u>${c.seats.filter(s=>s[2]==="ok").length}/3</u></span>
+        <span class="ws">${A.sub}${c.state.tray?" · "+c.seats.map(s=>s[0]+" "+(s[1]>0?de(s[1]):"—")).join(" · "):""}</span></button>
+      <button class="well" data-act="perf" data-i="${i}" data-on="${P.on}" ${P.dis?"disabled":""}>
+        <span class="wn">Performance<u>${de(c.perf)}/4</u></span>
+        <span class="ws">${P.sub}</span></button>
+      <button class="well" data-act="grow" data-i="${i}" data-on="${G.on}" ${G.dis?"disabled":""}>
+        <span class="wn">Growth<u>${de(c.grow)}/4</u></span>
+        <span class="ws">${G.sub}</span></button>
+    </div>
+  </div></div>`;
+  return n;
+}
+
+/* ---------- Deck ---------- */
+const RENDER = { dossier:cardDossier, battle:cardBattle, konsole:cardKonsole };
+let concept="dossier", index=0;
+const rail=document.getElementById("rail"), ribbon=document.getElementById("ribbon");
+
+function paintCapacity(){
+  const u=used();
+  document.getElementById("capNum").textContent = u+" / "+SLOTS;
+  const s=document.getElementById("capSlots"); s.innerHTML="";
+  for(let i=0;i<SLOTS;i++){ const b=document.createElement("i"); if(i<u)b.className="on"; s.appendChild(b); }
+}
+
+function paintRibbon(){
+  ribbon.innerHTML="";
+  DECK.forEach((c,i)=>{
+    const b=el("button",null,'<i style="--sc:'+SEC[c.sector].hi+';background:'+SEC[c.sector].hi+'"></i>'+c.name);
+    b.setAttribute("aria-current", i===index?"true":"false");
+    b.onclick=()=>go(i);
+    ribbon.appendChild(b);
+  });
+}
+
+function paintSigils(){
+  rail.querySelectorAll("canvas[data-sig]").forEach(cv=>{
+    const c=DECK[+cv.dataset.sig];
+    drawSigil(cv,c, parseFloat(getComputedStyle(cv).width)||54);
+  });
+}
+
+function render(keep){
+  const x = keep ? rail.scrollLeft : null;
+  rail.innerHTML="";
+  DECK.forEach((c,i)=>rail.appendChild(RENDER[concept](c,i)));
+  paintSigils(); paintCapacity(); paintRibbon();
+  if(x!=null) rail.scrollLeft=x; else go(index,true);
+  label();
+}
+
+function label(){
+  document.getElementById("stageLabel").textContent =
+    "Karte "+(index+1)+" von "+DECK.length+" · ← → oder wischen";
+  document.getElementById("prev").disabled = index<=0;
+  document.getElementById("next").disabled = index>=DECK.length-1;
+}
+
+function go(i,instant){
+  index=Math.max(0,Math.min(DECK.length-1,i));
+  const card=rail.children[index]; if(!card) return;
+  const left = card.offsetLeft - (rail.clientWidth - card.offsetWidth)/2;
+  rail.scrollTo({left, behavior: instant||window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto":"smooth"});
+  paintRibbon(); label();
+}
+
+/* Aktionen */
+function act(i,key){
+  const c=DECK[i];
+  if(key==="mgmt"){ c.state.tray=!c.state.tray; }
+  else {
+    const k = key==="perf"?"perf":"grow";
+    if(c.state[k]) c.state[k]=0;
+    else { if(used()>=SLOTS) return; c.state[k] = k==="perf"?3:2; }
+  }
+  render(true);
+}
+
+rail.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]"); if(!b || b.hasAttribute("disabled") || b.getAttribute("opacity")) return;
+  act(+b.dataset.i, b.dataset.act);
+});
+rail.addEventListener("keydown",e=>{
+  const v=e.target.closest(".vertex");
+  if(v && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); act(+v.dataset.i, v.dataset.act); }
+});
+
+/* Ziehen mit Maus und Finger */
+let down=false, sx=0, sl=0, moved=0;
+rail.addEventListener("pointerdown",e=>{
+  if(e.target.closest("button,.vertex")) return;
+  down=true; moved=0; sx=e.clientX; sl=rail.scrollLeft; rail.classList.add("drag"); rail.setPointerCapture(e.pointerId);
+});
+rail.addEventListener("pointermove",e=>{
+  if(!down) return; const d=e.clientX-sx; moved=Math.max(moved,Math.abs(d)); rail.scrollLeft=sl-d;
+});
+function release(){
+  if(!down) return; down=false; rail.classList.remove("drag");
+  // nächstliegende Karte suchen und dorthin einrasten
+  const mid = rail.scrollLeft + rail.clientWidth/2;
+  let best=0, bd=Infinity;
+  [...rail.children].forEach((ch,i)=>{ const d=Math.abs(ch.offsetLeft+ch.offsetWidth/2-mid); if(d<bd){bd=d;best=i;} });
+  go(best);
+}
+rail.addEventListener("pointerup",release);
+rail.addEventListener("pointercancel",release);
+
+rail.addEventListener("keydown",e=>{
+  if(e.key==="ArrowRight"){ e.preventDefault(); go(index+1); }
+  if(e.key==="ArrowLeft"){ e.preventDefault(); go(index-1); }
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.closest("input,textarea")) return;
+  if(e.key==="ArrowRight" && !rail.contains(document.activeElement)) go(index+1);
+  if(e.key==="ArrowLeft" && !rail.contains(document.activeElement)) go(index-1);
+});
+document.getElementById("prev").onclick=()=>go(index-1);
+document.getElementById("next").onclick=()=>go(index+1);
+
+/* Beim freien Scrollen die Anzeige mitführen */
+let tick;
+rail.addEventListener("scroll",()=>{
+  clearTimeout(tick);
+  tick=setTimeout(()=>{
+    if(down) return;
+    const mid=rail.scrollLeft+rail.clientWidth/2;
+    let best=0,bd=Infinity;
+    [...rail.children].forEach((ch,i)=>{const d=Math.abs(ch.offsetLeft+ch.offsetWidth/2-mid); if(d<bd){bd=d;best=i;}});
+    if(best!==index){ index=best; paintRibbon(); label(); }
+  },90);
+});
+
+document.querySelectorAll(".switch button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".switch button").forEach(o=>o.setAttribute("aria-selected", String(o===b)));
+    concept=b.dataset.c; render(false);
+  };
+});
+
+window.addEventListener("resize",()=>{ paintSigils(); go(index,true); });
+render(false);
+</script>

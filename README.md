@@ -23,6 +23,12 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Zinsschranke …), je mit Befund im Code und der Korrektur, die daraus folgte.
   Jeder Punkt ist in `lib/engine/__tests__/realityChecks.test.ts` festgehalten.
 
+- **`docs/design/`**
+  Gestaltungsentwürfe, die noch nicht im Spiel stecken — eigenständige
+  HTML-Dateien zum Anschauen, ohne Build. Aktuell `portfolio-deck.html`:
+  drei Vorschläge, die Beteiligungen als Kartendeck im Quartett-Stil zu
+  zeigen und seitwärts durchzublättern statt nach unten zu scrollen.
+
 - **`app/access/page.tsx`, `app/onboarding/`, `lib/access/context.ts`**
   Die Zugangskontrolle. Wer sich neu registriert, beantragt unter
   `/onboarding` einen Zugang (Anzeigename + optionale Nachricht) und wartet
