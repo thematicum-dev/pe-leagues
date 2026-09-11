@@ -20,6 +20,11 @@ body {
   --ink2: #8e9c9b;
   --rule: #243033;
   --accent: #e3897f;
+  /* Warnfarbe. Heißt im Spiel-Stylesheet (components/pel/ui.tsx) --ox und ist
+     dort derselbe Ton; hier stand bisher nur --accent, während .fppoints
+     bereits var(--ox) benutzte — die Farbe fiel damit still aus und eine
+     unvollständige Punkteverteilung sah aus wie eine vollständige. */
+  --ox: #e3897f;
   --teal: #5fc4b1;
   --gold: #dcb264;
   --r: 10px;
@@ -111,6 +116,7 @@ body {
 
 .btn-primary,
 .btn-secondary,
+.btn-danger,
 .authcard button {
   font-family: inherit;
   font-size: 13px;
@@ -148,6 +154,24 @@ body {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
+}
+
+/* Farbcodierung der Schaltflächen, dieselbe wie im Spiel selbst:
+   btn-primary  gefüllt  — der nächste Schritt, immer nur einer je Ansicht
+   btn-secondary Umriss  — jederzeit möglich, aber nicht der Weg nach vorn
+   btn-danger    rot     — macht etwas kaputt, das sich nicht zurückholen lässt
+   Vorher trugen "Sofort starten" und "Season entfernen" dieselbe Farbe wie
+   "Lobby verlassen"; die Karte gab damit keinen Hinweis, wo zu tippen ist. */
+.btn-danger {
+  background: transparent;
+  color: var(--ox);
+  border-color: color-mix(in srgb, var(--ox) 55%, var(--rule));
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--ox);
+  color: var(--paper);
+  border-color: var(--ox);
 }
 
 .authcard button {
@@ -277,10 +301,29 @@ body {
 }
 
 .dashcard .btn-primary,
-.dashcard .btn-secondary {
+.dashcard .btn-secondary,
+.dashcard .btn-danger {
   width: 100%;
   margin-top: 10px;
   box-sizing: border-box;
+}
+
+.dashcard .btn-secondary:disabled,
+.dashcard .btn-danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Eine gesperrte Hauptaktion darf nicht wie eine gefüllte aussehen: Mit
+   halber Deckkraft ergab die weiße Fläche einen grauen Block, der genauso
+   antippbar wirkte wie der echte Knopf daneben. Leerer Umriss, gestrichelt —
+   "hier kommt etwas hin, aber noch nicht". */
+.dashcard .btn-primary:disabled {
+  background: transparent;
+  color: var(--ink2);
+  border-color: var(--rule);
+  border-style: dashed;
+  cursor: default;
 }
 
 /* Abschnittsmarke über einer Gruppe von Karten. Hält die drei Bereiche des
@@ -522,7 +565,10 @@ body {
   width: 26px;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--rule);
+  /* Ein noch nicht vergebener Punkt muss als antippbar erkennbar sein und
+     nicht als abgeschaltetes Feld: derselbe Umriss wie eine Schaltfläche,
+     nur leer. */
+  border: 1px solid color-mix(in srgb, var(--ink2) 45%, var(--rule));
   border-radius: 5px;
   background: transparent;
   cursor: pointer;
@@ -536,15 +582,28 @@ body {
   border-color: var(--ink);
 }
 
+.fpdot:hover:not(.on) {
+  border-color: var(--ink2);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
 .fpdot:active {
   transform: scale(0.92);
 }
 
+.fpdot:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Statuszeile unter den Reglern: links der Stand, rechts in einem Wort, was
+   daraus folgt. Sie trägt keine Schaltfläche mehr — die Aktion steht darunter
+   über die volle Breite, wie jede andere Aktion dieser Karte. */
 .fpfoot {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   border-top: 1px solid var(--rule);
   padding-top: 14px;
@@ -563,12 +622,28 @@ body {
   color: var(--teal);
 }
 
-/* Der Button steht in dieser Zeile neben der Punktezahl und darf deshalb
-   nicht die volle Breite der Dashboard-Karte beanspruchen. */
-.fundprofile .fpfoot .btn-primary {
-  width: auto;
-  margin-top: 0;
-  flex: none;
+.fpstate {
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+/* Erledigt sieht anders aus als "zu erledigen": Statt einer toten, weiß
+   gefüllten Schaltfläche mit Häkchen steht hier eine ruhige Bestätigung.
+   Die Schaltfläche kommt zurück, sobald wieder etwas zu speichern ist. */
+.fpdone {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--rule));
+}
+
+.fpdone::before {
+  content: "✓ ";
+  font-weight: 600;
 }
 
 .fpnote {
@@ -576,12 +651,14 @@ body {
   font-size: 12px;
 }
 
-/* Auf sehr schmalen Displays bricht die Fußzeile um; dann nimmt der Button
-   die volle Breite, statt neben der Punktezahl eingequetscht zu werden. */
-@media (max-width: 400px) {
-  .fundprofile .fpfoot .btn-primary {
-    width: 100%;
-  }
+/* Die Aktionen der Lobby als eigene Gruppe am Fuß der Karte, abgesetzt vom
+   Fondsprofil darüber. Vorher stand "Lobby verlassen" ganz oben zwischen
+   Spielerliste und Profil — die nebensächlichste Aktion an der auffälligsten
+   Stelle, und die eigentliche Arbeit darunter. */
+.lobbyactions {
+  border-top: 1px solid var(--rule);
+  margin-top: 20px;
+  padding-top: 6px;
 }
 
 /* Universums-Umschalter im Dashboard (nur sichtbar, wenn einem Spieler
