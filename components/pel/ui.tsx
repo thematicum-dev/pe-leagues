@@ -60,33 +60,72 @@ export const CSS = `
 .pel .bar{position:sticky;top:0;z-index:20;background:var(--panel);color:var(--onpanel);padding:11px 16px 0;
   box-shadow:0 2px 14px var(--glow);}
 .pel .barrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
-/* Fristenleiste ganz oben in der Kopfleiste. Zieht sich über die Polsterung
-   von .bar hinweg bis an beide Ränder, damit der Balken die volle Breite hat
-   und nicht wie ein eingerücktes Kästchen wirkt. */
-.pel .dlbar{position:relative;overflow:hidden;margin:-11px -16px 9px;padding:6px 16px 8px;
-  display:flex;justify-content:space-between;align-items:center;gap:10px;}
-.pel .dlbar{background:rgba(95,196,177,.11);}
-.pel .dlbar.warn{background:rgba(220,178,100,.13);}
-.pel .dlbar.crit{background:rgba(227,137,127,.16);}
-/* Die Restzeit als Linie an der Unterkante, nicht als Fläche hinter dem Text:
-   Als Fläche schnitt der Balken bei niedrigem Stand mitten durch die
-   Beschriftung und las sich wie eine Texthervorhebung statt wie eine Anzeige.
-   Er läuft leer statt voll — die verbleibende Zeit ist die Ressource. */
-.pel .dlfill{position:absolute;left:0;bottom:0;height:3px;background:var(--pteal);
+/* ---------- Cockpit der Kopfleiste ----------
+   Drei Gruppen statt einer Aufzählung, weil die Werte drei verschiedene Fragen
+   beantworten: Wie lange habe ich noch (Zeit), wie stehe ich da (Leistung),
+   womit kann ich arbeiten (Kapital). Vorher standen sie durchmischt in vier
+   Zeilen, in denen auf einem 390-px-Gerät zwei umbrachen.
+
+   Zeitleiste: zieht sich über die Polsterung von .bar hinweg bis an beide
+   Ränder und trägt zwei Fortschrittslinien, die gegenläufig sind — oben der
+   Saisonfortschritt in Gold, der wächst, unten die Restzeit bis zur Abgabe in
+   der Dringlichkeitsfarbe, die schrumpft. Beide gehören zur Zeit, deshalb
+   stehen sie hier und nicht verstreut. */
+.pel .cockzeit{position:relative;overflow:hidden;margin:-11px -16px 0;padding:5px 12px 7px;
+  display:flex;align-items:center;gap:8px;background:rgba(95,196,177,.11);}
+.pel .cockzeit.warn{background:rgba(220,178,100,.13);}
+.pel .cockzeit.crit{background:rgba(227,137,127,.16);}
+.pel .cockzeit .theme{position:relative;flex:none;}
+.pel .cockhj{position:relative;font-size:11px;font-weight:600;letter-spacing:.04em;
+  color:var(--onpanel);white-space:nowrap;}
+.pel .cockhj s{text-decoration:none;opacity:.5;font-weight:400;}
+.pel .cockhj .kurz{display:none;}
+.pel .cockspacer{flex:1;}
+.pel .cockdl{position:relative;font-size:11px;font-weight:600;color:var(--pteal);white-space:nowrap;}
+.pel .cockzeit.warn .cockdl{color:var(--pgold);}
+.pel .cockzeit.crit .cockdl{color:var(--pox);}
+.pel .cockzeit.crit .cockdl{animation:dlpulse 1.6s ease-in-out infinite;}
+/* Die Restzeit als Linie, nicht als Fläche hinter dem Text: Als Fläche schnitt
+   der Balken bei niedrigem Stand mitten durch die Beschriftung und las sich
+   wie eine Texthervorhebung statt wie eine Anzeige. */
+.pel .cockline{position:absolute;left:0;bottom:0;height:3px;background:var(--pteal);
   transition:width 1s linear,background .4s ease;}
-.pel .dlbar.warn .dlfill{background:var(--pgold);}
-.pel .dlbar.crit .dlfill{background:var(--pox);}
-.pel .dltxt{position:relative;font-size:10.5px;letter-spacing:.05em;color:var(--onpanel);opacity:.75;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pel .dlval{position:relative;font-size:11px;font-weight:600;color:var(--pteal);white-space:nowrap;}
+.pel .cockzeit.warn .cockline{background:var(--pgold);}
+.pel .cockzeit.crit .cockline{background:var(--pox);}
+.pel .cockseason{position:absolute;left:0;top:0;height:2px;background:var(--gold);opacity:.75;
+  transition:width .4s ease;}
+/* Auf schmalen Geräten passen "HALBJAHR", der Countdown und zwei Schaltflächen
+   nicht nebeneinander -- bei 320 px wurde die Themenschaltfläche aus der Leiste
+   gedrängt. Die Beschriftung kürzt dann, statt dass etwas verschwindet. */
+@media (max-width:365px){
+  .pel .cockzeit{padding-left:9px;padding-right:9px;gap:6px;}
+  .pel .cockhj .lang{display:none;}
+  .pel .cockhj .kurz{display:inline;}
+}
 /* Einheit einer Countdown-Gruppe: gehört zur Zahl, ist aber nicht die Zahl. */
 .pel .cdu{opacity:.55;font-weight:400;margin-left:2px;}
-.pel .dlbar.warn .dlval{color:var(--pgold);}
-.pel .dlbar.crit .dlval{color:var(--pox);}
-.pel .dlbar.crit .dlval{animation:dlpulse 1.6s ease-in-out infinite;}
 @keyframes dlpulse{0%,100%{opacity:1;}50%{opacity:.55;}}
-@media (prefers-reduced-motion:reduce){.pel .dlbar.crit .dlval{animation:none;}
-  .pel .dlfill{transition:none;}}
+@media (prefers-reduced-motion:reduce){.pel .cockzeit.crit .cockdl{animation:none;}
+  .pel .cockline,.pel .cockseason{transition:none;}}
+
+.pel .cockgrp{padding:9px 16px 0;}
+.pel .cockgrp + .cockgrp{border-top:1px solid rgba(255,255,255,.07);margin-top:9px;}
+/* Zweitrangige Kennzahlen einer Gruppe: gehören zur Überschrift darüber, sollen
+   ihr aber nicht die Aufmerksamkeit nehmen. */
+/* Der Abstand zwischen den Kennzahlen muss deutlich größer sein als der
+   zwischen Zahl und ihrer Veränderung, sonst ist nicht zu sehen, zu welchem
+   Wert ein Pfeil gehört. */
+.pel .cockkpi{margin-top:5px;font-size:10.5px;opacity:.6;display:flex;gap:15px;flex-wrap:wrap;}
+/* In der zweitrangigen Zeile richtet sich die Veränderung nach der Schriftgröße
+   ihres Werts. Mit der Größe aus der Überschriftenzeile stand der Pfeil größer
+   da als die Zahl, auf die er sich bezieht. */
+.pel .cockkpi .delta{font-size:10.5px;margin-left:4px;}
+/* Veränderung der Wertung gegenüber dem zuletzt ausgewerteten Halbjahr. Färbt
+   den Wert mit, nicht nur den Pfeil: Der Blick soll beim Aufschlagen der
+   Ansicht ohne Lesen erfassen, in welche Richtung das letzte Halbjahr lief. */
+.pel .delta{font-size:12px;font-weight:600;margin-left:5px;white-space:nowrap;}
+.pel .statv.up,.pel .delta.up{color:var(--pteal);}
+.pel .statv.dn,.pel .delta.dn{color:var(--pox);}
 .pel .barrow > div{min-width:0;}
 .pel .hint{font-size:11px;line-height:1.5;color:var(--ink2);margin:0;}
 .pel .hint.ox{color:var(--ox);}
