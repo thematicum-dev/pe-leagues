@@ -21,8 +21,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
-  TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, Shortlist, Offers, Sheet,
-  Info, SeasonDrivers,
+  TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
+  Offers, Sheet, Info, SeasonDrivers,
 } from "@/components/pel/ui";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
@@ -33,8 +33,10 @@ import {
 } from "./turnDraft";
 import {
   BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
-  IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, MAX_PROC, MAX_SLOTS, PERIODS, PROC_FEE, PROC_Q,
-  SECCOLOR, SECNAMES, SECTORS, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf, eur, fairOf,
+  INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
+  PERIODS, PROC_FEE, PROC_Q,
+  SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
+  eur, exitNetOf, fairOf,
   gebote, grossMoicOf, hj, initDur, initSuccess, effSkill, initsOf, investableOf, irrOf,
   markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
@@ -320,7 +322,7 @@ export default function MultiplayerGame({
      unverändert — sie akzeptieren wie zuvor Wert oder Updater-Funktion. */
   const [draft, setDraft] = useState<TurnDraft>(EMPTY_DRAFT);
   const {
-    bids, ddStaged, searches, initiatives, ltipStaged, studyStaged,
+    bids, ddStaged, searches, initiatives, equityInjections, ltipStaged, studyStaged,
     exitStarts, hireDecisions, offerDecisions, shortlistCursor, exitQueueCursor,
   } = draft;
   const field = useCallback(<K extends keyof TurnDraft>(k: K) =>
@@ -331,6 +333,7 @@ export default function MultiplayerGame({
   const setDdStaged = useMemo(() => field("ddStaged"), [field]);
   const setSearches = useMemo(() => field("searches"), [field]);
   const setInitiatives = useMemo(() => field("initiatives"), [field]);
+  const setEquityInjections = useMemo(() => field("equityInjections"), [field]);
   const setLtipStaged = useMemo(() => field("ltipStaged"), [field]);
   const setStudyStaged = useMemo(() => field("studyStaged"), [field]);
   const setExitStarts = useMemo(() => field("exitStarts"), [field]);
@@ -342,6 +345,7 @@ export default function MultiplayerGame({
   const [sheet, setSheet] = useState<Any>(null);
   const [useProceedsItem, setUseProceedsItem] = useState<Any>(null);
   const [initPick, setInitPick] = useState<{ uid: string; dim: "plat" | "acc" } | null>(null);
+  const [injectPick, setInjectPick] = useState<string | null>(null);
 
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
@@ -645,6 +649,11 @@ export default function MultiplayerGame({
     searches.forEach((s) => { (map[s.holdingUid] ??= []).push(s); });
     return map;
   }, [searches]);
+  /* Bewusst ohne useMemo: Die Liste hat höchstens so viele Einträge wie das
+     Portfolio Beteiligungen, und die Hooks dieser Komponente stehen hinter
+     einem frühen Return — ein weiterer wäre ein weiterer bedingter Hook. */
+  const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
+  equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
   const stagedExitByHolding = useMemo(() => {
     const map: Record<string, ExitStartIntent> = {};
     exitStarts.forEach((e) => { map[e.holdingUid] = e; });
@@ -670,6 +679,11 @@ export default function MultiplayerGame({
       const E = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
       p.initA = { doneQ: quarter + Math.max(1, initDur(E)) };
     }
+    /* Eine vorgemerkte Kapitalzuführung sofort zeigen: Leverage, Zins und
+       Covenant-Abstand auf der Karte sind sonst die von vorhin, und der
+       Spieler entscheidet über den Rest des Halbjahres auf veralteten Zahlen. */
+    const inj = stagedInjectionByHolding[c.uid];
+    if (inj) { p.netDebt = c.netDebt - inj.amount; p.equityIn = (c.equityIn || 0) + inj.amount; }
     if (ltipStaged.includes(c.uid)) p.ltip = true;
     // Vorgemerkte Benchmarkstudie sofort sichtbar machen: die Karte zeigt
     // Branchenreferenz und Marktwachstum ab dem Klick, nicht erst nach der
@@ -725,13 +739,27 @@ export default function MultiplayerGame({
     const ev = eb * exMult;
     const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
-    const net = gross * (1 - feeRate);
+    // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
+    const net = exitNetOf(c, gross, feeRate);
 
     rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
       ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
     if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag", `−${Math.round((1 - eqDisc) * 100)} %`]);
 
+    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
+       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
+       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
+       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
+       des Dialogs wie ein Fehler aus.                                       */
+    if (ch !== "proc") {
+      const room = recycleRoom(me, Math.max(0, net), quarter);
+      note += room > 0.5
+        ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
+        : quarter > INVEST_PERIOD
+          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
+          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+    }
     if (ch === "proc") {
       const fair = Math.max(0, eqv100 * st);
       rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
@@ -743,6 +771,8 @@ export default function MultiplayerGame({
     }
 
     rows.push(["= Bruttoerlös", eur(gross)], [`− Kosten ${(feeRate * 100).toFixed(1).replace(".", ",")} %`, "−" + eur(gross * feeRate)]);
+    if (c.ltip) rows.push([`− Sweet Equity MEP ${Math.round(LTIP_SHARE * 100)} %`,
+      "−" + eur(gross * (1 - feeRate) * LTIP_SHARE)]);
     if (ch === "cv") rows.push(["Anteil danach", Math.round(st * (1 - CV_STAKE) * 100) + " %"]);
     if (ch === "ipo") rows.push(["Lock-up Restbeteiligung", "1 Jahr"]);
     const full = ch === "bil";
@@ -751,7 +781,7 @@ export default function MultiplayerGame({
 
     setSheet({
       kind: "confirm", c, ch, rows, net, note,
-      moic: full ? (net + recap) / c.entryEquity : net / costBasis,
+      moic: full ? dealMoic(c, net) : net / costBasis,
       moicLabel: full ? (recap > 0.05 ? "MOIC inkl. Ausschüttungen" : "MOIC (Deal)") : "MOIC der verkauften Tranche",
       dpiPct: net / CAPITAL,
     });
@@ -808,8 +838,8 @@ export default function MultiplayerGame({
       return;
     }
     const offerIndex = item.offers.indexOf(offer);
-    const net = offer.price * (1 - PROC_FEE);
     const c = me.holdings.find((h: Any) => h.uid === item.holdingUid);
+    const net = exitNetOf(c, offer.price, PROC_FEE);
     if (c && recycleRoom(me, net, quarter) > 0.5) {
       setUseProceedsItem({ c, net, offerIndex });
     } else {
@@ -830,11 +860,22 @@ export default function MultiplayerGame({
     setShortlistCursor((i) => i + 1);
   }
 
-  function startInitStage(id: string) {
+  function startInitStage(id: string, equity = 0) {
     if (!initPick) return;
     const { uid, dim } = initPick;
-    setInitiatives((arr) => [...arr.filter((i) => !(i.holdingUid === uid && i.dim === dim)), { holdingUid: uid, dim, id }]);
+    setInitiatives((arr) => [...arr.filter((i) => !(i.holdingUid === uid && i.dim === dim)),
+      { holdingUid: uid, dim, id, ...(id === "ma" && equity > 0.05 ? { equity } : {}) }]);
     setInitPick(null);
+  }
+
+  /* Kapitalzuführung vormerken. Je Beteiligung höchstens ein Eintrag — zwei
+     Zuführungen im selben Halbjahr sind eine, und der Server würde beide
+     gegen dasselbe investierbare Kapital prüfen. */
+  function stageInjection(uid: string, amount: number) {
+    setInjectPick(null);
+    if (!(amount > 0.05)) return;
+    haptic(8);
+    setEquityInjections((arr) => [...arr.filter((i) => i.holdingUid !== uid), { holdingUid: uid, amount }]);
   }
 
   const rank = useMemo(
@@ -921,6 +962,7 @@ export default function MultiplayerGame({
     if (bidList.length) payload.bids = bidList;
     if (dueDiligence.length) payload.dueDiligence = dueDiligence;
     if (initiatives.length) payload.initiatives = initiatives;
+    if (equityInjections.length) payload.equityInjections = equityInjections;
     if (ltipStaged.length) payload.ltip = ltipStaged;
     if (studyStaged.length) payload.studies = studyStaged;
     if (searches.length) payload.searches = searches;
@@ -1204,7 +1246,17 @@ export default function MultiplayerGame({
                       init: (dim: "plat" | "acc") => setInitPick({ uid: c.uid, dim }),
                       ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
                       study: () => setStudyStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
+                      inject: () => setInjectPick(c.uid),
                     }} />
+                  {stagedInjectionByHolding[c.uid] && (
+                    <p className="hint" style={{ margin: "-8px 16px 14px" }}>
+                      ✓ {eur(stagedInjectionByHolding[c.uid].amount)} Eigenkapital vorgemerkt — wird mit dem
+                      Halbjahresabschluss abgerufen.{" "}
+                      <button className="lnk" onClick={() => setEquityInjections((arr) => arr.filter((i) => i.holdingUid !== c.uid))}>
+                        verwerfen
+                      </button>
+                    </p>
+                  )}
                   {stagedExit && stagedExit.action !== "process" && (
                     <p className="hint" style={{ margin: "-8px 16px 14px" }}>
                       ✓ Verkauf vorgemerkt ({stagedExit.action === "bilateral" ? "bilateral" : stagedExit.action === "cv" ? "GP-led Secondary" : "IPO"}) —
@@ -1321,8 +1373,15 @@ export default function MultiplayerGame({
         <UseProceeds item={useProceedsItem} me={me} quarter={quarter} settle={settleProceeds} />
       )}
       {initPick && me.holdings.find((h: Any) => h.uid === initPick.uid) && (
-        <InitPicker c={me.holdings.find((h: Any) => h.uid === initPick.uid)} dim={initPick.dim} market={state.market}
+        <InitPicker c={patchHolding(me.holdings.find((h: Any) => h.uid === initPick.uid))}
+          dim={initPick.dim} market={state.market} investable={investableOf(me, quarter)}
           start={startInitStage} close={() => setInitPick(null)} />
+      )}
+      {injectPick && me.holdings.find((h: Any) => h.uid === injectPick) && (
+        <EquityInjection c={patchHolding(me.holdings.find((h: Any) => h.uid === injectPick))}
+          investable={investableOf(me, quarter)}
+          confirm={(amt: number) => stageInjection(injectPick, amt)}
+          close={() => setInjectPick(null)} />
       )}
       {!sheet && !initPick && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}

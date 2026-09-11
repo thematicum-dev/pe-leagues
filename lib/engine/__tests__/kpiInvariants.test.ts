@@ -177,7 +177,13 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
   const chains = open.map((c: Any) => bridgeChain(c.hist, liveHist(c, market)));
   const chainNav = chains.reduce((s: number, x: Any) => s + x.nav, 0);
   const chainRest = chains.reduce((s: number, x: Any) => s + x.rest, 0);
-  expect(b.uEbitda + b.uMult + b.uDelev + chainRest, `${where}: unrealisierte Treiber`)
+  /* Die Kapitalzuführung ist ein eigener Posten der Kette und kein Treiber:
+     Sie hebt den NAV, hebt aber zugleich das abgerufene Kapital, trägt also
+     nichts zum Gewinn bei und steht deshalb nicht in der Fondsaufstellung
+     (siehe fundBridge). Für die Probe gegen die Wertänderung gehört sie
+     dazu. */
+  const chainInj = chains.reduce((s: number, x: Any) => s + x.inj, 0);
+  expect(b.uEbitda + b.uMult + b.uDelev + chainRest + chainInj, `${where}: unrealisierte Treiber`)
     .toBeCloseTo(chainNav, 6);
   /* …und die Kette erklärt dieselbe Wertänderung wie eine einzelne Spanne vom
      Einstieg bis heute: Sie verteilt sie nur anders auf die Treiber. */
@@ -192,7 +198,7 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
     const h = c.hist || [];
     if (h.length < 2) continue;
     const st = bridgeStep(h[0], h[h.length - 1])!;
-    expect(st.ebitda + st.mult + st.delev + st.dist + st.rest, `${where}: ${c.name}`)
+    expect(st.ebitda + st.mult + st.delev + st.dist + st.inj + st.rest, `${where}: ${c.name}`)
       .toBeCloseTo(st.total, 6);
     expect(st.total, `${where}: ${c.name} Gesamtwert`).toBeCloseTo(h[h.length - 1].eq - h[0].eq, 6);
   }

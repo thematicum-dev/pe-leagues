@@ -183,9 +183,9 @@ const GOLDEN_RESULT = {
   undrawn: 40.417132,
   drawn: 459.582868,
   nav: 205.409127,
-  tvpi: 1.680096,
-  dpi: 1.274223,
-  irr: 0.094225,
+  tvpi: 1.688561,
+  dpi: 1.280643,
+  irr: 0.095142,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
@@ -207,9 +207,17 @@ const GOLDEN_RESULT = {
      Ein fünftes Mal mit der Neukalibrierung der Wertungsmarken auf die
      angehobene Renditekurve (TVPI_BENCH 1,5 -> 1,7, IRR_BENCH 14 % -> 18 %).
      Diese Marken gehen ausschließlich in scoreOf ein, deshalb bewegt sich
-     hier auch nur score: 0,896550 -> 0,755882. */
-  score: 0.755882,
-  carry: 78.140101,
+     hier auch nur score: 0,896550 -> 0,755882.
+     Ein sechstes Mal mit dem Catch-up im Wasserfall (carryOf): Der Fonds liegt
+     in der Catch-up-Stufe, der GP bekommt dort gain − pref statt pauschal
+     20 % des ganzen Gewinns. Carry 78,140 -> 74,250, und weil der Rest den
+     Investoren zusteht, steigen tvpi, dpi, irr und score entsprechend.
+     Unverändert: finalRngPosition, drawn, cash, undrawn, nav, die Marktstände
+     und die Value Bridge — der Wasserfall verteilt nur, er rechnet nichts neu.
+     Die Zinsschranke (INT_BARRIER) greift in dieser Partie nicht: Der Leverage
+     liegt bei 0,75 × levCap, der Zinsaufwand damit unter 30 % des EBITDA. */
+  score: 0.760918,
+  carry: 74.249754,
   landmark: {
     sector: "Consumer",
     revenue: 250.534344,

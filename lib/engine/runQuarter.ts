@@ -27,12 +27,12 @@ import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
-  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, LTIP_SHARE, DD_COST,
+  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
-  bookOff, periodFin, resetPeriod, eventPOf,
+  bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -205,6 +205,29 @@ function applyImmediateDecisions(
     pushFeed(news, quarter, "🔍", "neu", `${c.name}: Search-Mandat für einen neuen ${nm} erteilt.`, f.slot);
   });
 
+  /* 4b — Kapitalzuführung in eine Beteiligung (Equity Cure / Entschuldung).
+     Steht vor den Maßnahmen, damit die Pro-forma-Prüfung eines Zukaufs im
+     selben Halbjahr bereits die gesenkte Nettoverschuldung sieht. Der Betrag
+     wird gegen das tatsächlich investierbare Kapital gekappt; der Rest fällt
+     still weg, wie jede andere unzulässige Referenz auch.
+
+     Eine Heilung braucht keinen eigenen Schalter: Der Covenant wird in
+     stepCompany() jede Periode neu getestet, eine gesenkte Verschuldung setzt
+     den Bruchzähler also von selbst zurück — solange das Kapital vor dem
+     Periodenschritt drin ist, und genau das ist hier der Fall. Begrenzt ist
+     die Heilung nicht durch eine Regel, sondern durch ihren Preis: Das Geld
+     landet in der Kostenbasis des Deals und drückt jeden MOIC danach.     */
+  (decisions.equityInjections || []).forEach((inj) => {
+    const c = holdingByUid(inj.holdingUid);
+    if (!c) return;
+    const amt = Math.min(Math.max(0, Number(inj.amount) || 0), investableOf(f, quarter));
+    if (!(amt > 0.05)) return;
+    if (!fundEquityIn(f, c, amt, quarter)) return;
+    pushFeed(news, quarter, "💶", "neu",
+      `${c.name}: ${amt.toFixed(1)} Mio. € Eigenkapital nachgeschossen — Leverage jetzt `
+      + `${(c.netDebt / Math.max(0.5, ebitdaOf(c))).toFixed(1)}×.`, f.slot);
+  });
+
   // 5 — Maßnahmen starten (Operating Capacity: höchstens maxInitSlots
   // gleichzeitig laufende Maßnahmen fürs ganze Portfolio, siehe INIT_SLOTS +
   // Value-Creation-Bonus. Im Übungsmodus/Client nur eine deaktivierte
@@ -219,14 +242,27 @@ function applyImmediateDecisions(
     if (intent.dim === "plat" && c.initP) return;
     if (intent.dim === "acc" && c.initA) return;
     if (busyInitSlots >= maxInitSlots) return;
-    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat);
+    /* Eigenkapitalanteil an einem Zukauf: Was der Spieler angibt, wird gegen
+       das investierbare Kapital gekappt — mehr als das kann der Fonds nicht
+       geben, und ein Zukauf darf nie einen Abruf über das Commitment hinaus
+       auslösen. */
+    const wantEq = intent.dim === "acc" && intent.id === "ma"
+      ? Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)) : 0;
+    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, wantEq);
     if (!B || B.blocked) return;
+    const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
+    // Das Eigenkapital fließt unmittelbar an den Verkäufer weiter (toDebt:
+    // false) — es senkt die Nettoverschuldung der Plattform nicht, sondern
+    // ersetzt den Teil der Akquisitionsschuld, der nicht aufgenommen wird.
+    if (eqIn > 0) fundEquityIn(f, c, eqIn, quarter, { toDebt: false });
     // Der Kaufpreis eines Zukaufs ist eine Akquisition, Programmkosten sind
     // Einmalaufwand — in der Berichtsansicht stehen sie an verschiedenen Stellen.
-    c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
+    c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt + eqIn);
     c[B.slot] = B.init;
     busyInitSlots++;
-    pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu", `${c.name}: ${B.spec.n} gestartet.`, f.slot);
+    pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu",
+      `${c.name}: ${B.spec.n} gestartet.`
+      + (eqIn > 0.05 ? ` ${eqIn.toFixed(1)} Mio. € davon aus Fondskapital.` : ""), f.slot);
   });
 
   // 6 — Exits anstoßen (Prozess eröffnen oder sofort veräußern)
@@ -249,7 +285,7 @@ function applyImmediateDecisions(
     if (intent.action === "cv") {
       const fair = fairOf(c, market, NEG, quarter);
       const gross = fair * CV_STAKE * CV_DISC;
-      const net = gross * (1 - CV_FEE);
+      const net = exitNetOf(c, gross, CV_FEE);
       const costSold = c.entryEquity * CV_STAKE;
       const stSold = (c.st ?? 1) * CV_STAKE;
       const bridge = makeBridge(c, gross, net, { stake: stSold, cost: costSold, recap: 0 });
@@ -267,7 +303,7 @@ function applyImmediateDecisions(
     if (intent.action === "ipo") {
       const fair = fairOf(c, market, 0, quarter);
       const gross = fair * IPO_PLACE * IPO_DISC;
-      const net = gross * (1 - IPO_FEE);
+      const net = exitNetOf(c, gross, IPO_FEE);
       const costSold = c.entryEquity * IPO_PLACE;
       const stSold = (c.st ?? 1) * IPO_PLACE;
       const bridge = makeBridge(c, gross, net, { stake: stSold, cost: costSold, recap: 0 });
@@ -297,7 +333,7 @@ function finalizeExit(
   f: RuntimeFund, c: Any, gross: number, buyer: string, feeRate: number, extra: string,
   keepPct: number | undefined, quarter: number, news: Any[],
 ) {
-  const net = gross * (1 - feeRate) * (c.ltip ? 1 - LTIP_SHARE : 1);
+  const net = exitNetOf(c, gross, feeRate);
   const room = recycleRoom(f, net, quarter);
   const keep = room > 0.5 ? clamp(keepPct ?? 0, 0, 1) : 0;
   f.holdings = (f.holdings as Any[]).filter((h) => h.uid !== c.uid);
@@ -473,7 +509,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       // mult/out je Periode mitschreiben: nur damit lässt sich die
       // Wertveränderung eines Halbjahres später in ihre Treiber zerlegen
       // (EBITDA, Multiple, Entschuldung) -- siehe bridgeStep in lib/engine/engine.ts.
-      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
+      equityIn: 0,
+      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0, ei: 0 }],
     };
     c.baseLoad = seatLoad(c);
     spendFund(f, c.entryEquity, q, undefined);
@@ -515,14 +552,23 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         const id = cands.reduce((a: string, b: string) => (fitOf(b, c) * Math.pow(0.82, initRuns(c, b))
           > fitOf(a, c) * Math.pow(0.82, initRuns(c, a)) ? b : a));
         if (fitOf(id, c) * Math.pow(0.82, initRuns(c, id)) < 0.30 && id !== "ma") return;
-        const B = buildInit(rng, c, dim, id, mk, q, compat);
+        /* Reicht die Akquisitionsfinanzierung nicht, schießt auch ein KI-Fonds
+           Eigenkapital nach — sonst stünde dem Spieler seit dem 11.09.2026 ein
+           Weg offen, den die Kohorte nicht kennt. Gedeckelt auf ein Viertel
+           des investierbaren Kapitals: Ein Zukauf ist eine Ergänzung, kein
+           Anlass, den Fonds leerzuräumen. */
+        const needEq = id === "ma" ? addonEquityNeeded(c, mk) : 0;
+        const aiEq = needEq > 0 ? Math.min(needEq, investableOf(f, q) * 0.25) : 0;
+        const B = buildInit(rng, c, dim, id, mk, q, compat, aiEq);
         if (!B || B.blocked) return;
         const head = (c.covLimit ?? COV_DEFAULT) - c.netDebt / Math.max(0.5, ebitdaOf(c));
         /* Der Zukaufspreis steckt seit dem 30.08.2026 in B.debt. Die
            Finanzierbarkeit prüft für ihn aber addonCheck() pro forma, nicht
            dieser grobe Puffer — sonst blockierte er Zukäufe doppelt. */
         if (B.debt > 0 && !B.spec.ma && head < ADDON_HEADROOM) return;
-        c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt);
+        const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
+        if (eqIn > 0) fundEquityIn(f, c, eqIn, q, { toDebt: false });
+        c.netDebt += B.debt; bookOff(c, B.spec.ma ? "addon" : "restr", B.debt + eqIn);
         c[slot] = B.init;
       });
     });
@@ -583,7 +629,13 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     (f.holdings as Any[]).forEach((c) => {
       if (c.netDebt < -0.5) {
-        const sweep = -c.netDebt * (c.st ?? 1);
+        /* Die Ausschüttung verlässt die Beteiligung in voller Höhe (sie senkt
+           dort die Nettoverschuldung auf null); beim Fonds kommt sie um den
+           Anteil des Managements gekürzt an — ein MEP-Halter nimmt an einer
+           Rekapitalisierung teil wie an einem Exit. Ohne diesen Abzug wäre der
+           Cash Sweep der offene Weg gewesen, Wert am Management vorbei
+           auszuschütten und erst danach zu verkaufen.                       */
+        const sweep = mepCut(c, -c.netDebt * (c.st ?? 1));
         bookOff(c, "dist", -c.netDebt);
         c.netDebt = 0;
         c.cashOut = (c.cashOut || 0) + sweep;
@@ -644,7 +696,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const before = compat.legacyHistMark
         ? { mult: markMultiple(c, mk), eq: navValueOf(c, mk) + (c.cashOut || 0) } : null;
       const entry: Any = { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
-        st: c.st ?? 1, out: c.cashOut || 0, ...(f.isAi ? {} : { fin: periodFin(c) }) };
+        st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0,
+        ...(f.isAi ? {} : { fin: periodFin(c) }) };
       c.hist = [...(c.hist || []), entry];
       entry.mult = before ? before.mult : markMultiple(c, mk);
       entry.eq = before ? before.eq : navValueOf(c, mk) + (c.cashOut || 0);
@@ -670,11 +723,12 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     f.holdings = (f.holdings as Any[]).filter((c) => {
       if (c.lockUntil && q >= c.lockUntil) {
         const grossVal = fairOf(c, mk, f.attrs.negotiation, q);
-        const val = grossVal * (1 - BIL_FEE);
-        applyProceeds(f, val, c.entryEquity, q);
+        const val = exitNetOf(c, grossVal, BIL_FEE);
+        applyProceeds(f, val, c.costLeft ?? c.entryEquity, q);
         f.realized = [...(f.realized as Any[]),
-          { name: c.name + " (Restbeteiligung)", moic: val / c.entryEquity, bridge: makeBridge(c, grossVal, val) }];
-        pushFeed(news, q, val >= c.entryEquity ? "🔔" : "📉", val >= c.entryEquity ? "pos" : "neg",
+          { name: c.name + " (Restbeteiligung)", moic: dealMoic(c, val), bridge: makeBridge(c, grossVal, val) }];
+        pushFeed(news, q, val >= (c.costLeft ?? c.entryEquity) ? "🔔" : "📉",
+          val >= (c.costLeft ?? c.entryEquity) ? "pos" : "neg",
           `Lock-up bei ${c.name} ausgelaufen — Restbeteiligung platziert.`, f.slot);
         return false;
       }
@@ -693,10 +747,14 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const hurdle = a.key === "fin" ? 0.18 : a.key === "ops" ? 0.22 : 0.20;
       const patience = (a.key === "ops" ? 10 : 9) - (PERIODS - q <= 6 ? 2 : 0);
       if (c.holdQ >= 6 && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
-        const net = val * (1 - PROC_FEE);
-        applyProceeds(f, net, c.entryEquity, q);
+        /* Auch die KI zahlt ihr Sweet Equity. Bis zum 11.09.2026 tat sie es
+           nicht: Ihre Fonds setzten reihenweise MEPs auf (Retention, +0,5
+           effektives Rating) und kassierten beim Exit trotzdem brutto,
+           während der Spieler 6 % abgab.                                    */
+        const net = exitNetOf(c, val, PROC_FEE);
+        applyProceeds(f, net, c.costLeft ?? c.entryEquity, q);
         f.realized = [...(f.realized as Any[]),
-          { name: c.name, moic: net / c.entryEquity, bridge: makeBridge(c, val, net) }];
+          { name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, val, net) }];
         return false;
       }
       return true;
@@ -766,11 +824,11 @@ function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, n
     const g = cloneFund(f);
     (g.holdings as Any[]).forEach((c) => {
       const gross = Math.max(0, eqvOf(c, markMultiple(c, mk) - LIQ_DISC));
-      const net = gross * (1 - BIL_FEE);
-      applyProceeds(g, net, c.entryEquity, q);
+      const net = exitNetOf(c, gross, BIL_FEE);
+      applyProceeds(g, net, c.costLeft ?? c.entryEquity, q);
       g.realized = [...(g.realized as Any[]), { name: c.name + " (Tail-End)", moic: dealMoic(c, net), bridge: makeBridge(c, gross, net) }];
       if (!g.isAi) {
-        const mo = net / c.entryEquity;
+        const mo = dealMoic(c, net);
         pushFeed(news, q, mo >= 1 ? "⏳" : "💀", mo >= 1 ? "neu" : "neg",
           `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert — ${mo.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);
       }
