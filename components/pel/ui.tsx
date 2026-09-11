@@ -13,7 +13,8 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonRisk, anyInit, applyProceeds,
+  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonEbitda, addonEquityNeeded,
+  addonMultiple, addonRisk, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
@@ -1044,6 +1045,19 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         {c.ltip && <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 8 }}>
           📜 MEP aktiv · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
         </div>}
+        {act.inject && (
+          <>
+            <button className={"" + (c.breach ? " ox" : "")} style={{ width: "100%", marginTop: 8 }}
+              onClick={() => { haptic(8); act.inject(); }}>
+              💶 Eigenkapital nachschießen
+            </button>
+            <p className="hint" style={{ marginTop: 6 }}>
+              {c.breach
+                ? "Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis."
+                : "Fondskapital in die Beteiligung: senkt Verschuldung und Zinslast, erhöht den Einstand."}
+            </p>
+          </>
+        )}
 
         {inProc && (
           <div style={{ marginTop: 14, padding: "10px 12px", border: "1px solid var(--gold)", fontSize: 12.5, lineHeight: 1.5 }}>
@@ -1161,6 +1175,7 @@ export function PerformanceCompare({ c, market }) {
     { l: "Multiple", k: "mult" },
     { l: "Entschuldung", k: "delev" },
     ...(has("dist") ? [{ l: "Ausschüttung", k: "dist" }] : []),
+    ...(has("inj") ? [{ l: "Kapitalzuführung", k: "inj" }] : []),
     ...(has("rest") ? [{ l: "Übriges", k: "rest" }] : []),
   ];
   // Was als Strich erscheint, wird auch neutral eingefärbt
@@ -2297,11 +2312,80 @@ export function UseProceeds({ item, me, quarter, settle }) {
   );
 }
 
-export function InitPicker({ c, dim, market, start, close }) {
+/* ---------- Kapitalzuführung ----------
+   Der Gegenweg zur Ausschüttung. Zwei Anlässe, und der Dialog nennt beide beim
+   Namen: die Heilung eines gerissenen Covenants, bevor die Kreditgeber
+   vollstrecken, und schlichte Entschuldung, wenn die Zinslast die Rendite
+   auffrisst. Voreingestellt ist genau der Betrag, der den Leverage auf die
+   Covenant-Grenze zurückführt — mehr braucht eine Heilung nicht, weniger
+   reicht nicht.
+
+   Der Preis steht daneben und ist der eigentliche Punkt: Das Geld landet in
+   der Kostenbasis des Deals. Eine Zuführung schafft keinen Wert, sie kauft
+   Zeit — und jeder MOIC danach misst gegen einen höheren Einstand.        */
+export function EquityInjection({ c, investable, confirm, close }) {
+  const eb = ebitdaOf(c);
+  const cov = c.covLimit ?? COV_DEFAULT;
+  const lev = c.netDebt / Math.max(0.5, eb);
+  const toCov = Math.max(0, c.netDebt - cov * eb);
+  const max = Math.max(0, Math.min(investable, Math.max(0, c.netDebt)));
+  const [amt, setAmt] = useState(() => Math.min(max, Math.max(0, toCov)));
+  const levAfter = (c.netDebt - amt) / Math.max(0.5, eb);
+  const cost = (c.costLeft ?? c.entryEquity) || 0;
+  return (
+    <div className="modal" onClick={close}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="tomb">
+          <div className="sub">Eigenkapital nachschießen</div>
+          <div className="amt" style={{ fontSize: 24 }}>{c.name}</div>
+          <div className="sub">Leverage {x(lev)} · Covenant {x(cov)}</div>
+        </div>
+        <div className="card">
+          <div className="pad">
+            <input type="range" min={0} max={Math.round(max)} step={1} value={Math.round(amt)}
+              onChange={(e) => setAmt(Number(e.target.value))}
+              style={{ width: "100%", accentColor: "var(--gold)" }} />
+          </div>
+          <table className="ledger"><tbody>
+            <tr><td className="lab">Betrag</td><td>{eur(amt)}</td></tr>
+            <tr><td className="lab">Investierbar</td><td>{eur(investable)}</td></tr>
+            <tr><td className="lab">Leverage danach</td>
+              <td style={{ color: levAfter > cov ? "var(--ox)" : "var(--teal)", fontWeight: 600 }}>
+                {x(Math.max(0, levAfter))} gegen Covenant {x(cov)}</td></tr>
+            <tr><td className="lab">Kostenbasis danach</td>
+              <td>{eur(cost + amt)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>statt {eur(cost)}</span></td></tr>
+          </tbody></table>
+          <p className="hint" style={{ padding: "0 15px 12px" }}>
+            {toCov > 0
+              ? "Der voreingestellte Betrag führt den Leverage exakt auf die Covenant-Grenze zurück — genau das leistet ein Equity Cure."
+              : "Der Covenant hält. Zusätzliches Eigenkapital senkt nur die Zinslast."}
+            {" "}Nachgeschossenes Kapital zählt als Einstand, nicht als Wertbeitrag: Der MOIC misst danach
+            gegen einen höheren Nenner.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, margin: "10px 16px 28px" }}>
+          <button style={{ flex: 1 }} onClick={close}>Abbrechen</button>
+          <button className="solid" style={{ flex: 1 }} disabled={!(amt > 0.05)}
+            onClick={() => confirm(amt)}>{eur(amt)} zuführen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   const eb = ebitdaOf(c);
   const lvl = dim === "plat" ? c.plat : c.acc;
+  /* Eigenkapitalanteil an einem Zukauf. Voreingestellt ist genau der Betrag,
+     den die Akquisitionsfinanzierung nicht mehr trägt — ein Zukauf, der nur an
+     der Finanzierungsgrenze scheitert, ist damit ohne weiteres Zutun
+     darstellbar, und der Spieler sieht sofort, was er dafür geben muss.
+     Gedeckelt am investierbaren Kapital: Was der Fonds nicht hat, kann er
+     nicht geben.                                                            */
+  const eqCap = Math.max(0, Math.min(investable, addonEbitda(c) * addonMultiple(c, market)));
+  const [addonEq, setAddonEq] = useState(() => Math.min(eqCap, addonEquityNeeded(c, market)));
   return (
     <div className="modal" onClick={close}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -2319,7 +2403,7 @@ export function InitPicker({ c, dim, market, start, close }) {
           const p = clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm + (k.ma ? addonRisk(c) : 0), 0.1, 0.97);
           const FI = fitLabel(k.id, c);
           const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
-          const chk = addonCheck(c, market);
+          const chk = addonCheck(c, market, k.ma ? addonEq : 0);
           const noFin = k.ma && !chk.ok;
           return (
             <div className={"card" + (noFin ? " lm" : "")} key={k.id} style={{ marginTop: 10, opacity: locked ? 0.45 : 1 }}>
@@ -2336,7 +2420,19 @@ export function InitPicker({ c, dim, market, start, close }) {
                 {k.ma ? (<>
                   <tr><td className="lab">EBITDA Add-on-Target</td><td>{eur(chk.addEb)} · {Math.round((c.addonSize ?? 0.275) * 100)} % der Plattform</td></tr>
                   <tr><td className="lab">Einstandsmultiple Add-on</td><td>{x(chk.mult)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>= (Branche {x(market[c.sector])} + Einstieg {x(c.entryMult)}) / 2 − 2,0</span></td></tr>
-                  <tr><td className="lab">Kaufpreis, fremdfinanziert</td><td>{eur(chk.price)}</td></tr>
+                  <tr><td className="lab">Kaufpreis</td><td>{eur(chk.price)}
+                    <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                      {" "}— {eur(chk.debt)} fremdfinanziert{chk.equity > 0.05 ? `, ${eur(chk.equity)} Fondskapital` : ""}</span></td></tr>
+                  {eqCap > 0.5 && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
+                    <td>
+                      <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
+                        onChange={(e) => setAddonEq(Number(e.target.value))}
+                        style={{ width: "100%", accentColor: "var(--gold)" }} />
+                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                        {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
+                        erhöht die Kostenbasis des Deals um denselben Betrag.
+                      </span>
+                    </td></tr>}
                   <tr><td className="lab">Leverage heute</td><td>{x(c.netDebt / Math.max(0.5, eb))}</td></tr>
                   <tr><td className="lab">Pro forma nach Add-on</td>
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
@@ -2383,9 +2479,11 @@ export function InitPicker({ c, dim, market, start, close }) {
               </tbody></table>
               <div className="pad" style={{ paddingTop: 10 }}>
                 <button className={"solid" + (noFin ? " ox" : "")} style={{ width: "100%" }}
-                  disabled={locked || noFin} onClick={() => start(k.id)}>
+                  disabled={locked || noFin} onClick={() => start(k.id, k.ma ? addonEq : 0)}>
                   {maxed ? "Ausgereizt — hier ist nichts mehr zu holen" : locked ? k.reqT
-                    : noFin ? "Keine Finanzierung — Covenant Breach"
+                    : noFin ? (eqCap < addonEquityNeeded(c, market)
+                      ? "Keine Finanzierung — auch das investierbare Kapital reicht nicht"
+                      : "Keine Finanzierung — mehr Eigenkapital nachschießen")
                     : runs > 0 ? `${runs + 1}. Auflage starten` : "Starten"}
                 </button>
               </div>
@@ -2596,7 +2694,8 @@ export function Sheet({ sheet, close, onConfirm }) {
         <div className="tomb">
           <div className="sub">Exit an {sheet.buyer}</div>
           <div className="amt">{(totalOut / b.entry).toFixed(2)}×</div>
-          <div className="sub">{sheet.c.name} · {eur(sheet.price)}{(b.dist || 0) > 0.05 ? ` + ${eur(b.dist)} Ausschüttungen` : ""}</div>
+          <div className="sub">{sheet.c.name} · {eur(sheet.price)}{(b.dist || 0) > 0.05 ? ` + ${eur(b.dist)} Ausschüttungen` : ""}
+            {(sheet.c.equityIn || 0) > 0.05 ? ` · Einstieg inkl. ${eur(sheet.c.equityIn)} nachgeschossen` : ""}</div>
         </div>
         <div className="card">
           <h3 className="disp">Verlauf</h3>

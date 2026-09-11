@@ -303,14 +303,26 @@ export interface EngineCompat {
      Halbjahr von davor mehr nachrechnen.                                   */
   legacyEventP?: boolean;
   legacyHistMark?: boolean;
+  /* Bis 11.09.2026 war der Zinsaufwand unbegrenzt steuerlich abzugsfähig —
+     die Zinsschranke (INT_BARRIER) gab es nicht.                            */
+  legacyNoIntBarrier?: boolean;
+  /* Bis 11.09.2026 kam das EBITDA eines integrierten Add-ons über die
+     Branchenmarge statt über die Ist-Marge der Plattform herein (siehe
+     maturePeople).                                                          */
+  legacyAddonBenchMargin?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
+  legacyNoIntBarrier: true, legacyAddonBenchMargin: true,
 };
 
-export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist"];
+/* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
+   Beteiligung gibt (Equity Cure, Eigenkapitalanteil an einem Zukauf). Wie alle
+   Einmaleffekte mit dem Vorzeichen gebucht, in dem es die Nettoverschuldung
+   bewegt — eine Einlage senkt sie, steht also negativ. */
+export const OFF_KEYS = ["restr", "mgmt", "capexOff", "nwcRel", "addon", "dist", "inj"];
 /* Welche Einmaleffekte im berichteten EBITDA stehen und beim bereinigten
    wieder hinzugerechnet werden: Programm- und Personalkosten. Nachgeholte
    Investitionen, Cash Release, Zukäufe und Ausschüttungen sind keine
@@ -396,7 +408,7 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const ebH = eb / 2;
   const rate = rateOf(c, eb);
   const interest = (c.netDebt >= 0 ? c.netDebt * rate : c.netDebt * c.rate * 0.4) / 200;
-  const tax = TAX_RATE * Math.max(0, ebH - interest - capex);
+  const tax = taxOf(ebH, interest, capex, compat);
   const fcf = ebH - interest - capex - nwc - tax;
   const nd0 = c.netDebt;
   c.netDebt = c.netDebt - fcf;
@@ -425,6 +437,19 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
     - (c.netDebt / eb > 5 ? 0.8 : 0) - Math.min(2.5, Math.max(0, 0.35 * (c.holdQ - 8))),
     5, 99
   );
+  /* Covenant-Test auf dem BEREINIGTEN EBITDA. `eb` ist ebitdaOf(c) = Umsatz ×
+     Marge und damit frei von Einmaleffekten: Programm-, Restrukturierungs- und
+     Personalwechselkosten bucht die Engine unterhalb des EBITDA gegen die
+     Nettoverschuldung (siehe bookOff). Das berichtete EBITDA liegt in genau
+     diesen Perioden darunter — würde der Covenant darauf testen, löste jede
+     Wertsteigerungsmaßnahme den Bruch mit aus, den sie verhindern soll. Ein
+     Kreditvertrag rechnet aus demselben Grund auf Adjusted EBITDA.
+
+     Zwei Konventionen dazu, bewusst gewählt: Getestet wird die Laufrate der
+     Periode (annualisiert), nicht ein LTM-Durchschnitt — dieselbe Größe, auf
+     der auch Bewertung und Anzeige stehen, sodass der angezeigte Leverage
+     immer der getestete ist. Und die Add-backs sind unbegrenzt, weil die
+     Engine gar kein berichtetes EBITDA führt, aus dem sie zu begrenzen wären. */
   const covLev = c.netDebt / Math.max(0.5, eb);
   c.breach = covLev > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
   // Für die Anzeige festhalten: die Karte zeigt die tatsächlichen Werte der Periode
@@ -525,6 +550,30 @@ export const BASE_RATE = 6.5;      // Basismarge auf die Akquisitionsfinanzierun
    Konvention bildet die Berichtsansicht ab (D&A = Capex), sonst ließe sich der
    Steueraufwand der Engine in keiner GuV wiederfinden.                       */
 export const TAX_RATE = 0.30;
+/* Zinsschranke (§ 4h EStG / ATAD Art. 4). Zinsaufwand ist nur bis zu 30 % des
+   steuerlichen EBITDA abzugsfähig; was darüber liegt, mindert die Steuerlast
+   nicht. Für einen Buyout im DACH-Raum ist das keine Randnotiz, sondern die
+   Grenze, ab der zusätzlicher Leverage seinen Steuerschild verliert: Bei einem
+   Zinssatz um 6,5 % greift sie etwa ab 4,6× Nettoverschuldung, mit dem
+   Margin-Grid-Aufschlag (LEV_STEP) entsprechend früher. Vorher war der
+   Steuerschild unbegrenzt, und Fremdkapital verbilligte sich mit jedem Turn
+   weiter — genau die Verzerrung, gegen die der Gesetzgeber die Schranke
+   gesetzt hat.
+
+   Der EBITDA-Bezug ist der der Engine: bereinigtes EBITDA der Periode. Ein
+   Zinsvortrag wird nicht geführt — nicht abgezogener Aufwand ist verloren,
+   nicht aufgeschoben. Das ist die konservative Seite der Vereinfachung und
+   steht als Fußnote unter der Berichtsansicht.                              */
+export const INT_BARRIER = 0.30;
+/* Steueraufwand einer Halbjahresperiode. Bemessungsgrundlage ist EBITDA
+   abzüglich abzugsfähigem Zins und Capex (Capex steht stellvertretend für die
+   Abschreibung, siehe TAX_RATE). Steht als eigene Funktion, weil außer
+   stepCompany() auch die Base-Case-Projektion und die Berichtsansicht exakt
+   dieselbe Rechnung brauchen.                                               */
+export function taxOf(ebH: number, interest: number, capex: number, compat: EngineCompat = {}) {
+  const ded = compat.legacyNoIntBarrier ? interest : Math.min(interest, INT_BARRIER * Math.max(0, ebH));
+  return TAX_RATE * Math.max(0, ebH - ded - capex);
+}
 /* Kreditmarge staffelt sich mit der Verschuldung. Bis 3,0× gilt die Basismarge,
    darüber kostet jeder weitere Turn 75 bp — so wie ein Kreditvertrag über ein
    Margin Grid funktioniert. Vorher war Leverage bis zum Covenant gratis und die
@@ -763,18 +812,38 @@ export const ADDON_HEADROOM = 0.6;   // Mindestpuffer zum Covenant nach dem Zuka
 /* Pro-forma-Verschuldung nach dem Zukauf:
    (Nettoverschuldung PortCo + Kaufpreis) / (EBITDA PortCo + EBITDA Add-on)
    Reißt sie den Covenant, kommt die Finanzierung nicht zustande.              */
-export function addonCheck(c, market) {
+export function addonCheck(c, market, equity = 0) {
   const addEb = addonEbitda(c);
   const mult = addonMultiple(c, market);
   const price = addEb * mult;
-  const lev = (c.netDebt + price) / Math.max(0.5, ebitdaOf(c) + addEb);
+  /* Ein Zukauf muss nicht vollständig fremdfinanziert sein. Der Fonds kann
+     Eigenkapital nachschießen — genau das tut ein Sponsor, wenn die Plattform
+     die Akquisitionsschuld nicht mehr trägt, der Zukauf aber strategisch
+     richtig ist. Der Eigenkapitalanteil mindert die Schuld und damit die
+     Pro-forma-Verschuldung; die Kostenbasis des Deals steigt entsprechend,
+     der Zukauf wird also nicht billiger, sondern nur finanzierbar.         */
+  const eqIn = clamp(equity, 0, price);
+  const debt = price - eqIn;
+  const lev = (c.netDebt + debt) / Math.max(0.5, ebitdaOf(c) + addEb);
   /* Die Banken finanzieren einen Zukauf nicht bis auf den letzten Zentimeter an
      den Covenant heran — sie verlangen Puffer für den Fall, dass die Integration
      schiefgeht. ADDON_HEADROOM ist genau dieser Puffer. Vorher genügte formale
      Einhaltung, und die Plattform stand nach dem Zukauf regelmäßig mit 0,4×
      Restluft da: Ein einziger Nachfrageeinbruch reichte für den Breach.       */
   const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
-  return { addEb, mult, price, lev, limit, ok: lev <= limit };
+  return { addEb, mult, price, equity: eqIn, debt, lev, limit, ok: lev <= limit };
+}
+/* Wie viel Eigenkapital ein Zukauf mindestens braucht, damit die Pro-forma-
+   Verschuldung die Finanzierungsgrenze hält. Null, wenn er ohnehin trägt;
+   der volle Kaufpreis, wenn auch das nicht reicht (dann steht die Plattform
+   schon über der Grenze und der Zukauf ist unabhängig vom Preis nicht
+   finanzierbar).                                                           */
+export function addonEquityNeeded(c, market) {
+  const addEb = addonEbitda(c);
+  const price = addEb * addonMultiple(c, market);
+  const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
+  const room = limit * Math.max(0.5, ebitdaOf(c) + addEb) - c.netDebt;
+  return clamp(price - room, 0, price);
 }
 /* Integrationsrisiko. Vorher hing der Erfolg allein am Rating der Fachrolle —
    eine Plattform mit unreifen Prozessen und 4,5× Verschuldung integrierte einen
@@ -798,7 +867,7 @@ export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1,
    dieselbe Funktion — vorher war die KI mit einem pauschalen Reifegradgewinn
    von 0,85 unterwegs, während der Spieler über initGain das Drei- bis Vierfache
    holte. Das war der eigentliche Grund, warum die Kohorte nie mithalten konnte. */
-export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineCompat = {}) {
+export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineCompat = {}, equity = 0) {
   const spec = initById(dim, id);
   if (!spec) return null;
   const runs = initRuns(c, id);
@@ -816,18 +885,23 @@ export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineC
   let debt = ebitdaOf(c) * (spec.oneOff || 0);
   let chk = null;
   if (spec.ma) {
-    chk = addonCheck(c, market);
+    chk = addonCheck(c, market, equity);
     if (!chk.ok) return { blocked: chk };
     /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung hier —
        im Mehrspieler- und KI-Pfad kam das EBITDA des Add-ons an, ohne dass
        die Akquisitionsschuld je gebucht wurde, während der Übungsmodus sie
        (in seiner eigenen Kopie der Mechanik) korrekt buchte.               */
-    if (!compat.addonWithoutDebt) debt += chk.price;
+    /* Nur der fremdfinanzierte Teil des Kaufpreises erhöht die Schuld; den
+       Rest schießt der Fonds als Eigenkapital nach (siehe fundEquityIn beim
+       Aufrufer). Ohne Nachschuss ist chk.debt der volle Kaufpreis, das
+       Verhalten also unverändert.                                          */
+    if (!compat.addonWithoutDebt) debt += chk.debt;
     /* Der Reifegradgewinn ist bewusst klein: Der Wert eines Zukaufs steckt im
        zugekauften EBITDA, nicht in einer dauerhaft schnelleren Organik. Vorher
        gab es hier eine volle Stufe obendrauf — rund zwei Drittel des gemessenen
        Vorteils kamen aus dieser Doppelzählung.                               */
-    patch = { ...patch, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price, gain: 0.35, ok };
+    patch = { ...patch, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price,
+      equity: chk.equity, gain: 0.35, ok };
   } else {
     patch = { ...patch, gain: initGain(E) * sp * (spec.gm || 1) * rep.gm * fitOf(id, c)
       * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
@@ -1065,7 +1139,14 @@ export function feeReserveOf(f, quarter) {
     const base = t <= INVEST_PERIOD ? CAPITAL : cost;
     res += (base * MGMT_FEE) / 2;
   }
-  return Math.max(0, res - (f.recyc || 0));
+  /* Die Reserve ist der Barbetrag künftiger Gebühren, unabhängig davon, aus
+     welchem Topf sie bezahlt werden. Bis zum 11.09.2026 stand hier
+     `res − f.recyc`: Einbehaltene Erlöse senkten die Reserve, obwohl
+     investableOf() sie zugleich als verfügbares Kapital dazuzählt. Derselbe
+     Euro war damit zweimal da — das investierbare Kapital lag um genau die
+     einbehaltenen Erlöse zu hoch, und ein Fonds, der recycelt hatte, konnte
+     mehr zusagen, als er je aufbringen konnte.                              */
+  return Math.max(0, res);
 }
 // Was der Spieler tatsächlich einsetzen kann: offenes Commitment plus einbehaltene
 // Erlöse, abzüglich der Gebühren, die bis zum Laufzeitende noch fällig werden.
@@ -1095,6 +1176,40 @@ export function spendFund(f, amt, quarter, accrue) {
     f.drawn = (f.drawn || 0) + call;
   }
   return true;
+}
+
+/* ---------- Kapitalzuführung in eine Beteiligung ----------
+   Der Gegenweg zur Ausschüttung: Der Fonds ruft Kapital ab und gibt es in eine
+   Beteiligung. Zwei Anlässe, beide aus der Praxis:
+
+   - Equity Cure. Steht der Leverage über dem Covenant, heilt frisches
+     Eigenkapital den Bruch, bevor die Kreditgeber vollstrecken. Ohne diese
+     Möglichkeit war der einzige Ausweg aus einem Bruch der Notverkauf — eine
+     Wahl, die es in einem Kreditvertrag so nicht gibt.
+   - Eigenkapitalanteil an einem Zukauf. Trägt die Plattform die
+     Akquisitionsschuld nicht mehr, finanziert der Sponsor den Zukauf teilweise
+     selbst (`toDebt: false` — das Geld fließt unmittelbar an den Verkäufer und
+     senkt die Nettoverschuldung deshalb nicht).
+
+   In beiden Fällen steigt die Kostenbasis des Deals um genau den Betrag. Eine
+   Zuführung schafft damit keinen Wert: Sie verschiebt Geld vom Fonds in die
+   Beteiligung, und der MOIC misst danach gegen einen höheren Einstand. Genau
+   deshalb zählt sie auch in der Value Bridge nicht als Entschuldung (siehe
+   makeBridge/bridgeStep) — sie ist Kapital, nicht Leistung.                 */
+export function fundEquityIn(f, c, amt: number, quarter: number, opts: { toDebt?: boolean } = {}) {
+  if (!(amt > 0)) return 0;
+  if (!spendFund(f, amt, quarter, undefined)) return 0;
+  if (opts.toDebt !== false) c.netDebt -= amt;
+  // Reihenfolge zählt: costLeft fällt ersatzweise auf entryEquity zurück, das
+  // hier gerade selbst erhöht wird — der Rückfallwert muss der alte sein.
+  const costLeft0 = c.costLeft ?? c.entryEquity ?? 0;
+  c.equityIn = (c.equityIn || 0) + amt;
+  c.entryEquity = (c.entryEquity || 0) + amt;
+  c.costTotal = (c.costTotal || 0) + amt;
+  c.costLeft = costLeft0 + amt;
+  f.investedTotal = (f.investedTotal || 0) + amt;
+  bookOff(c, "inj", -amt);
+  return amt;
 }
 
 /* Wie viel eines Exiterlöses überhaupt einbehalten werden darf. Zwei Schranken
@@ -1145,9 +1260,28 @@ export const grossMoicOf = (f, market) => (f.investedTotal || 0) > 0
    zu überspringen; wer früh viel Kapital bindet, eine größere.                */
 export function carryOf(f, market, quarter) {
   const gain = totalValueOf(f, market) - (f.drawn || 0);
+  if (!(gain > 0)) return 0;
   const pref = (f.calls || []).reduce(
     (s, c) => s + c.amt * (Math.pow(1 + HURDLE, Math.max(0, quarter - c.q) / 2) - 1), 0);
-  return gain > pref ? CARRY * gain : 0;
+  /* Catch-up statt Sprungstelle. Bis zum 11.09.2026 stand hier
+     `gain > pref ? CARRY * gain : 0` — ein Fonds, der die Hurdle um einen Euro
+     überschritt, verlor schlagartig 20 % seines gesamten Gewinns an den GP.
+     Der Wert in der Hand der Investoren fiel damit über der Hurdle unter den
+     eines Fonds knapp darunter: Ein Fonds IN Carry konnte einen niedrigeren
+     Netto-TVPI haben als einer ohne. Das ist kein Wasserfall, das ist eine
+     Klippe.
+
+     Der übliche europäische Wasserfall mit 100 % Catch-up kennt die Klippe
+     nicht. Er hat drei Stufen:
+       gain <= pref                       kein Carry — die Investoren haben die
+                                          Vorzugsrendite noch nicht verdient;
+       pref < gain < pref / (1 - CARRY)   Catch-up — jeder weitere Euro geht an
+                                          den GP, bis er auf seinen Anteil am
+                                          Gesamtgewinn aufgeschlossen hat;
+       gain >= pref / (1 - CARRY)         Carry auf den vollen Gewinn.
+     Genau das ist min(gain − pref, CARRY · gain): stetig, monoton, und der
+     Netto-TVPI steigt nie, wenn der Bruttogewinn fällt. */
+  return clamp(gain - pref, 0, CARRY * gain);
 }
 export function tvpiOf(f, market, quarter) {
   return (totalValueOf(f, market) - carryOf(f, market, quarter)) / drawnOf(f);
@@ -1160,6 +1294,20 @@ export function dpiOf(f, market, quarter) {
 }
 
 /* ---------- IRR ----------
+   Ja, die Reihe mischt Realisiertes und Unrealisiertes — und zwar mit Absicht.
+   Sie ist der Since-Inception-Netto-IRR, wie ihn jedes LP-Reporting ausweist:
+   tatsächliche Abrufe und tatsächliche Ausschüttungen bis zum Stichtag, und
+   der verbleibende NAV als fiktive Schlusszahlung zum Stichtag. Solange der
+   Fonds läuft, gibt es keine andere Möglichkeit, ihn zu messen; erst nach der
+   Liquidation (Halbjahr 20, alle Beteiligungen verwertet) ist der NAV null und
+   der IRR vollständig realisiert. Die Endwertung einer Partie steht also auf
+   einer reinen Zahlungsreihe, die Zwischenstände nicht.
+
+   Was daraus folgt und in der Ansicht steht: Ein hoher Zwischen-IRR bei
+   niedrigem DPI ist eine Bewertung, keine Rendite. Die Trennung leisten DPI
+   (nur Ausschüttungen) und RVPI (nur NAV) — beide je abgerufenem Euro, beide
+   neben dem TVPI ausgewiesen.
+
    Zahlungsreihe aus Sicht der Investoren: Abrufe negativ zum Zeitpunkt des
    Abrufs, Ausschüttungen positiv, der verbleibende NAV plus nicht reinvestierte
    Liquidität als Schlusszahlung zum Stichtag. Je Halbjahr saldiert, wie es auch
@@ -1288,6 +1436,39 @@ export function scoreOf(f, market, quarter) {
   return 0.5 * clamp(t, -1, 4) + 0.5 * clamp(i, -1, 4);
 }
 
+/* ---------- Managementbeteiligung ----------
+   Zwei Wirkungen, und beide hingen bisher an einem Schalter statt am Wert des
+   Pakets.
+
+   mepCut — das Sweet Equity am Rückfluss. Es galt nur beim Schlussverkauf
+   durch den Spieler. Teilexit ins Continuation Vehicle, Börsengang,
+   Restbeteiligung nach dem Lock-up, Cash Sweep, Tail-End-Verwertung und jeder
+   Exit eines KI-Fonds gingen ohne Abzug durch — sechs von sieben Wegen, auf
+   denen Geld an den Fonds zurückfließt. Für den Spieler war der MEP damit
+   teurer als für die KI, und der Cash Sweep war der offene Weg, Wert am
+   Management vorbeizuführen: erst ausschütten, dann verkaufen. Jeder Rückfluss
+   läuft jetzt durch dieselbe Funktion.
+
+   retentionFactor — die Bindungswirkung. Sie war ein pauschaler halber
+   Risikofaktor, unabhängig davon, ob das Paket etwas wert ist. Das ist
+   genau verkehrt herum: Ein MEP bindet, weil er im Geld steht. Wer auf einem
+   Paket sitzt, das beim Exit ein Vielfaches bringt, lässt sich nicht abwerben;
+   wer unter Einstand sitzt, hat nichts zu verlieren und geht eher als ohne
+   MEP. Der Faktor läuft deshalb am Gesamtwert je Euro Einstand: 1,0× lässt es
+   bei der Halbierung, ab gut 2,2× bindet der MEP praktisch vollständig,
+   deutlich unter dem Einstand verpufft er.                                  */
+export const mepCut = (c, amt: number) => amt * (c && c.ltip ? 1 - LTIP_SHARE : 1);
+/* Nettoerlös eines Exits an den Fonds: erst die Transaktionskosten, dann das
+   Sweet Equity. Jeder Exitweg benutzt diese eine Zeile. */
+export const exitNetOf = (c, gross: number, feeRate: number) => mepCut(c, gross * (1 - feeRate));
+export const MEP_RET_BASE = 0.5, MEP_RET_SLOPE = 0.35;
+export const mepMoic = (c, market) =>
+  (navValueOf(c, market) + (c.cashOut || 0)) / Math.max(0.01, c.costTotal || c.entryEquity || 0.01);
+export function retentionFactor(c, market) {
+  if (!c || !c.ltip) return 1;
+  return clamp(MEP_RET_BASE - MEP_RET_SLOPE * (mepMoic(c, market) - 1), 0.08, 1);
+}
+
 /* Reifung einer Beteiligung am Periodenende: Onboarding, Search-Mandate,
    Abschluss laufender Maßnahmen, Entwicklung und Abwerbung der Amtsinhaber.
    Hauptspiel und Übungsmodus rufen exakt diese Funktion auf — der Übungsmodus
@@ -1317,7 +1498,15 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
     if (!IN || q < IN.doneQ) return;
     const spec = IN.id ? initById(IN.dim, IN.id) : null;
     if (IN.ma) {
-      const addRev = IN.addEb / Math.max(4, c.benchMargin ?? 12) * 100;
+      /* Gekauft wird EBITDA, geliefert wird im Modell Umsatz — die Umrechnung
+         muss deshalb über die Marge laufen, mit der die Plattform das EBITDA
+         tatsächlich verdient. Bis zum 11.09.2026 stand hier die Branchenmarge:
+         Eine Plattform mit 22 % Ist-Marge und 15 % Branchenmarge bekam für
+         denselben Kaufpreis rund die Hälfte mehr EBITDA, als sie bezahlt hatte
+         — ein Gewinn aus einer Rechenkonvention, nicht aus dem Zukauf. Bei
+         einer Plattform unter Branchenniveau lief es umgekehrt.            */
+      const mgBase = compat.legacyAddonBenchMargin ? (c.benchMargin ?? 12) : c.margin;
+      const addRev = IN.addEb / Math.max(4, mgBase) * 100;
       if (IN.ok) { c.revenue += addRev; c.acc = Math.min(5, c.acc + 1.0); }
       else {
         // Gescheiterte Integration: die Akquisitionsschuld steht voll, das EBITDA
@@ -1374,7 +1563,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
       return;
     }
     if (c[k].dev && c[k].skill < 4.5) c[k] = { ...c[k], skill: Math.min(4.5, c[k].skill + 0.25) };
-    if (rng.rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * (c.ltip ? 0.5 : 1)) {
+    if (rng.rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * retentionFactor(c, mk)) {
       const nm = k === "ceo" ? "CEO" : k === "cfo" ? "CFO" : ROLE3[c.sector].n;
       c[k] = vacate(c[k]);
       if (me) news.push({ q, e: "🚪", tone: "neg", t: `<b>${c.name}</b>: Der ${nm} wurde abgeworben. Die Position ist vakant.` });
@@ -1424,7 +1613,13 @@ export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number;
   const exitMult = ebitdaOf(c) > 0 ? (gross / st + c.netDebt) / ebitdaOf(c) : c.entryMult;
   const bEbitda = (ebitdaOf(c) - c.entryEbitda) * c.entryMult * st;
   const bMult = ebitdaOf(c) * (exitMult - c.entryMult) * st;
-  const bDelev = (c.entryDebt - c.netDebt) * st;
+  /* Nachgeschossenes Eigenkapital senkt die Nettoverschuldung, ist aber keine
+     Entschuldung aus eigener Kraft — es steckt zugleich in der erhöhten
+     Kostenbasis (`base`). Bliebe es in dieser Zeile, zeigte die Brücke jeden
+     Equity Cure als Wertbeitrag und rechnete ihn über den höheren Einstand
+     gleich wieder heraus: zweimal dieselbe Zahl, einmal als Leistung
+     ausgewiesen, die keine war.                                            */
+  const bDelev = (c.entryDebt - c.netDebt - (c.equityIn || 0)) * st;
   return {
     entry: base, ebitda: bEbitda, mult: bMult, delev: bDelev, dist: recap,
     cost: net - base - bEbitda - bMult - bDelev,
@@ -1445,12 +1640,12 @@ export function makeBridge(c, gross, net, opts: { stake?: number; cost?: number;
    Beteiligung hätten beide gleich sein müssen und waren es nicht.          */
 export function bridgeChain(hist, last) {
   const pts = [...(hist || []), last].filter(Boolean);
-  const out = { ebitda: 0, mult: 0, delev: 0, dist: 0, rest: 0, nav: 0, total: 0 };
+  const out = { ebitda: 0, mult: 0, delev: 0, dist: 0, inj: 0, rest: 0, nav: 0, total: 0 };
   for (let i = 1; i < pts.length; i++) {
     const s = bridgeStep(pts[i - 1], pts[i]);
     if (!s) continue;
     out.ebitda += s.ebitda; out.mult += s.mult; out.delev += s.delev;
-    out.dist += s.dist; out.rest += s.rest; out.nav += s.nav; out.total += s.total;
+    out.dist += s.dist; out.inj += s.inj; out.rest += s.rest; out.nav += s.nav; out.total += s.total;
   }
   return out;
 }
@@ -1471,7 +1666,7 @@ export function liveHist(c, market) {
   return {
     rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
     eq: navValueOf(c, market) + (c.cashOut || 0), mult: markMultiple(c, market),
-    st: c.st ?? 1, out: c.cashOut || 0,
+    st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0,
   };
 }
 
@@ -1496,6 +1691,8 @@ export function bridgeStep(prev, now) {
   if (!prev || !now) return null;
   const stP = prev.st ?? 1, stN = now.st ?? 1;
   const outP = prev.out ?? 0, outN = now.out ?? 0;
+  // Kapitalzuführung der Periode: kumuliert mitgeschrieben, hier differenziert
+  const inj = (now.ei ?? 0) - (prev.ei ?? 0);
   // Nur der NAV-Teil trägt die Zerlegung; bereits ausgeschüttete
   // Rekapitalisierungen stehen als eigene Position daneben.
   const navP = prev.eq - outP, navN = now.eq - outN;
@@ -1504,10 +1701,13 @@ export function bridgeStep(prev, now) {
   if (mP == null || mN == null) return null;
   const ebitda = (now.eb - prev.eb) * mP * stN;
   const mult = now.eb * (mN - mP) * stN;
-  const delev = (prev.nd - now.nd) * stN;
+  // Wie in makeBridge: Zugeführtes Eigenkapital steht als eigener Posten und
+  // nicht in der Entschuldung.
+  const delev = (prev.nd - now.nd - inj) * stN;
   const dist = outN - outP;
   const nav = navN - navP;
-  return { ebitda, mult, delev, dist, rest: nav - ebitda - mult - delev, nav, total: nav + dist };
+  return { ebitda, mult, delev, dist, inj: inj * stN,
+    rest: nav - ebitda - mult - delev - inj * stN, nav, total: nav + dist };
 }
 
 /* ---------- Value Bridge des Fonds ----------
@@ -1684,7 +1884,7 @@ export function lboProjection(
     const nwc = (nwcPct / 100) * (revenue - revPrev);
     const rate = baseRate + Math.max(0, netDebt / Math.max(0.5, eb) - LEV_FREE) * LEV_STEP;
     const interest = (netDebt >= 0 ? netDebt * rate : netDebt * baseRate * 0.4) / 200;
-    const tax = TAX_RATE * Math.max(0, ebH - interest - capex);
+    const tax = taxOf(ebH, interest, capex);
     netDebt -= ebH - interest - capex - nwc - tax;
   }
 

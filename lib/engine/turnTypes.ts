@@ -26,6 +26,19 @@ export interface InitiativeIntent {
   holdingUid: string;
   dim: InitDim;
   id: string;
+  /* Nur beim Add-on (dim "acc", id "ma"): der Teil des Kaufpreises, den der
+     Fonds als Eigenkapital nachschießt, statt ihn auf die Plattform zu
+     finanzieren. Wird serverseitig gegen das investierbare Kapital und gegen
+     den Kaufpreis gekappt. */
+  equity?: number;
+}
+
+/* Kapitalzuführung in eine bestehende Beteiligung: Equity Cure vor einem
+   drohenden Enforcement oder schlichte Entschuldung. Der Betrag wird gegen das
+   investierbare Kapital gekappt. */
+export interface EquityInjectionIntent {
+  holdingUid: string;
+  amount: number;
 }
 
 export interface SearchIntent {
@@ -63,6 +76,7 @@ export interface TurnDecisions {
      für Beteiligungen, die ohne Due Diligence gekauft wurden. */
   studies?: string[];
   initiatives?: InitiativeIntent[];
+  equityInjections?: EquityInjectionIntent[];
   ltip?: string[];
   searches?: SearchIntent[];
   hires?: HireIntent[];

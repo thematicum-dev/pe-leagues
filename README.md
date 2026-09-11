@@ -16,6 +16,13 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   der ursprünglichen Datei `pe-leagues-mvp7.tsx` übernommen — an der Logik
   wurde nichts verändert.
 
+- **`docs/reality-checks.md`**
+  Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
+  PE-Praktiker: achtzehn Prüfungen an der Spiellogik (Covenant-Basis, IRR,
+  Value Bridges, Carry-Wasserfall, Gebühren, Managementbeteiligung,
+  Zinsschranke …), je mit Befund im Code und der Korrektur, die daraus folgte.
+  Jeder Punkt ist in `lib/engine/__tests__/realityChecks.test.ts` festgehalten.
+
 - **`app/access/page.tsx`, `app/onboarding/`, `lib/access/context.ts`**
   Die Zugangskontrolle. Wer sich neu registriert, beantragt unter
   `/onboarding` einen Zugang (Anzeigename + optionale Nachricht) und wartet

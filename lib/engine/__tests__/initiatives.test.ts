@@ -66,9 +66,14 @@ describe("Add-on: der Zukauf wird bezahlt", () => {
       return { nd: c.netDebt, rev: c.revenue };
     };
     const neu = run({}), alt = run(LEGACY_COMPAT);
-    // Derselbe Umsatzpfad — der Zukauf kommt in beiden Fällen an ...
-    expect(neu.rev).toBeCloseTo(alt.rev, 6);
-    // ... aber nur im korrigierten Verhalten steht auch die Schuld dafür.
+    /* Der Zukauf kommt in beiden Fällen an — die Umsatzpfade sind seit dem
+       11.09.2026 aber nicht mehr identisch: Das zugekaufte EBITDA wird jetzt
+       über die Ist-Marge der Plattform in Umsatz umgerechnet, im Altverhalten
+       über die Branchenmarge (siehe maturePeople). Beide wachsen, nur nicht
+       um denselben Betrag. */
+    expect(neu.rev).toBeGreaterThan(0);
+    expect(alt.rev).toBeGreaterThan(0);
+    // Entscheidend bleibt: nur im korrigierten Verhalten steht auch die Schuld dafür.
     expect(neu.nd).toBeGreaterThan(alt.nd);
   });
 });

@@ -26,6 +26,10 @@
       Steueraufwand im Bericht nicht dem der Engine entspricht.
    3. Die Steuer bemisst sich auf dem Ergebnis vor Einmalaufwendungen — die
       Engine kennt keine Steuerwirkung der Einmaleffekte.
+   4. Zinsschranke: Zinsaufwand mindert die Bemessungsgrundlage nur bis zu 30 %
+      des bereinigten EBITDA (INT_BARRIER, § 4h EStG / ATAD). Ein Zinsvortrag
+      wird nicht geführt — was über der Grenze liegt, ist verloren, nicht
+      aufgeschoben.
 
    Für Zielunternehmen im Dealflow existiert noch keine Halteperiode. Dort ist
    die einzige modellierte Historie das Umsatzwachstum der letzten drei Jahre
@@ -447,7 +451,7 @@ export function holdingStatements(c: Any): Statements | null {
     OFF_KEYS.forEach((k) => { off[k] = (rec && rec[k]) || 0; });
 
     const fcf = ebH - interest - capex - dNwc - tax;
-    const booked = off.restr + off.mgmt + off.capexOff + off.nwcRel + off.addon + off.dist;
+    const booked = off.restr + off.mgmt + off.capexOff + off.nwcRel + off.addon + off.dist + off.inj;
     /* Residuum gegen die Nettoverschuldung der Engine. Bei mitgeschriebenen
        Perioden ist es null; bei rekonstruierten trägt es alles, was die
        Formeln nicht erklären. Es wird als Einmalaufwand geführt — der weitaus
@@ -470,13 +474,18 @@ export function holdingStatements(c: Any): Statements | null {
     nwc = nwcBal != null ? nwcBal + nwcRelCum : nwc + dNwc + off.nwcRel;
     netDebt = now.nd;
     const netIncome = (ebH - oneOff - capex) - interest - tax;
-    equity = equity + netIncome - off.dist;
+    /* off.inj ist negativ gebucht (Einlage senkt die Nettoverschuldung) und
+       erhöht das Eigenkapital deshalb genau wie eine negative Ausschüttung. */
+    equity = equity + netIncome - off.dist - off.inj;
 
     halves.push(makePeriod({
       key: "h" + i, label: "HJ " + i, sub: "6M", months: 6, estimated, levered: true,
       revenue: revH, adjEbitda: ebH, oneOff, da: capex, interest, tax,
       dNwc: dNwc + off.nwcRel, capex: capex + off.capexOff, acquisitions: off.addon,
-      distributions: off.dist,
+      /* Ausschüttung und Einlage stehen in einer Zeile, netto: Der Fonds
+         bewegt Kapital in beide Richtungen, und ein negativer Betrag ist
+         genau die Einlage. */
+      distributions: off.dist + off.inj,
       ppe, goodwill, nwc, netDebt, equity, netDebtOpen: prev.nd,
     }));
   }

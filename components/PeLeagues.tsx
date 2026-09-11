@@ -16,6 +16,7 @@ import {
   COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P,
   INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LIQ_DISC, LM_ANNOUNCE, LM_DEAL,
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
+  exitNetOf, mepCut, fundEquityIn,
   RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
   chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
@@ -26,8 +27,8 @@ import {
 
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
-  TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, Shortlist, Offers, Sheet,
-  FundProfileEditor,
+  TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
+  Shortlist, Offers, Sheet, FundProfileEditor,
 } from "@/components/pel/ui";
 
 export default function PeLeagues() {
@@ -50,6 +51,7 @@ export default function PeLeagues() {
   const [tvpiHist, setTvpiHist] = useState([]);   // je Halbjahr eine Wertungszahl pro Fonds
   const [shortlist, setShortlist] = useState([]);
   const [initPick, setInitPick] = useState(null);
+  const [injectPick, setInjectPick] = useState(null);   // offene Kapitalzuführung
   const [useProceeds, setUseProceeds] = useState(null);   // offene Verwendungsentscheidung
   const [rolling, setRolling] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -352,7 +354,8 @@ export default function PeLeagues() {
     F.forEach((f) => {
       f.holdings.forEach((c) => {
         if (c.netDebt < -0.5) {
-          const sweep = -c.netDebt * (c.st ?? 1);
+          // Auch eine Rekapitalisierung teilt das Management mit (siehe mepCut)
+          const sweep = mepCut(c, -c.netDebt * (c.st ?? 1));
           bookOff(c, "dist", -c.netDebt);
           c.netDebt = 0;
           c.cashOut = (c.cashOut || 0) + sweep;
@@ -426,11 +429,12 @@ export default function PeLeagues() {
     });
     F[0].holdings = F[0].holdings.filter((c) => {
       if (c.lockUntil && q >= c.lockUntil) {
-        const val = fairOf(c, mk, F[0].attrs.negotiation, q) * (1 - BIL_FEE);
-        applyProceeds(F[0], val, c.entryEquity, q);
-        F[0].realized.push({ name: c.name + " (Restbeteiligung)", moic: val / c.entryEquity });
+        const val = exitNetOf(c, fairOf(c, mk, F[0].attrs.negotiation, q), BIL_FEE);
+        const cb = c.costLeft ?? c.entryEquity;
+        applyProceeds(F[0], val, cb, q);
+        F[0].realized.push({ name: c.name + " (Restbeteiligung)", moic: dealMoic(c, val) });
         news.push({
-          q, e: val >= c.entryEquity ? "🔔" : "📉", tone: val >= c.entryEquity ? "pos" : "neg",
+          q, e: val >= cb ? "🔔" : "📉", tone: val >= cb ? "pos" : "neg",
           t: `Lock-up bei <b>${c.name}</b> ausgelaufen — Restbeteiligung für ${eur(val)} platziert.`,
         });
         return false;
@@ -453,9 +457,9 @@ export default function PeLeagues() {
         // Auch die KI weiß, dass der Preis gegen Laufzeitende fällt, und zieht vor
         const patience = (f.arch.key === "ops" ? 10 : 9) - (PERIODS - q <= 6 ? 2 : 0);
         if (c.holdQ >= MIN_HOLD && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
-          const net = val * (1 - PROC_FEE);
-          applyProceeds(f, net, c.entryEquity, q);
-          f.realized.push({ name: c.name, moic: net / c.entryEquity });
+          const net = exitNetOf(c, val, PROC_FEE);
+          applyProceeds(f, net, c.costLeft ?? c.entryEquity, q);
+          f.realized.push({ name: c.name, moic: dealMoic(c, net) });
           return false;
         }
         return true;
@@ -497,11 +501,11 @@ export default function PeLeagues() {
       f.holdings.forEach((c) => {
         // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
         const gross = Math.max(0, eqvOf(c, markMultiple(c, mk) - LIQ_DISC));
-        const net = gross * (1 - BIL_FEE);
-        applyProceeds(f, net, c.entryEquity, q);
+        const net = exitNetOf(c, gross, BIL_FEE);
+        applyProceeds(f, net, c.costLeft ?? c.entryEquity, q);
         f.realized.push({ name: c.name + " (Tail-End)", moic: dealMoic(c, net) });
         if (i === 0) {
-          const mo = net / c.entryEquity;
+          const mo = dealMoic(c, net);
           news.push({
             q, e: mo >= 1 ? "⏳" : "💀", tone: mo >= 1 ? "neu" : "neg",
             t: `Tail-End-Verwertung: <b>${c.name}</b> zum Laufzeitende veräußert für ${eur(net)} — ${mo.toFixed(2)}× auf das eingesetzte Eigenkapital.`,
@@ -572,9 +576,12 @@ export default function PeLeagues() {
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }
 
-  function startInit(c, dim, id) {
+  function startInit(c, dim, id, equity = 0) {
     haptic(8);
-    const B = buildInit(rng, c, dim, id, market, quarter);
+    /* Eigenkapitalanteil an einem Zukauf: gedeckelt am investierbaren Kapital
+       — der Fonds kann nur geben, was er hat. */
+    const eqWant = id === "ma" ? Math.min(Math.max(0, equity), investableOf(me, quarter)) : 0;
+    const B = buildInit(rng, c, dim, id, market, quarter, {}, eqWant);
     if (!B) return;
     if (B.blocked) {
       setFeed((p2) => [{
@@ -584,17 +591,48 @@ export default function PeLeagues() {
       return;
     }
     const { spec, dur, p, debt, chk } = B;
+    const eqIn = spec.ma ? (chk?.equity || 0) : 0;
     const msg = spec.ma
-      ? ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
+      ? ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)} — ${eur(chk.debt)} fremdfinanziert${eqIn > 0.05 ? `, ${eur(eqIn)} aus Fondskapital` : ""}. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
       : ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
 
-    setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...chargeOff(h, B.spec.ma ? "addon" : "restr", debt), [B.slot]: B.init,
-      }),
+    setFunds((F) => F.map((f, i) => {
+      if (i !== 0) return f;
+      const g = { ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h }) };
+      const h = g.holdings.find((z) => z.uid === c.uid);
+      /* Das Eigenkapital fließt unmittelbar an den Verkäufer des Zukaufs
+         weiter (toDebt: false) — es ersetzt den Teil der Akquisitionsschuld,
+         der nicht aufgenommen wird, und senkt die Verschuldung der Plattform
+         deshalb nicht. */
+      if (h && eqIn > 0) fundEquityIn(g, h, eqIn, quarter, { toDebt: false });
+      if (h) {
+        h.netDebt += debt;
+        bookOff(h, spec.ma ? "addon" : "restr", debt + eqIn);
+        h[B.slot] = B.init;
+      }
+      return g;
     }));
     setFeed((p2) => [{ q: quarter, e: spec.ma ? "🏢" : "🛠️", tone: "neu",
       t: `<b>${c.name}</b>: ${spec.n} gestartet.${msg}` }, ...p2]);
+  }
+
+  /* Kapitalzuführung aus dem Fonds: Equity Cure oder schlichte Entschuldung.
+     Der Covenant wird in stepCompany() jede Periode neu getestet — gesenkte
+     Verschuldung setzt den Bruchzähler also von selbst zurück. */
+  function injectCapital(c, amount) {
+    setInjectPick(null);
+    const amt = Math.min(Math.max(0, amount), investableOf(me, quarter));
+    if (!(amt > 0.05)) return;
+    haptic(8);
+    setFunds((F) => F.map((f, i) => {
+      if (i !== 0) return f;
+      const g = { ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h }) };
+      const h = g.holdings.find((z) => z.uid === c.uid);
+      if (h) fundEquityIn(g, h, amt, quarter);
+      return g;
+    }));
+    setFeed((p) => [{ q: quarter, e: "💶", tone: "neu",
+      t: `<b>${c.name}</b>: ${eur(amt)} Eigenkapital nachgeschossen — die Nettoverschuldung sinkt entsprechend, die Kostenbasis des Deals steigt um denselben Betrag.` }, ...p]);
   }
 
   function toggleLtip(c) {
@@ -620,7 +658,7 @@ export default function PeLeagues() {
   }
 
 function finalize(c, gross, buyer, feeRate, extra) {
-    const net = gross * (1 - feeRate) * (c.ltip ? 1 - LTIP_SHARE : 1);
+    const net = exitNetOf(c, gross, feeRate);
     /* Steht Spielraum zum Einbehalten zur Verfügung, entscheidet der GP — sonst
        wird direkt voll ausgeschüttet und der Dialog erscheint gar nicht.      */
     if (recycleRoom(me, net, quarter) > 0.5) {
@@ -631,7 +669,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
   }
 
   function settle(c, gross, buyer, feeRate, extra, keep) {
-    const net = gross * (1 - feeRate) * (c.ltip ? 1 - LTIP_SHARE : 1);
+    const net = exitNetOf(c, gross, feeRate);
     const st = c.st ?? 1;
     const bridge = makeBridge(c, gross, net);
     setUseProceeds(null);
@@ -665,7 +703,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
   function doCV(c) {
     const fair = fairOf(c, market, NEG, quarter);
     const gross = fair * CV_STAKE * CV_DISC;
-    const net = gross * (1 - CV_FEE);
+    const net = exitNetOf(c, gross, CV_FEE);
     const costSold = c.entryEquity * CV_STAKE;
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
@@ -690,7 +728,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
   function doIPO(c) {
     const fair = fairOf(c, market, 0, quarter);
     const gross = fair * IPO_PLACE * IPO_DISC;
-    const net = gross * (1 - IPO_FEE);
+    const net = exitNetOf(c, gross, IPO_FEE);
     const costSold = c.entryEquity * IPO_PLACE;
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
@@ -746,7 +784,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     const ev = eb * exMult;
     const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
-    const net = gross * (1 - feeRate);
+    const net = exitNetOf(c, gross, feeRate);
 
     rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
       ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
@@ -754,6 +792,19 @@ function finalize(c, gross, buyer, feeRate, extra) {
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
+    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
+       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
+       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
+       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
+       des Dialogs wie ein Fehler aus.                                       */
+    if (ch !== "proc") {
+      const room = recycleRoom(me, Math.max(0, net), quarter);
+      note += room > 0.5
+        ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
+        : quarter > INVEST_PERIOD
+          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
+          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+    }
     if (ch === "proc") {
       const fair = Math.max(0, eqv100 * st);
       rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
@@ -766,6 +817,10 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
     rows.push(["= Bruttoerlös", eur(gross)],
       [`− Kosten ${(feeRate * 100).toFixed(1).replace(".", ",")} %`, "−" + eur(gross * feeRate)]);
+    // Das Sweet Equity des Managements geht von jedem Rückfluss ab, nicht nur
+    // vom Schlussverkauf — die Vorschau muss es deshalb ausweisen.
+    if (c.ltip) rows.push([`− Sweet Equity MEP ${Math.round(LTIP_SHARE * 100)} %`,
+      "−" + eur(gross * (1 - feeRate) * LTIP_SHARE)]);
     if (ch === "cv") rows.push(["Anteil danach", Math.round(st * (1 - CV_STAKE) * 100) + " %"]);
     if (ch === "ipo") rows.push(["Lock-up Restbeteiligung", "1 Jahr"]);
     /* Bei einem Vollverkauf zählen die bisherigen Rekapitalisierungen in den
@@ -1015,6 +1070,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
                   cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),
                   search: (seat) => startSearch(c, seat), init: (dim) => setInitPick({ uid: c.uid, dim }), ltip: () => toggleLtip(c),
                   study: c.dd ? null : () => runStudy(c.uid),
+                  inject: () => setInjectPick(c.uid),
                 }} />
             ))}
             {me.realized.length > 0 && (
@@ -1137,8 +1193,15 @@ function finalize(c, gross, buyer, feeRate, extra) {
       )}
       {initPick && me.holdings.find((h) => h.uid === initPick.uid) && (
         <InitPicker c={me.holdings.find((h) => h.uid === initPick.uid)} dim={initPick.dim} market={market}
-          start={(id) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id); setInitPick(null); }}
+          investable={investableOf(me, quarter)}
+          start={(id, eq) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, eq); setInitPick(null); }}
           close={() => setInitPick(null)} />
+      )}
+      {injectPick && me.holdings.find((h) => h.uid === injectPick) && (
+        <EquityInjection c={me.holdings.find((h) => h.uid === injectPick)}
+          investable={investableOf(me, quarter)}
+          confirm={(amt) => injectCapital(me.holdings.find((h) => h.uid === injectPick), amt)}
+          close={() => setInjectPick(null)} />
       )}
       {!sheet && !initPick && shortlist.length > 0 && (
         <Shortlist item={shortlist[0]} holding={me.holdings.find((h) => h.uid === shortlist[0].uid)}

@@ -18,6 +18,7 @@ import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, BASE_RATE, BOOK, CAPITAL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST,
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
+  exitNetOf, mepCut,
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   CV_FEE, IPO_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
@@ -632,8 +633,9 @@ function GuidedRun({ dark, setDark, back }) {
       news.push({ q: nq, e: "⚠️", tone: "neg", t: `<b>${n.name}</b> reißt den Covenant von ${x(n.covLimit ?? COV_DEFAULT)} bei ${x(n.netDebt / Math.max(0.5, ebitdaOf(n)))}. Noch ein Halbjahr bis zum Enforcement.` });
     }
     if (n.netDebt < -0.5) {
-      const sweep = -n.netDebt;
-      bookOff(n, "dist", sweep);
+      // Wie im Hauptspiel: Auch eine Rekapitalisierung teilt das Management mit
+      const out = -n.netDebt, sweep = mepCut(n, out);
+      bookOff(n, "dist", out);
       n.netDebt = 0; n.cashOut = (n.cashOut || 0) + sweep; n.recapOut = (n.recapOut || 0) + sweep;
       news.push({ q: nq, e: "💵", tone: "pos", t: `<b>${n.name}</b> kehrt ${eur(sweep)} Überschussliquidität aus — Nettoverschuldung bei null.` });
     }
@@ -658,7 +660,7 @@ function GuidedRun({ dark, setDark, back }) {
        unter den Käufern, der in der Partie über makeOffers abgebildet ist.   */
     if (proc && nq >= proc.resolveQ && (n.breach || 0) < 2) {
       const g2 = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
-      const n2 = g2 * (1 - PROC_FEE) * (n.ltip ? 1 - LTIP_SHARE : 1);
+      const n2 = exitNetOf(n, g2, PROC_FEE);
       setOffer({ gross: g2, net: n2, moic: dealMoic(n, n2) });
       news.push({ q: nq, e: "📨", tone: "neu",
         t: `Gebote für <b>${n.name}</b> liegen vor: ${eur(n2)} netto, ${dealMoic(n, n2).toFixed(2)}× auf das eingesetzte Eigenkapital. Der Wettbewerb im Prozess hat den Preis über das getrieben, was ein bilateraler Zuruf gebracht hätte.` });
@@ -675,7 +677,7 @@ function GuidedRun({ dark, setDark, back }) {
   function exitMoic(z) {
     if (!z) return null;
     const g = Math.max(0, eqvOf(z, dealMultiple(z, market, PRAC_ATTRS.negotiation)));
-    return dealMoic(z, g * (1 - PROC_FEE) * (z.ltip ? 1 - LTIP_SHARE : 1));
+    return dealMoic(z, exitNetOf(z, g, PROC_FEE));
   }
 
   /* Deal-IRR auf Halbjahresbasis: eine Auszahlung am Anfang, ein Rückfluss am
@@ -704,7 +706,7 @@ function GuidedRun({ dark, setDark, back }) {
         if (pool.length) rng.pick(pool).f(z);
       }
       maturePeople(rng, z, market, t + 1, false, [], []);
-      if (z.netDebt < -0.5) { z.cashOut = (z.cashOut || 0) + -z.netDebt; bookOff(z, "dist", -z.netDebt); z.netDebt = 0; }
+      if (z.netDebt < -0.5) { z.cashOut = (z.cashOut || 0) + mepCut(z, -z.netDebt); bookOff(z, "dist", -z.netDebt); z.netDebt = 0; }
       z.hist = [...z.hist, { rev: z.revenue, eb: ebitdaOf(z), nd: z.netDebt, mg: z.margin, ql: z.quality,
         eq: navValueOf(z, market), st: 1, out: z.cashOut || 0, fin: periodFin(z) }];
       resetPeriod(z);
@@ -712,7 +714,7 @@ function GuidedRun({ dark, setDark, back }) {
     rng.setSeed(keep);
     if ((z.breach || 0) >= 2) return { moic: 0, score: pracScore(0, PRAC_PERIODS) };
     const g = Math.max(0, eqvOf(z, dealMultiple(z, market, PRAC_ATTRS.negotiation)));
-    const nt = g * (1 - PROC_FEE) * (z.ltip ? 1 - LTIP_SHARE : 1);
+    const nt = exitNetOf(z, g, PROC_FEE);
     const mo = dealMoic(z, nt);
     return { moic: mo, irr: pracIrr(mo, PRAC_PERIODS), score: pracScore(mo, PRAC_PERIODS) };
   }
@@ -837,7 +839,7 @@ function GuidedRun({ dark, setDark, back }) {
     // Exit über einen strukturierten Prozess: kein Kanalabschlag, damit in der
     // Value Bridge ausschließlich die eigene Arbeit sichtbar wird.
     const gross = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
-    const net = gross * (1 - PROC_FEE) * (n.ltip ? 1 - LTIP_SHARE : 1);
+    const net = exitNetOf(n, gross, PROC_FEE);
     const bridge = makeBridge(n, gross, net);
     const moic = dealMoic(n, net);
     const base = exitMoic(sh);
@@ -904,7 +906,7 @@ function GuidedRun({ dark, setDark, back }) {
   if (!c) return null;
   const nav = navValueOf(c, market), moic = (nav + (c.cashOut || 0)) / c.costTotal;
   const offerGross = Math.max(0, eqvOf(c, dealMultiple(c, market, PRAC_ATTRS.negotiation)));
-  const offerNet = offerGross * (1 - PROC_FEE) * (c.ltip ? 1 - LTIP_SHARE : 1);
+  const offerNet = exitNetOf(c, offerGross, PROC_FEE);
   const offerMoic = dealMoic(c, offerNet);
 
   return (

@@ -18,7 +18,8 @@
    Die reinen Funktionen stehen hier und nicht in der Komponente, damit sich
    Wiederherstellung und Referenzprüfung ohne React testen lassen. */
 import type {
-  ExitStartIntent, HireIntent, InitiativeIntent, OfferDecisionIntent, SearchIntent,
+  EquityInjectionIntent, ExitStartIntent, HireIntent, InitiativeIntent, OfferDecisionIntent,
+  SearchIntent,
 } from "@/lib/engine/turnTypes";
 
 export interface TurnDraft {
@@ -26,6 +27,7 @@ export interface TurnDraft {
   ddStaged: Record<string, true>;
   searches: SearchIntent[];
   initiatives: InitiativeIntent[];
+  equityInjections: EquityInjectionIntent[];
   ltipStaged: string[];
   studyStaged: string[];
   exitStarts: ExitStartIntent[];
@@ -39,13 +41,15 @@ export interface TurnDraft {
 }
 
 export const EMPTY_DRAFT: TurnDraft = {
-  bids: {}, ddStaged: {}, searches: [], initiatives: [], ltipStaged: [], studyStaged: [],
-  exitStarts: [], hireDecisions: [], offerDecisions: [], shortlistCursor: 0, exitQueueCursor: 0,
+  bids: {}, ddStaged: {}, searches: [], initiatives: [], equityInjections: [], ltipStaged: [],
+  studyStaged: [], exitStarts: [], hireDecisions: [], offerDecisions: [],
+  shortlistCursor: 0, exitQueueCursor: 0,
 };
 
 export const isDraftEmpty = (d: TurnDraft) =>
   Object.keys(d.bids).length === 0 && Object.keys(d.ddStaged).length === 0
-  && d.searches.length === 0 && d.initiatives.length === 0 && d.ltipStaged.length === 0
+  && d.searches.length === 0 && d.initiatives.length === 0 && d.equityInjections.length === 0
+  && d.ltipStaged.length === 0
   && d.studyStaged.length === 0 && d.exitStarts.length === 0 && d.hireDecisions.length === 0
   && d.offerDecisions.length === 0 && d.shortlistCursor === 0 && d.exitQueueCursor === 0;
 
@@ -107,6 +111,7 @@ export function restoreDraft(raw: string | null, refs: DraftRefs): TurnDraft | n
     ddStaged: byDealId(o.ddStaged) as TurnDraft["ddStaged"],
     searches: byUid<SearchIntent>(o.searches),
     initiatives: byUid<InitiativeIntent>(o.initiatives),
+    equityInjections: byUid<EquityInjectionIntent>(o.equityInjections),
     exitStarts: byUid<ExitStartIntent>(o.exitStarts),
     ltipStaged: arr<string>(o.ltipStaged).filter((u) => refs.holdingUids.has(u)),
     studyStaged: arr<string>(o.studyStaged).filter((u) => refs.holdingUids.has(u)),

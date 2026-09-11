@@ -24,6 +24,7 @@ const fullDraft: TurnDraft = {
   ddStaged: { d2: true },
   searches: [{ holdingUid: "c1", seat: "ceo" }],
   initiatives: [{ holdingUid: "c2", dim: "plat", id: "opex" }],
+  equityInjections: [{ holdingUid: "c1", amount: 12 }],
   ltipStaged: ["c1"],
   studyStaged: ["c2"],
   exitStarts: [{ holdingUid: "c1", action: "process" }],
