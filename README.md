@@ -16,6 +16,14 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   der ursprünglichen Datei `pe-leagues-mvp7.tsx` übernommen — an der Logik
   wurde nichts verändert.
 
+- **`components/pel/battle.tsx`**
+  Die grafische Grundausstattung der Unternehmenskarten in Dealflow und
+  Portfolio ("Battle Cards"): Rahmen und Seltenheitsstufen, Sektorwappen, das
+  aus dem Firmennamen berechnete Artwork, Kennzahlenkacheln, Messbalken,
+  Notenplakette und Netzdiagramm — dazu die zugehörigen Stilregeln. Die Datei
+  enthält ausschließlich Darstellung; welche Zahl wann sichtbar ist, entscheidet
+  weiterhin `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
+
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
   PE-Praktiker: achtzehn Prüfungen an der Spiellogik (Covenant-Basis, IRR,

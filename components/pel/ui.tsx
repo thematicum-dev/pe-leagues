@@ -27,6 +27,10 @@ import {
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
   retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
 } from "@/lib/engine";
+import {
+  BATTLE_CSS, Ability, AX, Band, CardArt, CostBadge, GradeBadge, Meter, SectorEmblem,
+  StatRadar, StatTile,
+} from "./battle";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -136,11 +140,6 @@ export const CSS = `
 .pel .dt{font-size:12.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:5px;}
 .pel .dd{font-size:13px;line-height:1.62;color:var(--ink2);}
 .pel .dd b{color:var(--ink);font-weight:600;}
-.pel .kpis{border-top:1px solid var(--rule);}
-.pel .krow{display:flex;}
-.pel .krow + .krow{border-top:1px solid var(--rule);}
-.pel .krow > div{flex:1;min-width:0;padding:11px 8px;text-align:center;}
-.pel .krow > div + div{border-left:1px solid var(--rule);}
 .pel .kv{font-size:14px;font-weight:500;margin-top:5px;white-space:nowrap;}
 .pel .deltas{display:flex;border-top:1px solid var(--rule);}
 .pel .deltas > div{flex:1;padding:12px 10px;text-align:center;}
@@ -166,7 +165,6 @@ export const CSS = `
 .pel .infsheet .ic{width:100%;margin-top:18px;}
 .pel .infgrip{width:34px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;}
 .pel .hdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px;}
-.pel .shelfmeta{font-size:11.5px;line-height:1.4;color:var(--ink2);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .stat{font-size:9px;letter-spacing:.13em;text-transform:uppercase;opacity:.55;white-space:nowrap;}
 .pel .statv{font-size:17px;font-weight:500;white-space:nowrap;margin-top:3px;}
 .pel .prog{height:3px;background:rgba(255,255,255,.14);margin-top:12px;}
@@ -203,28 +201,6 @@ export const CSS = `
 .pel .card.st:before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--sec);opacity:.85;}
 .pel .secthead{display:flex;justify-content:space-between;align-items:baseline;
   padding:22px 2px 6px;border-top:1px solid var(--rule);margin:18px 16px 0;}
-.pel .card.shelf{cursor:pointer;transition:border-color .15s ease;}
-.pel .card.shelf:hover{border-color:var(--ink2);}
-/* Ohne .pad an derselben Zeile: .pel .pad{padding:0 16px 16px} steht in dieser
-   Datei nach .shelfrow und hat dieselbe Spezifität -- es gewann und setzte den
-   oberen Innenabstand auf 0. Der Unternehmensname klebte dadurch an der
-   Oberkante der Karte. */
-.pel .shelfrow{display:flex;gap:13px;align-items:center;padding:19px 16px;}
-.pel .shelfmain{flex:1;min-width:0;}
-.pel .shelfname{font-size:14px;font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pel .shelfmoic{font-size:16px;font-weight:500;width:52px;text-align:right;flex:none;}
-/* Die Sparkline wird an der Metazeile ausgerichtet, nicht in der Zeile zentriert:
-   zentriert reichte sie in das Zeilenfeld des Namens hinein, und weil die Kurve
-   je nach Verlauf ihre Box oben ausfüllt, lag die Linie genau auf der Unterkante
-   des Namens. Die feste Höhe ersetzt zugleich die Ableitung aus dem viewBox --
-   die ist als Flex-Element nicht in jedem Browser gleich. */
-.pel .shelfspark{width:64px;height:26px;flex:none;display:block;align-self:flex-end;}
-.pel .card.slot{border-style:dashed;background:transparent;box-shadow:none;}
-.pel .hhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:16px 15px 0;}
-.pel .flagpill{flex:none;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;
-  border-radius:99px;color:var(--teal);background:color-mix(in srgb, var(--teal) 13%, transparent);
-  padding:5px 10px;white-space:nowrap;}
-.pel .flagpill.att{color:var(--ox);background:color-mix(in srgb, var(--ox) 13%, transparent);}
 .pel .card.lm{border-color:var(--gold);box-shadow:0 0 22px -8px var(--gold),0 1px 0 var(--glow);}
 .pel .card.lm:before{background:var(--gold);height:4px;}
 .pel .card h3{margin:0;padding:18px 16px 10px;font-size:17px;}
@@ -400,28 +376,6 @@ export const CSS = `
 @media (prefers-reduced-motion:reduce){.pel .item{animation:none}}
 
 
-/* Reifegrade People / Performance / Growth */
-.pel .ppa{padding:14px 15px 10px;border-top:1px solid var(--rule);}
-.pel .ppa .row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
-.pel .ppa .lbl{width:74px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
-.pel .pips{display:flex;gap:3px;flex:1;}
-.pel .pip{flex:1;height:7px;border-radius:99px;background:var(--rule);opacity:.6;}
-.pel .pip.on{opacity:1;}
-.pel .pip.p{background:var(--gold);} .pel .pip.l{background:var(--teal);} .pel .pip.a{background:#8478BE;}
-.pel .pip.half{opacity:.55;}
-.pel .ppa .st{font-size:10px;min-width:56px;text-align:right;color:var(--ink2);}
-.pel .ppa .st.warn{color:var(--ox);} .pel .ppa .st.run{color:var(--gold);}
-
-/* Positionsreihe */
-.pel .seats{display:flex;gap:7px;padding:12px 15px 4px;}
-.pel .seat{flex:1;border:1px solid var(--rule);border-radius:8px;padding:11px 6px;text-align:center;background:transparent;}
-.pel .seat .rn{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);}
-.pel .seat .sk{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;line-height:1.5;}
-.pel .seat.vac{border-style:dashed;border-color:var(--ox);}
-.pel .seat.vac .sk{color:var(--ox);}
-.pel .seat.busy{border-color:var(--gold);}
-.pel .seat:hover:not(:disabled){background:var(--zebra);}
-
 .pel .sdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;}
 .pel .lb .bar2{height:4px;background:var(--rule);width:52px;}
 .pel .lb .bar2 i{display:block;height:100%;background:var(--gold);}
@@ -435,9 +389,9 @@ export const CSS = `
   background .15s ease,color .15s ease,box-shadow .15s ease,border-color .15s ease,opacity .15s ease;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .pel button:active:not(:disabled){transform:scale(.94);}
-.pel .seat, .pel .lb, .pel .dot{-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+.pel .bseat, .pel .lb, .pel .dot{-webkit-tap-highlight-color:transparent;touch-action:manipulation;
   transition:transform .12s cubic-bezier(.34,1.56,.64,1),background .15s ease,border-color .15s ease;}
-.pel .seat:active:not(:disabled){transform:scale(.95);}
+.pel .bseat:active:not(:disabled){transform:scale(.95);}
 .pel .lb[role="button"]:active{transform:scale(.985);}
 
 /* Karten heben sich beim Erscheinen sanft aus dem Papier — kein Pop-in ohne Grund */
@@ -550,7 +504,7 @@ export const CSS = `
 .pel .tabs button .badge{position:absolute;top:2px;margin-left:16px;background:var(--ox);color:#fff;
   font-size:9px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;
   justify-content:center;padding:0 3px;box-shadow:0 0 0 2px var(--panel);}
-`;
+` + BATTLE_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
@@ -734,71 +688,123 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
      als die Karte darüber.                                                   */
   const statements = useMemo(() => dealStatements(d), [d]);
 
+  /* Seltenheitsstufe der Karte. Sie ist keine neue Spielgröße, sondern die
+     sichtbare Form dessen, was ohnehin galt: Ein Trophy Asset ist das seltenste
+     Objekt des Zyklus, ein proprietärer Zugang seltener als ein offener
+     Prozess. Auf einer Sammelkarte liest man das am Rahmen. */
+  const tier = lm ? "myth" : d.type === "prop" ? "rare" : "common";
+  const grow = (v, dig = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dig).replace(".", ",")}`;
+
   return (
-    <div className={"card st" + (lm ? " lm" : "")} style={{ "--sec": SECCOLOR[d.sector] }}>
-      <h3 className="disp">{lm ? "🏛️ " : ""}{d.name}</h3>
-      <div className="pad" style={{ paddingBottom: 8 }}>
-        <span className={"tag" + (d.type !== "process" ? " prop" : "")}>
-          {lm ? "Trophy Asset" : d.type === "prop" ? "🤝 Proprietär (Off-Market)" : "📄 Strukturierter Prozess"}
-        </span>
-        <span className="tag"><i className="sdot" style={{ background: SECCOLOR[d.sector] }} />{d.sector}</span>
-        {d.flag && !flagHidden && (isAngle(d.flag)
-          ? <span className="tag prop">◆ {d.flag}</span>
-          : <span className="tag flag">⚑ {d.flag}</span>)}
-        {d.flag && flagHidden && <span className="tag">⚑ ?</span>}
-        <p className="biz">{d.desc}</p>
+    <div className={"bcard tier-" + tier} style={{ "--sec": SECCOLOR[d.sector] }}>
+      <i className="bedge" />
+
+      {/* Kopf: Wappen, Name, Preisschild — auf jeder Karte an derselben Stelle,
+          damit sich zwei Ziele ohne Lesen vergleichen lassen. */}
+      <div className="bcrown">
+        <span className="bcrest"><SectorEmblem sector={d.sector} /></span>
+        <div className="bnamewrap">
+          <h3 className="bname disp">{lm ? "🏛️ " : ""}{d.name}</h3>
+          <div className="bsub"><i className="bdot" />{SECLABEL[d.sector]}</div>
+        </div>
+        <CostBadge label="Preisvorstellung" value={x(d.askMult)} tone={lm ? "gold" : ""}
+          sub={`Sektor ${x(market[d.sector])}`} />
       </div>
-      {/* Reihenfolge folgt dem Lesefluss einer Investmentvorlage: erst das
-          Geschäft (Umsatz und Wachstum), dann der Ertrag und seine Qualität,
-          dann die Bewertung. Die Rechnung — Enterprise Value, Equity Ticket
-          und Implied MoM — steht unter den Reglern, weil sie sich mit Gebot
-          und Leverage bewegt. */}
-      <table className="ledger"><tbody>
-        <tr><td className="lab">Umsatz LTM</td><td>{eur(d.revenue)}</td></tr>
-        <tr><td className="lab">Umsatzwachstum L3Y</td><td>{pct(d.growth)}
-          {bench
-            ? <span style={{ color: gapG >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                {" "}{gapG >= 0 ? "+" : "−"}{Math.abs(gapG).toFixed(1).replace(".", ",")} pp</span>
-            : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>}</td></tr>
-        <tr><td className="lab wrap">Erwartetes Wachstum vs. Sektor Benchmark</td><td>
-          {dd
-            ? <span style={{ color: dEst >= 0 ? "var(--teal)" : "var(--ox)" }}>
-                {dEst >= 0 ? "+" : "−"}{Math.abs(dEst).toFixed(1).replace(".", ",")}
-                <span style={{ color: "var(--ink2)", fontSize: 11 }}>
-                  {" "}± {dBand.toFixed(1).replace(".", ",")} pp p.a.
-                </span>
-              </span>
-            : <span style={{ color: "var(--ink2)" }}>— <span style={{ fontSize: 11 }}>nur mit Datenraum</span></span>}
-          <Info k="drift" />
-        </td></tr>
 
-        <tr className="sep"><td className="lab">Adj. EBITDA LTM</td><td>{hidden ? "—" : eur(eb)}<Info k="adjEbitda" /></td></tr>
-        <tr><td className="lab wrap">Adj. EBITDA-Marge vs. Sektor Benchmark</td><td>{hidden ? "—" : pct(d.margin)}
-          {!hidden && (bench
-            ? <span style={{ color: gapM >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                {" "}{gapM >= 0 ? "+" : "−"}{Math.abs(gapM).toFixed(1).replace(".", ",")} pp</span>
-            : <span style={{ color: "var(--ink2)", fontSize: 11 }}>{" "}?</span>)}</td></tr>
-        <tr><td className="lab">Adj. EBITDA − Capex</td><td>{hidden ? "—" : eur(eb - capexA)}</td></tr>
-        <tr><td className="lab">Cash Conversion</td>
-          <td style={{ color: hidden ? "var(--ink2)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
-            {hidden ? "—" : pct(conv)}<Info k="conv" /></td></tr>
-        <tr><td className="lab">Assetqualität</td><td>{hidden ? "—" : Math.round(d.quality)}<Info k="quality" /></td></tr>
+      <CardArt sector={d.sector} color={SECCOLOR[d.sector]} name={d.name} tier={tier}>
+        <div className="bartfoot">
+          <span className="btype">
+            <SectorEmblem sector={d.sector} />
+            {SECLABEL[d.sector]}
+            <s>· {eur(d.revenue)} Umsatz</s>
+          </span>
+          <span className={"bstate " + (lm || d.type === "prop" ? "gold" : "dim")}>
+            {lm ? "⬢ Trophy Asset" : d.type === "prop" ? "🤝 Off-Market" : "📄 Prozess"}
+          </span>
+        </div>
+      </CardArt>
 
-        <tr className="sep"><td className="lab">EV/EBITDA Sektor</td><td>{x(market[d.sector])}</td></tr>
-        <tr><td className="lab">Bewertungserwartung</td><td>{x(d.askMult)}</td></tr>
-      </tbody></table>
-      <div className="pad" style={{ paddingTop: 12 }}>
+      {/* Flaggen sind die Fähigkeiten der Karte: Eigenschaften, die den Wert
+          verschieben — die Buy-&-Build-These nach oben, ein Risiko nach unten. */}
+      {(d.flag || lm) && (
+        <div className="babils">
+          {lm && <Ability kind="angle">Alle fünf Fonds bieten mit</Ability>}
+          {d.flag && !flagHidden && (
+            <Ability kind={isAngle(d.flag) ? "angle" : "risk"}>{d.flag}</Ability>
+          )}
+          {d.flag && flagHidden && <Ability kind="hidden">Flagge verdeckt — Datenraum nötig</Ability>}
+        </div>
+      )}
+
+      <p className="bflavor">{d.desc}</p>
+
+      {/* Reihenfolge wie in einer Investmentvorlage: erst das Geschäft, dann der
+          Ertrag, dann das Profil, zuletzt Bewertung und Underwriting. Die
+          Rechnung steht unten bei den Reglern, weil sie sich mit ihnen bewegt. */}
+      <Band right="LTM">Geschäft</Band>
+      <div className="bstats">
+        <StatTile label="Umsatz" value={eur(d.revenue)} />
+        <StatTile label="Wachstum L3Y" value={pct(d.growth)}
+          tone={bench ? (gapG >= 0 ? "teal" : "ox") : ""}
+          sub={bench ? `${grow(gapG)} pp vs. Sektor` : "Sektor: ?"} />
+        <StatTile label="Erw. Wachstum" info={<Info k="drift" />}
+          value={dd ? grow(dEst) : "—"}
+          tone={dd ? (dEst >= 0 ? "teal" : "ox") : "dim"}
+          sub={dd ? `± ${dBand.toFixed(1).replace(".", ",")} pp p. a.` : "nur mit Datenraum"} />
+      </div>
+
+      <Band>Ertrag</Band>
+      <div className="bstats">
+        <StatTile label="Adj. EBITDA" info={<Info k="adjEbitda" />}
+          value={hidden ? "—" : eur(eb)} tone={hidden ? "dim" : ""} />
+        <StatTile label="Adj. EBITDA-Marge"
+          value={hidden ? "—" : pct(d.margin)}
+          tone={hidden ? "dim" : bench ? (gapM >= 0 ? "teal" : "ox") : ""}
+          sub={hidden ? "verdeckt" : bench ? `${grow(gapM)} pp vs. Benchmark` : "Benchmark: ?"} />
+        <StatTile label="Adj. EBITDA − Capex"
+          value={hidden ? "—" : eur(eb - capexA)} tone={hidden ? "dim" : ""} />
+      </div>
+      <div className="bmeters">
+        <Meter label="Cash Conversion" info={<Info k="conv" />}
+          v={hidden ? 0 : conv} max={100}
+          value={hidden ? "—" : pct(conv)}
+          tone={hidden ? "neutral" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox"}
+          sub="Adj. EBITDA abzüglich Capex und Working Capital, vor Zinsen und Steuern" />
+      </div>
+
+      {/* Das Netzdiagramm ersetzt keine Zahl — es macht die Silhouette des Ziels
+          erkennbar, bevor eine Zahl gelesen ist. Ohne Datenraum bleibt es leer,
+          sonst ließe sich aus der Fläche zurückrechnen, was verdeckt ist. */}
+      <Band>Profil</Band>
+      <div className="bprofile">
+        <StatRadar color={SECCOLOR[d.sector]} redacted={hidden}
+          note={hidden ? "Datenraum erforderlich" : null}
+          axes={[
+            { k: "Marge", v: AX.margin(d.margin) },
+            { k: "Wachstum", v: AX.growth(d.growth) },
+            { k: "Größe", v: AX.size(eb) },
+            { k: "Cash", v: AX.conv(conv) },
+            { k: "Qualität", v: AX.quality(d.quality) },
+          ]} />
+        <GradeBadge score={hidden ? null : d.quality} label="Assetqualität"
+          extra={<Info k="quality" />}
+          sub={hidden
+            ? "Ohne Datenraum bleibt die Bewertung des Objekts verdeckt."
+            : `Marktreferenz ${x(market[d.sector])} · Erwartung ${x(d.askMult)} · Reservationspreis ≈ ${x(reserve)}`} />
+      </div>
+
+      <div className="bacts">
         <StatementsButton statements={statements} hidden={hidden}
           label={`📑 Financial Statements · ${DEAL_YEARS} Jahre`} />
         {hidden && (
-          <p className="hint" style={{ margin: "6px 0 12px" }}>
+          <p className="hint" style={{ margin: "6px 0 0" }}>
             Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
           </p>
         )}
         {dd ? (
-          <p className="hint teal">🔍 Due Diligence abgeschlossen</p>
+          <p className="hint teal" style={{ marginTop: 8 }}>🔍 Due Diligence abgeschlossen</p>
         ) : (
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginTop: 8 }}>
             <button onClick={onDD} className={sp("dd").trim()}
               disabled={investableOf(me, quarter) < ddCost || ddFull} style={{ width: "100%" }}>
               {ddFull ? `🔍 Deal-Team ausgelastet · ${ddUsed}/${ddCap} Prozesse`
@@ -812,42 +818,97 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             </p>
           </div>
         )}
-        <div className="slrow"><span>Gebot</span>
-          <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
-        <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => setMult(+e.target.value)} />
-        <p className={"hint" + (mult < reserve ? " ox" : "")} style={{ margin: "2px 0 0" }}>
-          {mult < reserve
-            ? `Unter der Schmerzgrenze des Verkäufers (rund ${x(reserve)}) — er zieht das Objekt zurück.`
-            : d.type === "prop"
-              ? `Off-Market. Reservationspreis rund ${x(reserve)}, Mitbieter aus der Kohorte sind selten.`
-              : `Auktion. Reservationspreis rund ${x(reserve)}, die Kohorte bietet mit.`}
-        </p>
-        <div className="slrow" style={{ marginTop: 8 }}><span>Leverage</span>
-          <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
-        <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => setLev(+e.target.value)} />
-        <table className="ledger" style={{ marginTop: 10 }}><tbody>
-          <tr><td className="lab">Enterprise Value</td><td>{hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)}</td></tr>
-          <tr><td className="lab">Equity Ticket</td><td style={{ color: afford ? "var(--ink)" : "var(--ox)" }}>{eur(eq)}</td></tr>
-          {/* Bewegt sich mit beiden Reglern: ein höheres Gebot drückt den
-              Multiple, mehr Fremdkapital hebelt ihn — bis der Zins ihn
-              wieder auffrisst. */}
-          <tr><td className="lab">Implied MoM {LBO_YEARS}Y</td>
-            <td style={{ color: mom == null ? "var(--ink2)" : mom >= 2 ? "var(--teal)" : mom >= 1.5 ? "var(--ink)" : "var(--ox)", fontWeight: 600 }}>
-              {mom == null ? "—" : `${mom.toFixed(2)}×`}
-              <Info k="impliedMoM" />
-            </td></tr>
-        </tbody></table>
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          {bid ? (
-            <button className="ox" style={{ flex: 1 }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
-          ) : (
-            <button className={"solid" + sp("bid")} style={{ flex: 1 }} disabled={!afford} onClick={() => { haptic(10); setBid({ mult, lev }); }}>
-              {!afford ? (me.holdings.length >= MAX_SLOTS ? "Portfolio voll" : "Dry Powder reicht nicht")
-                : mult < reserve ? "Angebot abgeben — vermutlich zu niedrig" : "Angebot abgeben"}
-            </button>
-          )}
+      </div>
+
+      <Band right={`max. ${x(cap)} Leverage`}>Underwriting</Band>
+      <div className="bfoot">
+        <div className="bdial">
+          <div className="slrow"><span>Gebot</span>
+            <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
+          <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => setMult(+e.target.value)} />
+          <p className={"hint" + (mult < reserve ? " ox" : "")} style={{ margin: "2px 0 0" }}>
+            {mult < reserve
+              ? `Unter der Schmerzgrenze des Verkäufers (rund ${x(reserve)}) — er zieht das Objekt zurück.`
+              : d.type === "prop"
+                ? `Off-Market. Reservationspreis rund ${x(reserve)}, Mitbieter aus der Kohorte sind selten.`
+                : `Auktion. Reservationspreis rund ${x(reserve)}, die Kohorte bietet mit.`}
+          </p>
+        </div>
+        <div className="bdial">
+          <div className="slrow"><span>Leverage</span>
+            <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
+          <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => setLev(+e.target.value)} />
+        </div>
+        <div className="bfnums">
+          <div className="bfrow">
+            <span className="bflab">Enterprise Value</span>
+            <span className="bfval">{hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)}</span>
+          </div>
+          <div className="bfrow">
+            <span className="bflab">Equity Ticket</span>
+            <span className="bfval" style={{ color: afford ? "var(--ink)" : "var(--ox)" }}>{eur(eq)}</span>
+          </div>
+        </div>
+        {/* Schlagkraft der Karte: der Base Case zum aktuellen Reglerstand. Ein
+            höheres Gebot drückt ihn, mehr Fremdkapital hebelt ihn — bis der Zins
+            ihn wieder auffrisst. */}
+        <div className="bpower">
+          <span className="bpowerlab">Implied MoM · {LBO_YEARS} Jahre<Info k="impliedMoM" /></span>
+          <span className={"bpowerval " + (mom == null ? "dim" : mom >= 2 ? "teal" : mom >= 1.5 ? "" : "ox")}>
+            {mom == null ? "—" : `${mom.toFixed(2)}×`}
+          </span>
         </div>
       </div>
+
+      <div className="bacts" style={{ paddingBottom: 14 }}>
+        {bid ? (
+          <button className="ox" style={{ width: "100%" }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
+        ) : (
+          <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic(10); setBid({ mult, lev }); }}>
+            {!afford ? (me.holdings.length >= MAX_SLOTS ? "Portfolio voll" : "Dry Powder reicht nicht")
+              : mult < reserve ? "Angebot abgeben — vermutlich zu niedrig" : "Angebot abgeben"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Die Ankündigung des Trophy Assets, bevor es in den Dealflow kommt. Sie ist
+   dieselbe Karte wie ein Ziel, nur mit verdeckten Werten — deshalb derselbe
+   Rahmen in der höchsten Seltenheitsstufe statt einer eigenen Kachelform.
+   `note` trägt den Zusatz aus dem Übungsmodus; der Mehrspielerbetrieb gibt
+   ihn nicht mit.                                                            */
+export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }) {
+  return (
+    <div className={"bcard tier-myth" + (fresh ? " fresh" : "")} style={{ "--sec": SECCOLOR[landmark.sector] }}>
+      <i className="bedge" />
+      <div className="bcrown">
+        <span className="bcrest"><SectorEmblem sector={landmark.sector} /></span>
+        <div className="bnamewrap">
+          <h3 className="bname disp">🏛️ {landmark.name}</h3>
+          <div className="bsub"><i className="bdot" />{SECLABEL[landmark.sector]}</div>
+        </div>
+        <CostBadge label="Am Markt in" value={hj(LM_DEAL - quarter)} tone="gold" />
+      </div>
+      <CardArt sector={landmark.sector} color={SECCOLOR[landmark.sector]} name={landmark.name} tier="myth">
+        <div className="bartfoot">
+          <span className="btype">
+            <SectorEmblem sector={landmark.sector} />
+            {SECLABEL[landmark.sector]}
+            <s>· {eur(landmark.revenue)} Umsatz</s>
+          </span>
+          <span className="bstate gold">⬢ Trophy Asset</span>
+        </div>
+      </CardArt>
+      <p className="bflavor">{landmark.desc}</p>
+      {/* Zwei Kacheln: Der Termin steht schon oben rechts im Preisschild. */}
+      <div className="bstats two" style={{ paddingBottom: 4 }}>
+        <StatTile label="Umsatz" value={eur(landmark.revenue)} />
+        <StatTile label="Kennzahlen" value="—" tone="dim" sub="erst mit dem Datenraum" />
+      </div>
+      {note && <div className="bnote gold">{note}</div>}
+      <div style={{ height: 14 }} />
     </div>
   );
 }
@@ -885,100 +946,161 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   const canNow = ripe && !inProc;                   // Bilateral und CV: jedes Halbjahr erneut
   const ipoOpen = canNow && st === 1 && market[c.sector] >= SECTORS[c.sector].m * 1.05 && eb >= IPO_EBITDA;
 
+  /* Eine Beteiligung im Prozess ist die seltenste Karte des Portfolios — ihr
+     Wert steht zur Abstimmung. Sie bekommt deshalb denselben goldenen Rahmen
+     wie ein Trophy Asset im Dealflow. */
+  const tier = inProc ? "myth" : "common";
+  const covLim = c.covLimit ?? COV_DEFAULT;
+  const head = covLim - lev;
+  const grow = (v, dig = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dig).replace(".", ",")}`;
+  const cagr = cagrOf(c);
+  const seatDefs = [["ceo", "CEO"], ["cfo", "CFO"], ["r3", ROLE3[c.sector].n]];
+
   return (
-    <div className={"card st" + (inProc ? " lm" : "")} id={"h_" + c.uid} style={{ "--sec": SECCOLOR[c.sector] }}>
-      <div className="hhead">
-        <h3 className="disp" style={{ padding: 0 }}>{c.cv ? "🔄 " : ""}{c.name}</h3>
-        <span className={"flagpill" + (health.attention ? " att" : "")}>
-          {health.attention ? "◉ Needs attention" : "○ On track"}
-        </span>
+    <div className={"bcard tier-" + tier} id={"h_" + c.uid} style={{ "--sec": SECCOLOR[c.sector] }}>
+      <i className="bedge" />
+
+      <div className="bcrown">
+        <span className="bcrest"><SectorEmblem sector={c.sector} /></span>
+        <div className="bnamewrap">
+          <h3 className="bname disp">{c.cv ? "🔄 " : ""}{c.name}</h3>
+          <div className="bsub">
+            <i className="bdot" />{SECLABEL[c.sector]}
+            <span>· {c.holdQ} HJ gehalten</span>
+            {st < 1 && <span>· {Math.round(st * 100)} % Anteil</span>}
+          </div>
+        </div>
+        <CostBadge label="Einstand" value={eur(cost)}
+          sub={c.equityIn > 0.5 ? `inkl. ${eur(c.equityIn)} Nachschuss` : `Einstieg ${x(c.entryMult)}`} />
       </div>
 
-      <div className="pad" style={{ paddingBottom: 8 }}>
-        <span className="tag"><i className="sdot" style={{ background: SECCOLOR[c.sector] }} />{c.sector}</span>
-        <span className="tag">⏱ {c.holdQ} HJ gehalten</span>
-        {st < 1 && <span className="tag prop">{Math.round(st * 100)} % Anteil</span>}
-        {c.flag && (isAngle(c.flag)
-          ? <span className="tag prop">◆ {c.flag}</span>
-          : <span className="tag flag">⚑ {c.flag}</span>)}
-        <p className="biz">{c.desc}</p>
-      </div>
+      <CardArt sector={c.sector} color={SECCOLOR[c.sector]} name={c.name} tier={tier}>
+        <div className="bartfoot">
+          <span className="btype">
+            <SectorEmblem sector={c.sector} />
+            {SECLABEL[c.sector]}
+            <s>· {eur(c.revenue)} Umsatz</s>
+          </span>
+          <span className={"bstate" + (inProc ? " gold" : health.attention ? " att" : "")}>
+            {inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
+          </span>
+        </div>
+      </CardArt>
+
+      {(c.flag || c.ltip || health.top) && (
+        <div className="babils">
+          {c.flag && (isAngle(c.flag)
+            ? <Ability kind="angle">{c.flag}</Ability>
+            : <Ability kind="risk">{c.flag}</Ability>)}
+          {health.top && <Ability kind="risk">{health.top.t}</Ability>}
+          {c.ltip && <Ability kind="good">MEP · {Math.round(LTIP_SHARE * 100)} % Sweet Equity</Ability>}
+        </div>
+      )}
+
+      <p className="bflavor">{c.desc}</p>
+
       {/* Jede Größe steht neben ihrer Referenz, immer in derselben Spaltenlogik:
-          Ist — eigene Entwicklung — Branchenreferenz. Vorher hingen Benchmark und
-          Marktwachstum als Zusätze in der Wertspalte und brachen dort um.        */}
-      <div className="kpis">
-        <div className="krow">
-          <div>
-            <div className="eyebrow">Umsatz</div>
-            <div className="mono kv">{eur(c.revenue)}</div>
+          Ist — eigene Entwicklung — Branchenreferenz. */}
+      <Band right="LTM">Geschäft</Band>
+      <div className="bstats">
+        <StatTile label="Umsatz" value={eur(c.revenue)} />
+        <StatTile label="Wachstum"
+          value={cagr == null ? "—" : pctS(cagr)}
+          tone={!c.dd || cagr == null ? "" : cagrPrem(c) >= 0 ? "teal" : "ox"}
+          sub={c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "Markt: ?"} />
+        <StatTile label="Adj. EBITDA" info={<Info k="adjEbitda" />} value={eur(eb)} />
+      </div>
+
+      <Band>Ertrag</Band>
+      <div className="bstats">
+        <StatTile label="Adj. EBITDA-Marge" value={pct(c.margin)}
+          tone={!c.dd ? "" : c.margin >= c.benchMargin ? "teal" : "ox"}
+          sub={c.dd ? `Benchmark ${pct(c.benchMargin)}` : "Benchmark: ?"} />
+        <StatTile label="Adj. EBITDA − Capex" value={cf ? eur(cf.eb - cf.capex) : "—"}
+          tone={cf ? "" : "dim"} />
+        <StatTile label="Cash Conversion" info={<Info k="conv" />}
+          value={conv == null ? "—" : pct(conv)}
+          tone={conv == null ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox"} />
+      </div>
+
+      {/* Der Leverage als Lebensbalken: die Marke ist der Covenant. Solange der
+          Balken links von ihr steht, ist Luft — rechts von ihr ist der Bruch. */}
+      <div className="bmeters">
+        <Meter label="Leverage gegen Covenant" info={<Info k="cov" />}
+          v={lev} max={Math.max(covLim * 1.45, lev * 1.08, 1)} mark={covLim}
+          value={x(lev)}
+          tone={c.breach ? "ox" : head < 0.4 ? "ox" : head < 1 ? "gold" : "teal"}
+          sub={`Covenant ${x(covLim)} · Zins ${pct(cf ? cf.rate : c.rate)} · ${
+            c.breach ? "gebrochen" : `${x(Math.max(0, head))} Luft`}`} />
+      </div>
+
+      <Band>Profil</Band>
+      <div className="bprofile">
+        <StatRadar color={SECCOLOR[c.sector]}
+          axes={[
+            { k: "Marge", v: AX.margin(c.margin) },
+            { k: "Wachstum", v: AX.growth(cagr == null ? SECTORS[c.sector].g : cagr) },
+            { k: "Größe", v: AX.size(eb) },
+            { k: "Cash", v: AX.conv(conv == null ? 0 : conv) },
+            { k: "Bilanz", v: AX.headroom(head) },
+          ]} />
+        <GradeBadge score={c.quality} label="Assetqualität" extra={<Info k="quality" />}
+          sub={c.entryQuality != null
+            ? `${grow(c.quality - c.entryQuality, 0)} Punkte seit Einstieg · Marktmultiple ${x(markMultiple(c, market))}`
+            : `Marktmultiple ${x(markMultiple(c, market))}`} />
+      </div>
+
+      {/* Reifegrade als Fähigkeitsbalken: drei Hebel, an denen im Halbjahr
+          gearbeitet wird — Mannschaft, Prozesse, Wachstum. */}
+      <Band>Reifegrad</Band>
+      <Stages c={c} compact={quarter} />
+
+      <Band right={`${(c.done || []).length} Programme`}>Führung</Band>
+      <div className="bseats">
+        {seatDefs.map(([k, nm]) => {
+          const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
+          const searching = !!se;
+          return (
+            <button key={k}
+              className={("bseat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
+                + (k === "cfo" ? sp("hire") : "")).trim()}
+              disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
+              <div className="rn">{nm}</div>
+              <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
+              <div className="rn2">{searching ? (se.waiting ? "Shortlist" : "läuft") : sk <= 0 ? "vakant"
+                : isCapped(c, k) ? `wirkt ${cappedSkill(c, k).toFixed(1)}` : eur(payOf(k, sk, eb))}</div>
+            </button>
+          );
+        })}
+      </div>
+      <p className="hint" style={{ padding: "8px 14px 0" }}>
+        Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · ein Halbjahr
+      </p>
+
+      <Band>Wertentwicklung</Band>
+      <div className="bfoot">
+        <div className="bfnums" style={{ marginTop: 0, borderTop: 0, paddingTop: 0 }}>
+          <div className="bfrow">
+            <span className="bflab">Enterprise Value</span>
+            <span className="bfval">{eur(evOf(c, markMultiple(c, market)))}
+              <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> bei {x(markMultiple(c, market))}</span></span>
           </div>
-          <div>
-            <div className="eyebrow">Wachstum</div>
-            <div className="mono kv" style={{ color: !c.dd || cagrOf(c) == null ? "var(--ink)" : cagrPrem(c) >= 0 ? "var(--teal)" : "var(--ox)" }}>
-              {cagrOf(c) == null ? "—" : pctS(cagrOf(c))}
-            </div>
-          </div>
-          <div>
-            <div className="eyebrow">Markt</div>
-            <div className="mono kv" style={{ color: "var(--ink2)" }}>{c.dd ? pctS(SECTORS[c.sector].g) : "—"}</div>
+          <div className="bfrow">
+            <span className="bflab">Total Value</span>
+            <span className="bfval">{eur(val + out)}
+              {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)} Rückfluss</span>}</span>
           </div>
         </div>
-        <div className="krow">
-          <div>
-            <div className="eyebrow">Adj. EBITDA<Info k="adjEbitda" /></div>
-            <div className="mono kv">{eur(eb)}</div>
-          </div>
-          <div>
-            <div className="eyebrow">Marge</div>
-            <div className="mono kv" style={{ color: !c.dd ? "var(--ink)" : c.margin >= c.benchMargin ? "var(--teal)" : "var(--ox)" }}>
-              {pct(c.margin)}
-            </div>
-          </div>
-          <div>
-            <div className="eyebrow">Benchmark</div>
-            <div className="mono kv" style={{ color: "var(--ink2)" }}>{c.dd ? pct(c.benchMargin) : "—"}</div>
-          </div>
-        </div>
-        {/* Cash-Sicht vor Finanzierung: was nach Investitionen und Working Capital
-            vom EBITDA übrig bleibt. Der Zins steht daneben beim Leverage.      */}
-        <div className="krow">
-          <div>
-            <div className="eyebrow">Adj. EBITDA − Capex</div>
-            <div className="mono kv">{cf ? eur(cf.eb - cf.capex) : "—"}</div>
-          </div>
-          <div>
-            <div className="eyebrow">Cash Conversion<Info k="conv" /></div>
-            <div className="mono kv" style={{ color: conv == null ? "var(--ink)" : conv >= 60 ? "var(--teal)" : conv >= 35 ? "var(--ink)" : "var(--ox)" }}>
-              {conv == null ? "—" : pct(conv)}
-            </div>
-          </div>
-          <div>
-            <div className="eyebrow">Leverage<Info k="cov" /></div>
-            <div className="mono kv" style={{ color: lev > (c.covLimit ?? COV_DEFAULT) ? "var(--ox)" : "var(--ink)" }}>
-              {x(lev)}
-              <span style={{ display: "block", fontSize: 10, color: "var(--ink2)", fontWeight: 400, marginTop: 2 }}>
-                Cov {x(c.covLimit ?? COV_DEFAULT)} · {pct(cf ? cf.rate : c.rate)}
-              </span>
-            </div>
-          </div>
+        <div className="bpower">
+          <span className="bpowerlab">Total Value<br />je eingesetztem Euro</span>
+          <span className={"bpowerval " + (mTot >= 1 ? "teal" : "ox")}>{mTot.toFixed(2)}×</span>
         </div>
       </div>
-      <table className="ledger"><tbody>
-        <tr><td className="lab">Assetqualität</td><td>{Math.round(c.quality)}
-          {c.entryQuality != null && <span style={{ color: c.quality >= c.entryQuality ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-            {" "}{c.quality >= c.entryQuality ? "+" : "−"}{Math.abs(Math.round(c.quality - c.entryQuality))}</span>}
-          <Info k="quality" /></td></tr>
-        <tr><td className="lab">Enterprise Value</td>
-          <td>{eur(evOf(c, markMultiple(c, market)))} <span style={{ fontSize: 11, color: "var(--ink2)" }}>bei {x(markMultiple(c, market))}</span></td></tr>
-        <tr><td className="lab">Total Value</td>
-          <td style={{ color: mTot >= 1 ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
-            {eur(val + out)} <span style={{ fontSize: 11, fontWeight: 400 }}>· {mTot.toFixed(2)}×</span>
-            {out > 0.5 && <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> inkl. {eur(out)}</span>}</td></tr>
-      </tbody></table>
-      <Stages c={c} compact={quarter} />
+
       <PerformanceCompare c={c} market={market} />
       <Track c={c} />
-      <div className="pad" style={{ paddingTop: 4, paddingBottom: 0 }}>
+
+      <div className="bacts">
         <StatementsButton statements={statements}
           label={`📑 Financial Statements${finYears
             ? ` · ${finYears} ${finYears === 1 ? "Jahr" : "Jahre"} Halteperiode`
@@ -992,45 +1114,27 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           </Info>
         </p>
       </div>
-      <div className="pad" style={{ paddingTop: 12 }}>
-        <div className="seats">
-          {[["ceo", "CEO"], ["cfo", "CFO"], ["r3", ROLE3[c.sector].n]].map(([k, nm]) => {
-            const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
-            const searching = !!se, eb = ebitdaOf(c);
-            return (
-              <button key={k}
-                className={("seat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
-                  + (k === "cfo" ? sp("hire") : "")).trim()}
-                disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
-                <div className="rn">{nm}</div>
-                <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
-                <div className="rn">{searching ? (se.waiting ? "Shortlist" : "läuft") : sk <= 0 ? "vakant"
-                  : isCapped(c, k) ? `wirkt ${cappedSkill(c, k).toFixed(1)}` : eur(payOf(k, sk, eb))}</div>
-              </button>
-            );
-          })}
-        </div>
-        {!c.dd && act.study && (
-          <div style={{ padding: "10px 14px 0" }}>
-            <button className={sp("study").trim()} style={{ width: "100%" }} onClick={() => { haptic(8); act.study(); }}>
-              📊 Benchmarkstudie · {eur(DD_COST / 2)}
-            </button>
-            <p className="hint ox" style={{ marginTop: 6 }}>Branchenreferenz fehlt — ohne sie sind Marge und Wachstum nicht einzuordnen.</p>
-          </div>
-        )}
-        <p className="hint" style={{ padding: "4px 15px 0" }}>
-          Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · ein Halbjahr
-        </p>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button className={sp("plat").trim()} style={{ flex: 1 }} disabled={!!c.initP || freeSlots <= 0} onClick={() => act.init("plat")}>
+      {!c.dd && act.study && (
+        <div className="bacts">
+          <button className={sp("study").trim()} style={{ width: "100%" }} onClick={() => { haptic(8); act.study(); }}>
+            📊 Benchmarkstudie · {eur(DD_COST / 2)}
+          </button>
+          <p className="hint ox" style={{ marginTop: 6 }}>Branchenreferenz fehlt — ohne sie sind Marge und Wachstum nicht einzuordnen.</p>
+        </div>
+      )}
+
+      <Band right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>Wertsteigerung</Band>
+      <div className="bacts" style={{ paddingTop: 0 }}>
+        <div className="bactgrid">
+          <button className={sp("plat").trim()} disabled={!!c.initP || freeSlots <= 0} onClick={() => act.init("plat")}>
             🏗 Performance
           </button>
-          <button className={sp("acc").trim()} style={{ flex: 1 }} disabled={!!c.initA || freeSlots <= 0} onClick={() => act.init("acc")}>
+          <button className={sp("acc").trim()} disabled={!!c.initA || freeSlots <= 0} onClick={() => act.init("acc")}>
             🚀 Growth
           </button>
         </div>
-        <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
             ? initsOf(c).map((I) => `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.${I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : ""}`).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
@@ -1038,16 +1142,13 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             : `Performance und Growth laufen parallel. Maßnahmen lassen sich wiederholen — jede weitere Auflage bringt weniger und dauert länger, und ob überhaupt noch etwas zu holen ist, steht als Eignung im Katalog.${(c.done || []).length ? ` Bisher ${(c.done || []).length} Programme abgeschlossen.` : ""}`}
         </div>
         {!c.ltip && (
-          <button className={sp("ltip").trim()} style={{ width: "100%", marginTop: 8 }} onClick={act.ltip}>
+          <button className={sp("ltip").trim()} style={{ width: "100%", marginTop: 10 }} onClick={act.ltip}>
             📜 MEP aufsetzen · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
           </button>
         )}
-        {c.ltip && <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 8 }}>
-          📜 MEP aktiv · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
-        </div>}
         {act.inject && (
           <>
-            <button className={"" + (c.breach ? " ox" : "")} style={{ width: "100%", marginTop: 8 }}
+            <button className={"" + (c.breach ? " ox" : "")} style={{ width: "100%", marginTop: 10 }}
               onClick={() => { haptic(8); act.inject(); }}>
               💶 Eigenkapital nachschießen
             </button>
@@ -1058,33 +1159,38 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             </p>
           </>
         )}
+      </div>
 
-        {inProc && (
-          <div style={{ marginTop: 14, padding: "10px 12px", border: "1px solid var(--gold)", fontSize: 12.5, lineHeight: 1.5 }}>
-            📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
-            der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
-          </div>
-        )}
-        {locked && (
-          <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--ink2)" }}>
-            🔔 Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
-          </div>
-        )}
-        {blocked && <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--ox)" }}>
+      {inProc && (
+        <div className="bnote gold">
+          📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
+          der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
+        </div>
+      )}
+      {locked && (
+        <div className="bnote">
+          🔔 Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
+        </div>
+      )}
+      {blocked && (
+        <div className="bnote ox">
           🚫 Nach dem abgebrochenen Prozess für {hj(c.block - quarter)} gesperrt.
-        </div>}
+        </div>
+      )}
 
-        {!practice && !inProc && !locked && (
-          <>
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button className={"solid" + sp("proc")} style={{ flex: 1 }} disabled={!canProc || procCount >= MAX_PROC} onClick={act.proc}>
-                Verkaufsprozess einleiten
+      {!practice && !inProc && !locked && (
+        <>
+          <Band>Exit</Band>
+          <div className="bacts" style={{ paddingTop: 0, paddingBottom: 16 }}>
+            <div className="bactgrid">
+              <button className={"solid" + sp("proc")} disabled={!canProc || procCount >= MAX_PROC} onClick={act.proc}>
+                Verkaufsprozess
               </button>
-              <button style={{ flex: 1 }} disabled={!canNow} onClick={act.bil}>Bilateral verkaufen</button>
+              <button disabled={!canNow} onClick={act.bil}>Bilateral</button>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button style={{ flex: 1 }} disabled title="Vorübergehend deaktiviert">🔄 GP-led Secondary</button>
-              <button style={{ flex: 1 }} disabled={!ipoOpen} onClick={act.ipo}>🔔 IPO</button>
+            <div className="bactgrid" style={{ marginTop: 8 }}>
+              <button disabled title="Vorübergehend deaktiviert">🔄 GP-led Secondary</button>
+              <button disabled={!ipoOpen} onClick={act.ipo}>🔔 IPO</button>
             </div>
             <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 8, lineHeight: 1.5 }}>
               {c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
@@ -1097,9 +1203,9 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
                 : ipoOpen ? "Börsenfenster offen: 40 % platzieren, Rest ein Jahr im Lock-up."
                 : "Jede Option zeigt Bewertung und Rückfluss, bevor du freigibst."}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1596,15 +1702,19 @@ export function StatementsButton({ statements, hidden = false, label, className 
 
 export function Pips({ v, cls }) {
   return (
-    <span className="pips">
+    <span className="babpips">
       {[0, 1, 2, 3, 4].map((i) => {
         const fill = v - i;
-        return <i key={i} className={"pip " + cls + (fill >= 1 ? " on" : fill > 0 ? " on half" : "")} />;
+        return <i key={i} className={"babpip " + cls + (fill >= 1 ? " on" : fill > 0 ? " on half" : "")} />;
       })}
     </span>
   );
 }
 
+/* Die drei Reifegrade als Fähigkeitsbalken einer Spielerkarte: Mannschaft,
+   Prozesse, Wachstum. Inhaltlich dieselben fünf Stufen wie zuvor — nur liest
+   man eine Reihe geneigter Segmente schneller als eine Punktreihe, und der
+   Zustandstext rechts sagt weiterhin, woran es gerade liegt.               */
 export function Stages({ c, compact }) {
   const pl = peopleLvl(c), A = accEff(c), OS = overstretch(c);
   const sc = (c.searches || [])[0];
@@ -1612,28 +1722,28 @@ export function Stages({ c, compact }) {
   const runI = c.initP ? "Performance" : c.initA ? "Growth" : null;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
   return (
-    <div className="ppa">
-      <div className="row">
-        <span className="lbl">People</span><Pips v={pl} cls="p" />
-        <span className={"st " + (vac ? "warn" : runP ? "run" : "")}>
+    <div className="bability">
+      <div className="babrow">
+        <span className="bablab">People</span><Pips v={pl} cls="p" />
+        <span className={"babst " + (vac ? "warn" : runP ? "run" : "")}>
           {vac ? `${vac} vakant` : runP ? runP : pl.toFixed(1)}
         </span>
       </div>
-      <div className="row">
-        <span className="lbl">Performance</span><Pips v={c.plat} cls="l" />
-        <span className={"st " + (c.initP ? "run" : c.plat < 1.5 ? "warn" : "")}>
+      <div className="babrow">
+        <span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
+        <span className={"babst " + (c.initP ? "run" : c.plat < 1.5 ? "warn" : "")}>
           {c.initP ? `${c.initP.doneQ - (compact || 0)} HJ`
-            : c.plat < 1.5 ? "unter Benchmark" : c.plat < 2.5 ? "Benchmark" : c.plat < 3.5 ? "über Benchmark" : "Best-in-Class"}
+            : c.plat < 1.5 ? "unter Bench." : c.plat < 2.5 ? "Benchmark" : c.plat < 3.5 ? "über Bench." : "Best-in-Class"}
         </span>
       </div>
-      <div className="row">
-        <span className="lbl">Growth</span><Pips v={c.acc} cls="a" />
-        <span className={"st " + (OS > 0 ? "warn" : c.initA ? "run" : c.acc < 1.5 ? "warn" : "")}>
+      <div className="babrow">
+        <span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
+        <span className={"babst " + (OS > 0 ? "warn" : c.initA ? "run" : c.acc < 1.5 ? "warn" : "")}>
           {OS > 0 ? "überdehnt" : c.initA ? `${c.initA.doneQ - (compact || 0)} HJ`
-            : c.acc < 1.5 ? "unter Benchmark" : c.acc < 2.5 ? "Benchmark" : c.acc < 3.5 ? "über Benchmark" : "Best-in-Class"}
+            : c.acc < 1.5 ? "unter Bench." : c.acc < 2.5 ? "Benchmark" : c.acc < 3.5 ? "über Bench." : "Best-in-Class"}
         </span>
       </div>
-      {OS > 0 && <div style={{ fontSize: 11, color: "var(--ox)", paddingBottom: 4 }}>
+      {OS > 0 && <div style={{ fontSize: 11, color: "var(--ox)" }}>
         ⚠️ Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
       </div>}
     </div>
@@ -1959,43 +2069,40 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
         const base = c.costTotal || 1;
         const vals = t.length > 1 ? t.map((v) => v / base) : [1, 1];
         const hiV = Math.max(1.15, ...vals), loV = Math.min(0.85, ...vals);
-        /* Zeichenfläche innerhalb der 26 Einheiten hohen Box: Grundlinie bei 24,
-           Amplitude 18. Die sechs Einheiten Luft nach oben sind Absicht -- ein
-           stark steigender Verlauf stieß sonst an die Oberkante der Box und lag
-           damit direkt an der Namenszeile. */
-        const yOf = (v) => 24 - ((v - loV) / (hiV - loV || 1)) * 18;
-        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 64},${yOf(v)}`).join(" ");
+        /* Zeichenfläche innerhalb der 24 Einheiten hohen Box: Grundlinie bei 22,
+           Amplitude 17. Die Luft nach oben ist Absicht — ein stark steigender
+           Verlauf stieße sonst an die Oberkante. */
+        const yOf = (v) => 22 - ((v - loV) / (hiV - loV || 1)) * 17;
+        const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 56},${yOf(v)}`).join(" ");
         return (
-          <div className="card st shelf" key={c.uid} style={{ "--sec": SECCOLOR[c.sector] }}
+          <button className="bshelf" key={c.uid} style={{ "--sec": SECCOLOR[c.sector] }}
             onClick={() => onPick && onPick(c.uid)}>
-            <div className="shelfrow">
-              <div className="shelfmain">
-                <div className="shelfname">
-                  <i className="hdot" style={{ background: col }} />{c.name}
-                </div>
-                <div className="shelfmeta">
-                  {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ</span>
-                </div>
-              </div>
-              <svg viewBox="0 0 64 26" className="shelfspark" role="img"
-                aria-label={`Wertverlauf von ${c.name}`}>
-                <line x1="0" y1={yOf(1)} x2="64" y2={yOf(1)}
-                  style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
-                <polyline points={pts} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" />
-              </svg>
-              <div className="mono shelfmoic" style={{ color: col }}>{h.moic.toFixed(2)}×</div>
-            </div>
-          </div>
+            <span className="bshelfcrest"><SectorEmblem sector={c.sector} /></span>
+            <span className="bshelfmain">
+              <span className="bshelfname">
+                <i className="hdot" style={{ background: col, marginRight: 0 }} /><span>{c.name}</span>
+              </span>
+              <span className="bshelfmeta">
+                {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ · {SECLABEL[c.sector]}</span>
+              </span>
+            </span>
+            <svg viewBox="0 0 56 24" className="bshelfspark" role="img"
+              aria-label={`Wertverlauf von ${c.name}`}>
+              <line x1="0" y1={yOf(1)} x2="56" y2={yOf(1)}
+                style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
+              <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+            </svg>
+            <span className="bshelfmoic">
+              <span className="v mono" style={{ color: col }}>{h.moic.toFixed(2)}×</span>
+              <span className="l">MOIC</span>
+            </span>
+          </button>
         );
       })}
       {holdings.length < MAX_SLOTS && (
-        <div className="card slot">
-          <div style={{ textAlign: "center", color: "var(--ink2)", padding: "18px 15px" }}>
-            <div style={{ fontSize: 12 }}>
-              {MAX_SLOTS - holdings.length === 1 ? "Ein freier Platz" : `${MAX_SLOTS - holdings.length} freie Plätze`}
-              {" · "}{eur(cash)} · noch {hj(PERIODS - quarter)}
-            </div>
-          </div>
+        <div className="bslot">
+          <b>{MAX_SLOTS - holdings.length === 1 ? "Ein freier Platz" : `${MAX_SLOTS - holdings.length} freie Plätze`}</b>
+          {eur(cash)} Dry Powder · noch {hj(PERIODS - quarter)}
         </div>
       )}
     </>
