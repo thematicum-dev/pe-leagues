@@ -676,8 +676,10 @@ export const BATTLE_CSS = `
 /* ---------- Reifegrade als Fähigkeitsbalken ---------- */
 .pel .bability{padding:11px 14px 0;display:flex;flex-direction:column;gap:8px;}
 .pel .babrow{display:flex;align-items:center;gap:9px;}
-.pel .bablab{width:78px;flex:none;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--ink2);font-weight:650;}
+/* Spaltenbreite nach dem längsten Wort ("Performance"): mit 78 px und dem
+   weiteren Sperrsatz lief es über die Fähigkeitsbalken daneben. */
+.pel .bablab{width:92px;flex:none;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink2);font-weight:650;white-space:nowrap;}
 .pel .babpips{display:flex;gap:3px;flex:1;min-width:0;}
 .pel .babpip{flex:1;height:8px;border-radius:2px;background:var(--rule);
   transform:skewX(-16deg);opacity:.55;}

@@ -2092,8 +2092,13 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
                 style={{ stroke: "var(--rule)" }} strokeDasharray="2 2" />
               <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
             </svg>
+            {/* Der MOIC färbt sich nach dem MOIC, nicht nach der Zustandsflagge:
+                Eine Beteiligung über Einstand, in der gerade eine Position vakant
+                ist, stand vorher mit ihren 1,7× in der Alarmfarbe da. Der Zustand
+                hat seine eigenen zwei Anzeigen — den Punkt vor dem Namen und die
+                Farbe der Verlaufslinie. */}
             <span className="bshelfmoic">
-              <span className="v mono" style={{ color: col }}>{h.moic.toFixed(2)}×</span>
+              <span className="v mono" style={{ color: h.moic >= 1 ? "var(--teal)" : "var(--ox)" }}>{h.moic.toFixed(2)}×</span>
               <span className="l">MOIC</span>
             </span>
           </button>
