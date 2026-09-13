@@ -33,6 +33,15 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Darstellung; welche Zahl wann sichtbar ist, entscheidet weiterhin
   `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
 
+- **`docs/prompts/kartenbilder.md`**
+  Ein Arbeitsauftrag zum Einfügen in eine Claude-Code-Sitzung: die fünf
+  Bildszenen im Kopfbereich der Unternehmenskarten neu zeichnen. Er enthält die
+  Diagnose der jetzigen Bilder, die Regeln, an denen sich eine Illustration von
+  einem Schaubild unterscheidet, und die Schnittstelle, an die sich der Code
+  halten muss. Er ist an `HeroArt` und `identityOf` in
+  `components/pel/battle.tsx` gebunden und muss mitgeändert werden, wenn sich
+  dort etwas ändert.
+
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
   PE-Praktiker: achtzehn Prüfungen an der Spiellogik (Covenant-Basis, IRR,
