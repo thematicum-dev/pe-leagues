@@ -4,8 +4,9 @@ Entwurf, noch nicht implementiert. Zur Entscheidung, nicht zur Umsetzung ohne
 Gegenlesen.
 
 Die Frage: Der Spieler soll abhängig von der Qualität des Managements
-Aktionspunkte haben, die er auf Value-Creation-Initiativen allokiert. Dieses
-Dokument beschreibt, was dafür an der Engine zu ändern wäre, mit welchen Zahlen,
+Aktionspunkte haben, die er auf Value-Creation-Initiativen allokiert — und die
+Allokation soll wirken, nicht nur freischalten: alles auf eine Maßnahme gegen
+den Split auf zwei (Abschnitt 3.5). Dieses Dokument beschreibt, was dafür an der Engine zu ändern wäre, mit welchen Zahlen,
 wo es sich mit bestehenden Mechaniken überschneidet, und was die Änderung an der
 Balance verschiebt.
 
@@ -110,7 +111,7 @@ Drei Abzüge, jeder mit einer Aussage:
   Bankengespräche, keine Programme. Das ist der Kanal, der fehlende Zeit
   abbildet, ohne noch einen Abschlag auf die Bewertung zu legen.
 
-### 3.2 Was eine Maßnahme kostet
+### 3.2 Was eine Maßnahme kostet — die Normalbesetzung
 
 | Maßnahme | Dim | BP | Warum |
 | --- | --- | --- | --- |
@@ -121,6 +122,10 @@ Drei Abzüge, jeder mit einer Aussage:
 | `pen` — Pricing & Cross-Selling | acc | **1,0** | Vertriebsführung, kurzer Zyklus |
 | `exp` — Markt-/Segmentexpansion | acc | **1,5** | neue Region braucht Führungspräsenz |
 | `ma` — Add-on M&A | acc | **2,5** | Integration ist der teuerste Zeitfresser |
+
+Diese Zahlen sind **kein Festpreis, sondern der Referenzpunkt**: die
+Besetzung, bei der ein Programm so läuft, wie die Engine es heute rechnet.
+Abweichen nach oben und unten ist die eigentliche Entscheidung — siehe 3.5.
 
 Entscheidend: **Eine Maßnahme belegt ihre Punkte über die gesamte Laufzeit**,
 nicht nur im Halbjahr des Starts. Damit zahlt ein schwaches Team doppelt — es
@@ -189,6 +194,133 @@ export interface BandwidthSupportIntent { holdingUid: string; points: number; }
 Serverseitig gegen `sponsorBand(f)` und den Deckel kappen, wie jede andere
 Absicht auch — der Kommentarkopf von `turnTypes.ts` verlangt das ausdrücklich.
 
+### 3.5 Intensität — wie viel Bandbreite auf *diese* Maßnahme
+
+Bis hierher ist Bandbreite eine Schranke: Sie entscheidet, **ob** ein Programm
+läuft. Das ist noch keine Allokation. Interessant wird es, wenn die zugeteilte
+Bandbreite auch bestimmt, **wie gut** es läuft — alles auf ein Programm gegen
+den Split auf zwei.
+
+Jede Maßnahme bekommt dafür eine Intensität `i`, gemessen an ihrer
+Normalbesetzung aus 3.2:
+
+```
+BP(id, i)  = BW_OVERHEAD + (bpBase(id) - BW_OVERHEAD) * i      // BW_OVERHEAD = 0.3
+```
+
+Der Fixanteil ist der Steuerungsaufwand, den jedes Programm unabhängig von
+seiner Größe verursacht: Lenkungsausschuss, Reporting, ein Platz auf der
+Agenda. Er ist der Grund, warum fünf halbe Programme teurer sind als zwei ganze.
+
+**Drei Stufen, nicht ein Schieberegler.** Das ist eine bewusste Entscheidung
+gegen Feingranularität: Ein stufenloser Regler macht aus jeder Runde eine
+Optimierungsaufgabe mit einer berechenbaren Lösung, und eine berechenbare
+Lösung ist keine Entscheidung. Drei benannte Stufen erzählen dagegen etwas.
+
+| Stufe | `i` | `opex`/`nwc`/`pen` | `exp` | `erp`/`ai` | `ma` |
+| --- | --- | --- | --- | --- | --- |
+| Sparflamme | 0,6 | 0,7 | 1,0 | 1,3 | 1,6 |
+| **Normal** | 1,0 | **1,0** | **1,5** | **2,0** | **2,5** |
+| Task Force | 1,6 | 1,4 | 2,2 | 3,0 | 3,8 |
+
+#### Die drei Kanäle
+
+```
+gainFactor(i) = (1 + BW_SAT) * i / (i + BW_SAT)     // BW_SAT = 0.7, konkav
+pFactor(i)    = cls === "rel"                        // verlässliche Maßnahmen
+                  ? 1 + 0.35 * (gainFactor(i) - 1)   //   flach, unterliefern statt scheitern
+                  : clamp(0.45 + 0.55 * i^1.6,       // tr / hard: Schwelle unter i = 1,
+                          0.30, 1.10)                //   gedeckelt darüber
+durShift(i)   = i < 0.75 ? +1 : i >= 1.5 ? -1 : 0
+```
+
+| `i` | `gainFactor` | `pFactor` rel | `pFactor` tr/hard | Dauer |
+| --- | --- | --- | --- | --- |
+| 0,6 | 0,785 | 0,93 | **0,69** | +1 HJ |
+| 0,8 | 0,907 | 0,97 | 0,84 | 0 |
+| 1,0 | 1,000 | 1,00 | 1,00 | 0 |
+| 1,6 | 1,183 | 1,06 | 1,10 (Deckel) | −1 HJ |
+| 2,0 | 1,259 | 1,09 | 1,10 (Deckel) | −1 HJ |
+
+Die Formen sind nicht beliebig, sie sind die ganze Mechanik:
+
+- **Der Ertrag ist konkav.** Die ersten Punkte auf ein Programm bringen am
+  meisten, die letzten am wenigsten (Grenzertrag von 0,6 auf 0,8: +0,12; von
+  1,8 auf 2,0: +0,035). Für sich genommen belohnt das **Verteilen**.
+- **Das Risiko ist konvex — aber nur bei Transformationen.** `erp`, `ai` und
+  `ma` sind binär im Ausgang und tragen `failCost`. Eine halb besetzte
+  ERP-Ablösung liefert nicht 70 % eines ERP, sie liefert ein gescheitertes ERP:
+  `pFactor` 0,69, und der Einmalaufwand ist trotzdem gebucht. Für sich genommen
+  bestraft das **Verteilen**, und zwar hart.
+- **Verlässliche Maßnahmen sind gutmütig.** `opex`, `nwc`, `pen` unterliefern
+  statt zu scheitern (`PARTIAL_DELIVERY`) — der Risikokanal ist dort flach.
+  Genau deshalb sind sie die Kandidaten für Sparflamme.
+- **Die Dauer ist der Preis der Breite.** Und Zeit kostet in diesem Spiel
+  echtes Geld: `staleDisc()`, `endPressure()`, zwanzig Halbjahre Fondslaufzeit.
+
+Zusammen ergibt das keine dominante Antwort, sondern eine situative:
+
+> Breit und langsam, wenn viele Maßnahmen gut passen und Zeit da ist. Schmal
+> und schnell, wenn nur eine passt oder das Exitfenster näherkommt. Und niemals
+> eine Transformation auf Sparflamme.
+
+#### Durchgerechnet: Band 2,15 (solide besetzt, 3/3/3)
+
+| Option | BP | Fit-gewichteter Ertrag | Nebenwirkung |
+| --- | --- | --- | --- |
+| `opex` Task Force | 1,42 | 1,42 | eine Dimension, ein Halbjahr früher fertig |
+| `opex` + `pen` Normal, `pen` passt gut | 2,00 | **2,30** | beide Dimensionen laufen |
+| `opex` + `pen` Normal, `pen` passt schwach | 2,00 | 1,55 | schlechter als die Task Force |
+| `opex` + `pen` Sparflamme | 1,44 | 1,80 | beide +1 Halbjahr |
+| `erp` Sparflamme | 1,32 | — | `pFactor` 0,69 — **die Falle** |
+
+Unterstellt sind `fitOf` 1,20 für `opex` und 1,10 bzw. 0,35 für `pen`. Die
+Ablesung: **Die Fit-Spreizung entscheidet.** Wo beide Maßnahmen passen, gewinnt
+der Split. Wo die zweite kaum ansetzt, gewinnt die Konzentration — und das ist
+genau die Entscheidung, die `fitOf` seit seiner Einführung vorbereitet, ohne
+dass sie bisher irgendwo abgefragt wurde.
+
+#### Die Stellschraube, die man kennen muss
+
+`BW_OVERHEAD` steuert, ob Verteilen oder Vollbesetzung effizienter ist. Ertrag
+je BP für eine Basismaßnahme:
+
+| `BW_OVERHEAD` | Sparflamme | Normal | Task Force | Effizienzoptimum |
+| --- | --- | --- | --- | --- |
+| 0,30 | 1,090 | 1,000 | 0,833 | Sparflamme |
+| 0,40 | 1,032 | 1,000 | 0,870 | Sparflamme, knapp |
+| 0,45 | 1,006 | 1,000 | 0,889 | praktisch gleich |
+| 0,50 | 0,981 | **1,000** | 0,910 | Normal |
+
+Bei 0,5 ist Normalbesetzung das Optimum und jede Abweichung kostet Effizienz —
+sauber, aber der Regler wird zahnlos: Sparflamme spart dann nur noch 20 % der
+Kosten für 21 % weniger Ertrag, und niemand dreht mehr daran.
+
+**Empfehlung: 0,3, und den Gegendruck dort lassen, wo er inhaltlich hingehört** —
+in der Dauer und im Zusammenbruch der Transformationsklassen. Breite Bearbeitung
+auf Sparflamme *soll* eine tragfähige Strategie sein; sie kostet Zeit, und Zeit
+ist in diesem Spiel bereits teuer. Wenn die Messung zeigt, dass alles auf
+Sparflamme läuft, ist `BW_OVERHEAD` die Schraube — nicht die Ertragskurve.
+
+#### Was nicht geht: Nachsteuern
+
+Die Intensität steht beim Start fest und ist danach nicht mehr änderbar. Das
+ist keine Bequemlichkeit, sondern eine Folge der Architektur: `buildInit()`
+zieht `ok` genau einmal aus dem gesetzten Zufallsstrom (`engine.ts:882`). Ein
+Programm später zu verstärken hieße, entweder neu zu würfeln — dann verschiebt
+sich die Reihenfolge der Ziehungen und `replay.test.ts` bricht — oder die
+Ziehung ans Ende der Laufzeit zu verlegen, was ein Eingriff in den Kern ist.
+
+Inhaltlich trägt die Einschränkung: Der Ressourcenplan steht beim Kick-off.
+Wer ein Programm unterbesetzt startet, hat sich entschieden.
+
+Eine **Rettungsaktion** — nach der Hälfte der Laufzeit eine Ampel, und gegen
+zusätzliche BP ein neuer Wurf — wäre die interessantere Mechanik und ist
+bewusst zurückgestellt: Sie ist nur mit einem eigenen, separaten Zufallsstrom
+sauber zu bauen. Als Ausbaustufe notiert, nicht als Teil dieses Vorschlags.
+
+---
+
 ---
 
 ## 4 — Kalibrierung
@@ -244,6 +376,13 @@ dieselbe Rechnung nicht macht. Drei Stellschrauben, in dieser Reihenfolge:
 Empfehlung: mit (1) und (2) messen, (3) nur wenn nötig. Ein zweiter Deckel
 neben der Bandbreite nimmt der Mechanik genau das, was sie hinzufügen soll.
 
+**Die Intensität aus 3.5 wirkt hier mit, und die Richtung ist offen.** Sie gibt
+überschüssiger Bandbreite eine zweite Verwendung: nicht noch ein Programm,
+sondern ein besser besetztes. Ob das den Durchsatz dämpft oder weiter treibt,
+hängt an `BW_OVERHEAD` und ist aus der Formel nicht abzulesen — bei 0,3 bleibt
+Verteilen effizienter, der Durchsatz steigt also eher weiter. Beide Effekte
+gehören deshalb in **dieselbe** Messung, nicht in zwei aufeinanderfolgende.
+
 ---
 
 ## 5 — Zwei Ausbaustufen
@@ -257,10 +396,15 @@ Berührt: `runQuarter.ts:231–265` (die Slot-Prüfung), `buildInit()` (load in 
 und `dur`), `targetMargin()` (Überzeichnung), `maturePeople()` (Poach-Faktor),
 drei UI-Stellen. Kein Datenmodellwechsel, kein Migrationsrisiko.
 
-Der Haken: Bei nur zwei möglichen Maßnahmen je Beteiligung — eine je Dimension —
-ist die *Allokation* kaum je eine Wahl. Die Bandbreite entscheidet meistens nur,
-ob eine oder zwei laufen. Das ist eine Verbesserung, aber noch keine
-Aktionspunkt-Mechanik.
+Der Haken war: Bei nur zwei möglichen Maßnahmen je Beteiligung — eine je
+Dimension — ist die *Allokation* kaum je eine Wahl; die Bandbreite entscheidet
+dann nur, ob eine oder zwei laufen.
+
+**Die Intensität aus 3.5 räumt genau das aus.** Auch mit zwei festen Slots gibt
+es dann eine echte Allokation: eine Maßnahme als Task Force gegen zwei auf
+Sparflamme, und zwischen beiden die Fit-Spreizung als Entscheidungsgrundlage.
+Stufe 1 ist damit keine Vorstufe mehr, sondern eine vollständige Mechanik —
+Stufe 2 erweitert sie, sie rettet sie nicht.
 
 ### Stufe 2 — die eigentliche Fassung
 
@@ -379,6 +523,11 @@ mit dem `fitLabel()` (`engine.ts:768`) begründet ist:
   Dauer 3 statt 2 Halbjahre, −1,2 pp Marge"). Neben `fitLabel` — dieselbe Zeile.
 - **Portfolioübersicht:** Sponsor-Pool mit Restbestand, damit die Verteilung
   überhaupt planbar ist.
+- **Intensitätsstufe:** drei Schaltflächen im Picker, voreingestellt auf
+  „Normal", darunter die Folge in Zahlen — „Sparflamme: 0,7 BP, Ertrag 79 %,
+  Erfolgsquote 93 %, ein Halbjahr länger". Bei einer Transformationsmaßnahme
+  unter Normal gehört die Warnung ausgeschrieben daneben, in `--ox`: Das ist
+  die teuerste vermeidbare Fehlentscheidung im ganzen Modell.
 
 ### 6.5 Tests
 
@@ -394,6 +543,20 @@ die entfällt, und ist die Vorlage für das, was an ihre Stelle tritt:
 - KI und Spieler laufen durch dieselbe Prüfung: ein KI-Fonds mit vakanten
   Sitzen startet ebenfalls nichts.
 - Invarianz: Über eine ganze Partie überschreitet keine Beteiligung `LOAD_MAX`.
+
+Für die Intensität (3.5) kommen dazu:
+
+- `BP(id, i)` ist monoton in `i` und trifft bei `i = 1` exakt `bpBase(id)` —
+  sonst verschiebt die Einführung stillschweigend die Kalibrierung aus 3.2.
+- Eine Maßnahme, deren Intensität über die freie Bandbreite hinausgeht, wird
+  gekappt oder verworfen, nicht ungeprüft übernommen — dieselbe Zusage wie bei
+  jeder anderen eingereichten Absicht.
+- `gainFactor` ist über den ganzen Bereich konkav und `pFactor` für `tr`/`hard`
+  unter `i = 1` konvex. Beides sind Aussagen über die Kurvenform, von denen die
+  ganze Entscheidungsstruktur abhängt; ein Vorzeichenfehler beim Tuning fällt
+  sonst niemandem auf.
+- Bei `i = 1` liefert `buildInit()` in allen drei Kanälen bitgleich dasselbe
+  wie vor der Änderung — der Regressionstest gegen die heutige Engine.
 
 ---
 
@@ -427,15 +590,21 @@ bereits ab.
 2. `runQuarter.ts:231–265`: Slot-Zähler raus, Bandbreitenprüfung rein. `load`
    an `buildInit()` durchreichen.
 3. Überzeichnung in `targetMargin()` und `maturePeople()` (Poach).
-4. KI-Zweig auf dieselbe Prüfung (6.2).
-5. `EngineCompat`-Schalter und `LEGACY_COMPAT` (6.3).
-6. Tests (6.5), dann 60 nachgespielte Partien: Median-TVPI Spieler und Kohorte
+4. Intensität (3.5): `BP(id, i)`, `gainFactor`, `pFactor`, `durShift`; Feld
+   `intensity` in `InitiativeIntent`, serverseitig gegen die freie Bandbreite
+   geprüft. Voreinstellung überall „Normal" — bis der Spieler etwas anderes
+   wählt, verhält sich das Spiel wie in Schritt 2.
+5. KI-Zweig auf dieselbe Prüfung (6.2). Die Allokationsregel aus 6.2 wird dabei
+   zweidimensional: erst welche Maßnahme, dann mit welcher Intensität.
+   Vorschlag: `tr`-Klassen nie unter Normal, Rest greedy nach Ertrag je Punkt.
+6. `EngineCompat`-Schalter und `LEGACY_COMPAT` (6.3).
+7. Tests (6.5), dann 60 nachgespielte Partien: Median-TVPI Spieler und Kohorte
    vorher/nachher. Zielmarke: Median unverändert ±0,05, aber deutlich größere
    Spreizung zwischen gut und schlecht geführten Beteiligungen. Verschiebt sich
    der Median, greift 4.1.
-7. Oberfläche (6.4).
-8. Erst danach Stufe 2 (Abschnitt 5).
+8. Oberfläche (6.4) — inklusive der drei Intensitätsstufen im Maßnahmenpicker.
+9. Erst danach Stufe 2 (Abschnitt 5).
 
-Schritte 1–7 sind Stufe 1 und in sich abgeschlossen. Wenn die Messung in
-Schritt 6 die Spreizung nicht zeigt, ist der Vorschlag gescheitert und
+Schritte 1–8 sind Stufe 1 und in sich abgeschlossen. Wenn die Messung in
+Schritt 7 die Spreizung nicht zeigt, ist der Vorschlag gescheitert und
 zurückzubauen — nicht nachzujustieren, bis die Zahl passt.
