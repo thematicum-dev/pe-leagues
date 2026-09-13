@@ -187,202 +187,569 @@ export function Sigil({ id, size = 40, className = "" }) {
    für Name und Anspruch.
    ========================================================================= */
 
-function Racks({ rnd, id }) {
-  const n = 4 + Math.floor(rnd() * 3);
-  const racks = Array.from({ length: n }, (_, i) => {
-    const w = 26 + rnd() * 8, x = 16 + i * (172 / n), h = 96 + rnd() * 52;
-    return { x, w, h, rows: 5 + Math.floor(rnd() * 4) };
-  });
-  return (
-    <g>
-      {/* Lichtstreifen im Hintergrund: die Gänge zwischen den Reihen */}
-      {racks.map((r, i) => (
-        <rect key={"g" + i} x={r.x + r.w} y={180 - r.h} width="4" height={r.h}
-          fill={id.lit} opacity=".22" />
-      ))}
-      {racks.map((r, i) => (
-        <g key={i}>
-          <rect x={r.x} y={180 - r.h} width={r.w} height={r.h} rx="2"
-            fill={id.shade} stroke={id.own} strokeWidth="1.2" />
-          {Array.from({ length: r.rows }, (_, k) => {
-            const y = 180 - r.h + 7 + k * ((r.h - 12) / r.rows);
-            const on = (i * 7 + k * 3) % 5;
-            return (
-              <g key={k}>
-                <rect x={r.x + 3} y={y} width={r.w - 6} height="3.4" rx="1.7"
-                  fill={id.own} opacity=".45" />
-                {/* Zwei helle Dioden je Einschub — das Licht macht das Bild */}
-                <rect x={r.x + 3} y={y} width={5 + on * 2.5} height="3.4" rx="1.7"
-                  fill={id.lit} opacity={on >= 3 ? 1 : 0.55} />
-              </g>
-            );
-          })}
-        </g>
-      ))}
-      {/* Spiegelung auf dem Boden */}
-      <rect x="0" y="180" width="220" height="20" fill={id.own} opacity=".12" />
-      {racks.map((r, i) => (
-        <rect key={"m" + i} x={r.x} y="180" width={r.w} height="14" fill={id.lit} opacity=".10" />
-      ))}
-    </g>
-  );
-}
+/* Kleine Hilfe: ein Viereck aus vier Punkten. Alle Szenen bauen ihre Körper
+   aus solchen Flächen, weil eine Fläche mit heller und dunkler Seite Volumen
+   hat, eine Linie dagegen nicht.                                            */
+const poly = (pts) => pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
-function Helix({ rnd, id }) {
-  const turns = 2 + Math.floor(rnd() * 2);
-  const amp = 26 + rnd() * 10, cx = 118, top = 12, bot = 190;
-  const pt = (t, phase) => {
-    const y = top + t * (bot - top);
-    const x = cx + Math.sin(t * Math.PI * 2 * turns + phase) * amp;
-    return [x, y];
+/* ---------------------------------------------------------- Software & IT --
+   Eine Reihe Serverschränke, die nach hinten links im Dunkeln verschwindet;
+   der vorderste ist vom rechten Kartenrand angeschnitten.
+
+   Das Licht kommt von oben rechts. Jeder Schrank ist ein Körper aus drei
+   Flächen: Vorderseite mit Verlauf von hell (rechts) nach dunkel (links),
+   Seitenwand im Schatten, Deckel als schmale helle Sichel. Erst diese drei
+   Flächen machen aus einem Rechteck einen Gegenstand.
+
+   Nur der vorderste Schrank bekommt helle Leuchtdioden; die dahinter werden
+   kleiner, höher und dunkler. Das ist die ganze Tiefenwirkung — drei
+   Helligkeitsstufen, mehr braucht es nicht.                                 */
+function Racks({ rnd, id, k = "", glow = false }) {
+  const dx = rnd() * 8 - 4;
+  /* Drei Schränke von hinten nach vorn. `dim` ist die Tiefenstufe: Sie
+     bestimmt Deckkraft und ob überhaupt Licht gezeigt wird. */
+  const cabs = [
+    { x: 44 + dx, w: 42, top: 92, bot: 188, dim: 0.3, rows: 6 },
+    { x: 92 + dx, w: 50, top: 74, bot: 194, dim: 0.6, rows: 7 },
+    { x: 150 + dx, w: 78, top: 46, bot: 200, dim: 1, rows: 8 + Math.floor(rnd() * 3) },
+  ];
+  // Welche Einschübe leuchten und wie breit ihr Lichtband ist
+  cabs.forEach((c) => {
+    c.lit = Array.from({ length: c.rows }, () => rnd() < 0.42);
+    c.wide = Array.from({ length: c.rows }, () => 0.28 + rnd() * 0.42);
+  });
+
+  // Geometrie eines Schranks: Vorderseite geschert, Seitenwand nach links
+  const geo = (c) => {
+    const sh = 9, dep = 20;
+    const FL = [c.x, c.top + sh], FR = [c.x + c.w, c.top];
+    const BL = [c.x, c.bot], BR = [c.x + c.w, c.bot - sh];
+    const SL = [c.x - dep, c.top + sh + 7], SB = [c.x - dep, c.bot + 7];
+    const units = Array.from({ length: c.rows }, (_, i) => {
+      const t0 = (i + 0.5) / (c.rows + 0.6), t1 = t0 + 0.6 / (c.rows + 0.6);
+      return { a: lerp(FL, BL, t0), b: lerp(FR, BR, t0),
+               c: lerp(FR, BR, t1), d: lerp(FL, BL, t1) };
+    });
+    return { FL, FR, BL, BR, SL, SB, units };
   };
-  const path = (phase) => Array.from({ length: 49 }, (_, i) => {
-    const [x, y] = pt(i / 48, phase);
-    return `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  const rungs = Array.from({ length: 14 }, (_, i) => {
-    const t = (i + 0.5) / 14;
-    return [pt(t, 0), pt(t, Math.PI)];
-  });
-  return (
-    <g>
-      {rungs.map(([a, z], i) => (
-        <line key={i} x1={a[0]} y1={a[1]} x2={z[0]} y2={z[1]}
-          stroke={id.lit} strokeWidth="1.3" opacity=".38" />
-      ))}
-      <path d={path(0)} fill="none" stroke={id.lit} strokeWidth="3.6" strokeLinecap="round" />
-      <path d={path(Math.PI)} fill="none" stroke={id.own} strokeWidth="3.6" strokeLinecap="round" opacity=".85" />
-      {rungs.map(([a, z], i) => (
-        <g key={"n" + i}>
-          <circle cx={a[0]} cy={a[1]} r="2.6" fill={id.lit} opacity=".8" />
-          <circle cx={z[0]} cy={z[1]} r="2.6" fill={id.own} opacity=".6" />
-        </g>
-      ))}
-    </g>
-  );
-}
 
-function Robot({ rnd, id }) {
-  // Stellung des Arms variiert je Unternehmen, die Bauform bleibt
-  const a1 = -52 - rnd() * 26, a2 = 46 + rnd() * 34;
-  const bx = 60, by = 178, L1 = 74, L2 = 58;
-  const r1 = (a1 * Math.PI) / 180, e = [bx + Math.cos(r1) * L1, by + Math.sin(r1) * L1];
-  const r2 = r1 + (a2 * Math.PI) / 180, h = [e[0] + Math.cos(r2) * L2, e[1] + Math.sin(r2) * L2];
-  /* Jedes Armstück wird zweimal gezeichnet: dunkles Gehäuse, darüber der
-     schmalere helle Körper. Das gibt die Kante, an der eine Maschine als
-     Maschine lesbar wird — eine einzelne Linie sieht aus wie ein Balken. */
-  const seg = (p, q, w) => (
-    <g>
-      <line x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} stroke={id.shade} strokeWidth={w + 5} strokeLinecap="round" />
-      <line x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} stroke={id.own} strokeWidth={w} strokeLinecap="round" />
-      <line x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} stroke={id.lit} strokeWidth={Math.max(1, w * 0.22)}
-        strokeLinecap="round" opacity=".8" />
-    </g>
-  );
-  return (
-    <g>
-      {/* Werkhalle im Hintergrund */}
-      <g opacity=".3">
-        {Array.from({ length: 6 }, (_, i) => {
-          const x = 8 + i * 36, hh = 30 + rnd() * 58;
-          return <rect key={i} x={x} y={182 - hh} width="22" height={hh} fill={id.shade} />;
-        })}
+  /* Der Leuchtdurchgang zeichnet nur, was Licht abgibt: die Dioden des
+     vordersten Schranks und die beiden Kanten, auf die das Licht fällt. Er
+     läuft unscharf darunter und gibt ihnen den Hof. */
+  if (glow) {
+    const c = cabs[2], g = geo(c);
+    return (
+      <g>
+        {g.units.map((u, i) => (c.lit[i] ? (
+          <rect key={i} x={u.a[0] + 8} y={(u.a[1] + u.d[1]) / 2 - 2}
+            width={(u.b[0] - u.a[0]) * c.wide[i]} height="4" rx="2" fill={id.lit} />
+        ) : null))}
+        <polyline points={poly([g.SL, g.FL, g.FR])} fill="none" stroke={id.lit} strokeWidth="3" />
+        <line x1={g.FR[0]} y1={g.FR[1]} x2={g.BR[0]} y2={g.BR[1]} stroke={id.lit} strokeWidth="2.5" />
       </g>
-      <rect x="0" y="182" width="220" height="18" fill={id.own} opacity=".14" />
-      {/* Sockel */}
-      <path d={`M${bx - 26} 190 L${bx - 15} 164 H${bx + 15} L${bx + 26} 190 Z`}
-        fill={id.shade} stroke={id.own} strokeWidth="1.4" />
-      {seg([bx, by - 8], e, 13)}
-      {seg([bx, by - 8], e, 6.5)}
-      {seg(e, h, 10)}
-      <circle cx={bx} cy={by - 8} r="10" fill={id.shade} stroke={id.lit} strokeWidth="2" />
-      <circle cx={e[0]} cy={e[1]} r="8.5" fill={id.shade} stroke={id.lit} strokeWidth="2" />
-      {/* Greifer */}
-      <g stroke={id.lit} strokeWidth="3" strokeLinecap="round" fill="none">
-        <path d={`M${h[0]} ${h[1]} l${Math.cos(r2 - 0.5) * 15} ${Math.sin(r2 - 0.5) * 15}`} />
-        <path d={`M${h[0]} ${h[1]} l${Math.cos(r2 + 0.5) * 15} ${Math.sin(r2 + 0.5) * 15}`} />
-      </g>
-      {/* Funken */}
-      {Array.from({ length: 7 }, (_, i) => (
-        <circle key={i} cx={h[0] + (rnd() - 0.5) * 46} cy={h[1] + (rnd() - 0.2) * 40}
-          r={0.8 + rnd() * 1.6} fill={id.lit} opacity={0.3 + rnd() * 0.5} />
-      ))}
-    </g>
-  );
-}
+    );
+  }
 
-function Bottle({ rnd, id }) {
-  const cx = 118, leaves = 5 + Math.floor(rnd() * 3);
   return (
     <g>
-      {/* Botanik hinter der Flasche */}
-      {Array.from({ length: leaves * 2 }, (_, i) => {
-        const side = i % 2 ? 1 : -1, k = Math.floor(i / 2);
-        const ang = side * (28 + k * 17 + rnd() * 8);
-        const len = 46 + rnd() * 34;
-        const bx = cx + side * 20, by = 150 - k * 12;
-        const r = (ang - 90) * Math.PI / 180;
-        const tx = bx + Math.cos(r) * len, ty = by + Math.sin(r) * len;
-        // Blattform: zwei gespiegelte Bögen um die Achse Ansatz -> Spitze,
-        // dazu die Mittelrippe. Eine einzelne Kurve zurück ergab eine Zacke.
-        const mx = (bx + tx) / 2, my = (by + ty) / 2;
-        /* Der Kontrollpunkt liegt doppelt so weit von der Sehne entfernt wie
-           die spätere Blatthälfte breit ist. Mit dem früheren festen Abstand
-           von rund zehn Einheiten wurde aus jedem Blatt eine Zacke. */
-        const nx = -(ty - by) / len, ny = (tx - bx) / len, w = len * (0.36 + rnd() * 0.14);
+      <defs>
+        <linearGradient id={k + "rf"} x1="1" y1="0" x2="0" y2="0.35">
+          <stop offset="0%" stopColor={id.own} />
+          <stop offset="52%" stopColor={id.deep} />
+          <stop offset="100%" stopColor={id.shade} />
+        </linearGradient>
+        <linearGradient id={k + "rs"} x1="1" y1="0" x2="0" y2="0">
+          <stop offset="0%" stopColor={id.deep} /><stop offset="100%" stopColor={id.shade} />
+        </linearGradient>
+        <linearGradient id={k + "rfl"} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={id.own} stopOpacity=".3" />
+          <stop offset="100%" stopColor={id.own} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Boden und die Spiegelung darauf */}
+      <rect x="0" y="188" width="220" height="14" fill={id.shade} opacity=".6" />
+      <rect x="70" y="188" width="160" height="24" fill={`url(#${k}rfl)`} />
+
+      {cabs.map((c, ci) => {
+        const g = geo(c), front = ci === cabs.length - 1;
         return (
-          <g key={i} opacity={0.3 + rnd() * 0.34}>
-            <path d={`M${bx} ${by} Q${mx + nx * w} ${my + ny * w} ${tx} ${ty}
-                      Q${mx - nx * w} ${my - ny * w} ${bx} ${by} Z`} fill={id.own} />
-            <path d={`M${bx} ${by} L${tx} ${ty}`} stroke={id.lit} strokeWidth=".9" opacity=".7" fill="none" />
+          <g key={ci} opacity={c.dim}>
+            <polygon points={poly([g.SL, g.FL, g.BL, g.SB])} fill={`url(#${k}rs)`} />
+            <polygon points={poly([g.FL, g.FR, g.BR, g.BL])} fill={`url(#${k}rf)`} />
+            {/* Deckel: die Fläche, auf die das Licht direkt fällt */}
+            <polygon points={poly([g.SL, g.FL, g.FR, [g.FR[0] - 20, g.FR[1] + 7]])}
+              fill={id.own} opacity=".55" />
+            {g.units.map((u, i) => (
+              <g key={i}>
+                <polygon points={poly([u.a, u.b, u.c, u.d])} fill={id.shade} opacity=".9" />
+                <line x1={u.a[0]} y1={u.a[1]} x2={u.b[0]} y2={u.b[1]}
+                  stroke={id.own} strokeWidth=".7" opacity=".45" />
+                <rect x={u.a[0] + (front ? 8 : 5)} y={(u.a[1] + u.d[1]) / 2 - 1.5}
+                  width={(u.b[0] - u.a[0]) * c.wide[i]} height="3" rx="1.5"
+                  fill={c.lit[i] && front ? id.lit : id.own}
+                  opacity={c.lit[i] ? (front ? 1 : 0.5) : 0.28} />
+              </g>
+            ))}
+            {/* Lichtsaum nur dort, wo das Licht tatsächlich hinfällt */}
+            <polyline points={poly([g.SL, g.FL, g.FR])} fill="none" stroke={id.lit}
+              strokeWidth={front ? 1.7 : 1} opacity={front ? 0.95 : 0.5} />
+            <line x1={g.FR[0]} y1={g.FR[1]} x2={g.BR[0]} y2={g.BR[1]}
+              stroke={id.lit} strokeWidth={front ? 1.5 : 0.9} opacity={front ? 0.75 : 0.4} />
+            <line x1={g.FL[0]} y1={g.FL[1]} x2={g.BL[0]} y2={g.BL[1]}
+              stroke={id.shade} strokeWidth="1.2" opacity=".85" />
           </g>
         );
       })}
-      {/* Flasche */}
-      <path d={`M${cx - 22} 186 V116 q0-10 7-14 l3-2 V84 h24 v16 l3 2 q7 4 7 14 v70 z`}
-        fill={id.shade} stroke={id.lit} strokeWidth="1.8" />
-      <rect x={cx - 13} y="72" width="26" height="14" rx="3" fill={id.own} />
-      {/* Etikett */}
-      <rect x={cx - 22} y="128" width="44" height="38" fill={id.lit} opacity=".22" />
-      {Array.from({ length: 4 }, (_, i) => (
-        <rect key={i} x={cx - 14} y={136 + i * 8} width={i === 0 ? 28 : 20 - i * 3} height="2.4"
-          rx="1.2" fill={id.lit} opacity=".55" />
-      ))}
-      {/* Glanzkante */}
-      <path d={`M${cx - 15} 182 V120 q0-6 4-9`} fill="none" stroke={id.lit} strokeWidth="2"
-        opacity=".5" strokeLinecap="round" />
-      <ellipse cx={cx} cy="190" rx="40" ry="7" fill={id.own} opacity=".2" />
     </g>
   );
 }
 
-function Network({ rnd, id }) {
-  const n = 8 + Math.floor(rnd() * 4);
-  const nodes = Array.from({ length: n }, () => [22 + rnd() * 176, 26 + rnd() * 150]);
-  const hub = nodes[0];
+/* ------------------------------------------------------------- Healthcare --
+   Eine Doppelhelix mit Tiefe: Die vordere Strebe deckt die hintere ab, wird
+   dorthin dicker und heller, wo sie auf den Betrachter zuläuft, und dünner und
+   dunkler, wo sie nach hinten wegdreht.
+
+   Das geht nicht mit einem Pfad — ein Pfad hat eine Strichbreite und eine
+   Farbe. Jede Strebe ist deshalb in kurze Abschnitte zerlegt, und jeder
+   Abschnitt bekommt Breite, Farbe und Deckkraft aus seiner Tiefe. Gezeichnet
+   wird nach Tiefe sortiert, damit vorne wirklich vorne liegt.
+
+   Das Licht kommt von oben rechts: Abschnitte auf der rechten Seite der Achse
+   bekommen eine Stufe mehr.                                                 */
+function Helix({ rnd, id, glow = false }) {
+  const turns = 2 + rnd() * 0.8;
+  const A = 36 + rnd() * 8;
+  const cx = 162 + rnd() * 10, top = 12, bot = 208;
+  const N = 30;                       // Abschnitte je Strebe
+  const RUNGS = 13;
+
+  const at = (t, ph) => {
+    const a = t * Math.PI * 2 * turns + ph;
+    return { p: [cx + Math.sin(a) * A, top + t * (bot - top)], z: Math.cos(a) };
+  };
+  // Tiefe 0..1, rechts der Achse eine Stufe heller (Licht von oben rechts)
+  const lvl = (z, x) => Math.max(0, Math.min(1, (z + 1) / 2 + (x > cx ? 0.12 : 0)));
+  const col = (u) => (u < 0.26 ? id.shade : u < 0.52 ? id.deep : u < 0.8 ? id.own : id.lit);
+
+  const segs = [];
+  [0, Math.PI].forEach((ph, si) => {
+    for (let i = 0; i < N; i++) {
+      const a = at(i / N, ph), b = at((i + 1) / N, ph);
+      const z = (a.z + b.z) / 2, u = lvl(z, (a.p[0] + b.p[0]) / 2);
+      segs.push({ a: a.p, b: b.p, z, u, si });
+    }
+  });
+  segs.sort((m, n) => m.z - n.z);     // hinten zuerst
+
+  const rungs = Array.from({ length: RUNGS }, (_, i) => {
+    const t = (i + 0.5) / RUNGS;
+    const a = at(t, 0), b = at(t, Math.PI);
+    const u = lvl(Math.max(a.z, b.z), cx);
+    return { a: a.p, b: b.p, u, spread: Math.abs(a.p[0] - b.p[0]) / (2 * A) };
+  });
+
+  /* Der Leuchtdurchgang: nur die vordersten Abschnitte und die Knoten, die
+     dort sitzen. Sie sind die Lichtquelle des Bildes. */
+  if (glow) {
+    return (
+      <g>
+        {segs.filter((s2) => s2.u > 0.8).map((s2, i) => (
+          <line key={i} x1={s2.a[0]} y1={s2.a[1]} x2={s2.b[0]} y2={s2.b[1]}
+            stroke={id.lit} strokeWidth="6" strokeLinecap="round" />
+        ))}
+        {rungs.filter((r) => r.u > 0.82).map((r, i) => (
+          <circle key={i} cx={r.a[0]} cy={r.a[1]} r="4" fill={id.lit} />
+        ))}
+      </g>
+    );
+  }
+
   return (
     <g>
-      {nodes.map((p, i) => nodes.slice(i + 1).map((q, j) => {
-        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
-        return d < 78 ? (
-          <line key={i + "-" + j} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
-            stroke={id.own} strokeWidth="1" opacity={0.5 - d / 220} />
-        ) : null;
-      }))}
-      {nodes.map((p, i) => (
-        <line key={"h" + i} x1={hub[0]} y1={hub[1]} x2={p[0]} y2={p[1]}
-          stroke={id.lit} strokeWidth="1" opacity=".2" />
+      {/* Die Sprossen liegen zwischen den Streben; weit auseinanderstehende
+          sieht man von der Seite, zusammenlaufende von vorn — deshalb hängt
+          ihre Deckkraft an der Spreizung. */}
+      {rungs.map((r, i) => (
+        <line key={"r" + i} x1={r.a[0]} y1={r.a[1]} x2={r.b[0]} y2={r.b[1]}
+          stroke={col(r.u * 0.8)} strokeWidth={1 + r.spread * 1.6}
+          strokeLinecap="round" opacity={0.25 + r.spread * 0.5} />
       ))}
-      {nodes.map((p, i) => (
-        <g key={i}>
-          <circle cx={p[0]} cy={p[1]} r={i === 0 ? 13 : 7} fill={id.shade}
-            stroke={i === 0 ? id.lit : id.own} strokeWidth={i === 0 ? 2 : 1.4} />
-          {/* Standort als Person: Kopf und Schulter */}
-          <circle cx={p[0]} cy={p[1] - (i === 0 ? 3.4 : 1.8)} r={i === 0 ? 3.2 : 1.9} fill={id.lit} opacity=".85" />
-          <path d={`M${p[0] - (i === 0 ? 5 : 3)} ${p[1] + (i === 0 ? 6 : 3.4)}
-                    a${i === 0 ? 5 : 3} ${i === 0 ? 5 : 3} 0 0 1 ${i === 0 ? 10 : 6} 0`}
-            fill="none" stroke={id.lit} strokeWidth={i === 0 ? 2 : 1.3} opacity=".85" />
+      {segs.map((s2, i) => (
+        <line key={i} x1={s2.a[0]} y1={s2.a[1]} x2={s2.b[0]} y2={s2.b[1]}
+          stroke={col(s2.u)} strokeWidth={1.8 + s2.u * 4.4}
+          strokeLinecap="round" opacity={0.42 + s2.u * 0.58} />
+      ))}
+      {/* Knoten an den Ansatzpunkten der Sprossen — vorne hell und groß */}
+      {rungs.map((r, i) => (
+        <g key={"n" + i}>
+          <circle cx={r.a[0]} cy={r.a[1]} r={1.4 + r.u * 2} fill={col(Math.min(1, r.u + 0.15))}
+            opacity={0.5 + r.u * 0.5} />
+          <circle cx={r.b[0]} cy={r.b[1]} r={1.4 + (1 - r.u) * 2} fill={col(1 - r.u)}
+            opacity={0.5 + (1 - r.u) * 0.5} />
         </g>
+      ))}
+    </g>
+  );
+}
+
+/* ------------------------------------------------------------ Industrials --
+   Ein Roboterarm, gebaut wie eine Maschine: Sockel, Drehteller, zwei sich
+   verjüngende Armstücke, Gelenkringe mit Schraubenkranz, ein Greifer mit zwei
+   Backen, eine Kabelführung. Dahinter die Halle nur als Silhouette.
+
+   Ein Armstück ist keine Linie, sondern eine Fläche, die sich zum Gelenk hin
+   verjüngt: Nur so hat es eine Ober- und eine Unterseite, und nur dann kann
+   das Licht von oben rechts auf der einen liegen und die andere im Schatten
+   lassen. Genau dieser Unterschied macht aus dem Strich ein Bauteil.       */
+function Robot({ rnd, id, k = "", glow = false }) {
+  const bx = 116 + rnd() * 10, by = 182;
+  const a1 = (-66 - rnd() * 26) * Math.PI / 180;
+  const a2 = (52 + rnd() * 40) * Math.PI / 180;
+  const L1 = 62 + rnd() * 10, L2 = 46 + rnd() * 10;
+  const sh = [bx, by - 26];
+  const el = [sh[0] + Math.cos(a1) * L1, sh[1] + Math.sin(a1) * L1];
+  const wr = [el[0] + Math.cos(a1 + a2) * L2, el[1] + Math.sin(a1 + a2) * L2];
+  const aw = a1 + a2;
+
+  /* Ein sich verjüngendes Armstück als Viereck, dazu die Linien für Ober- und
+     Unterkante. Die Normale zur Achse gibt die beiden Seiten. */
+  const limb = (p, q, w0, w1) => {
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const nx = -(q[1] - p[1]) / d, ny = (q[0] - p[0]) / d;
+    const A = [p[0] + nx * w0, p[1] + ny * w0], B = [q[0] + nx * w1, q[1] + ny * w1];
+    const C = [q[0] - nx * w1, q[1] - ny * w1], D = [p[0] - nx * w0, p[1] - ny * w0];
+    // Die dem Licht zugewandte Seite ist die mit dem kleineren y
+    const upper = A[1] + B[1] < C[1] + D[1] ? [A, B] : [D, C];
+    const lower = A[1] + B[1] < C[1] + D[1] ? [D, C] : [A, B];
+    return { quad: [A, B, C, D], upper, lower };
+  };
+  const arm1 = limb(sh, el, 11, 8), arm2 = limb(el, wr, 8.5, 6);
+
+  const bolts = (c, r, n) => Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2 + 0.4;
+    return <circle key={i} cx={c[0] + Math.cos(a) * r} cy={c[1] + Math.sin(a) * r} r="1.1"
+      fill={id.lit} opacity=".55" />;
+  });
+  const jaw = (s2) => `M${wr[0] + Math.cos(aw) * 7} ${wr[1] + Math.sin(aw) * 7}
+    q${Math.cos(aw + s2 * 0.7) * 13} ${Math.sin(aw + s2 * 0.7) * 13}
+     ${Math.cos(aw + s2 * 0.25) * 24} ${Math.sin(aw + s2 * 0.25) * 24}`;
+  const sparks = Array.from({ length: 8 }, () => ({
+    x: wr[0] + (rnd() - 0.3) * 44, y: wr[1] + (rnd() - 0.35) * 40,
+    r: 0.7 + rnd() * 1.5, o: 0.3 + rnd() * 0.5,
+  }));
+
+  /* Der Leuchtdurchgang: die Kanten im Licht, die Gelenkringe und die Funken. */
+  if (glow) {
+    return (
+      <g>
+        <polyline points={poly(arm1.upper)} fill="none" stroke={id.lit} strokeWidth="4" strokeLinecap="round" />
+        <polyline points={poly(arm2.upper)} fill="none" stroke={id.lit} strokeWidth="3.5" strokeLinecap="round" />
+        <circle cx={sh[0]} cy={sh[1]} r="12" fill="none" stroke={id.lit} strokeWidth="3.5" />
+        <circle cx={el[0]} cy={el[1]} r="9.5" fill="none" stroke={id.lit} strokeWidth="3.5" />
+        <path d={jaw(1)} fill="none" stroke={id.lit} strokeWidth="4" strokeLinecap="round" />
+        <path d={jaw(-1)} fill="none" stroke={id.lit} strokeWidth="4" strokeLinecap="round" />
+        {sparks.map((s2, i) => <circle key={i} cx={s2.x} cy={s2.y} r={s2.r * 1.6} fill={id.lit} opacity={s2.o} />)}
+      </g>
+    );
+  }
+
+  return (
+    <g>
+      <defs>
+        <linearGradient id={k + "ro"} x1="0" y1="0" x2="0.25" y2="1">
+          <stop offset="0%" stopColor={id.own} />
+          <stop offset="45%" stopColor={id.deep} />
+          <stop offset="100%" stopColor={id.shade} />
+        </linearGradient>
+        <linearGradient id={k + "rb"} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={id.deep} /><stop offset="100%" stopColor={id.shade} />
+        </linearGradient>
+      </defs>
+
+      {/* Halle: nur Silhouette, damit sie Tiefe gibt und nichts behauptet */}
+      <g opacity=".5">
+        {Array.from({ length: 5 }, (_, i) => {
+          const x = 16 + i * 40, h = 40 + rnd() * 58;
+          return <rect key={i} x={x} y={184 - h} width="26" height={h} fill={id.shade} />;
+        })}
+        {/* Kranbahn: beginnt erst rechts, damit sie nicht als Strich durch den
+            Namen läuft */}
+        <rect x="72" y="58" width="148" height="4" fill={id.shade} />
+        {Array.from({ length: 3 }, (_, i) => (
+          <rect key={"c" + i} x={92 + i * 52} y="58" width="3" height="24" fill={id.shade} />
+        ))}
+      </g>
+      <rect x="0" y="184" width="220" height="18" fill={id.shade} opacity=".7" />
+
+      {/* Sockel und Drehteller */}
+      <path d={`M${bx - 30} 192 L${bx - 17} 160 H${bx + 17} L${bx + 30} 192 Z`}
+        fill={`url(#${k}rb)`} stroke={id.shade} strokeWidth="1.4" />
+      <line x1={bx - 17} y1="160" x2={bx + 17} y2="160" stroke={id.own} strokeWidth="1.2" opacity=".6" />
+      <rect x={bx - 20} y="152" width="40" height="11" rx="3" fill={id.deep} stroke={id.shade} strokeWidth="1.2" />
+      <line x1={bx - 19} y1="153" x2={bx + 19} y2="153" stroke={id.lit} strokeWidth="1.6" opacity=".85" />
+
+      {/* Kabelführung, hinter dem Arm */}
+      <path d={`M${bx - 6} 158 Q${sh[0] - 22} ${(sh[1] + el[1]) / 2} ${el[0] - 10} ${el[1] + 8}`}
+        fill="none" stroke={id.shade} strokeWidth="4" strokeLinecap="round" />
+      <path d={`M${bx - 6} 158 Q${sh[0] - 22} ${(sh[1] + el[1]) / 2} ${el[0] - 10} ${el[1] + 8}`}
+        fill="none" stroke={id.deep} strokeWidth="2" strokeLinecap="round" />
+
+      {/* Armstücke: Fläche, helle Oberkante, dunkle Unterkante */}
+      {[arm1, arm2].map((a, i) => (
+        <g key={i}>
+          <polygon points={poly(a.quad)} fill={`url(#${k}ro)`} stroke={id.shade} strokeWidth="1.6" />
+          <polyline points={poly(a.upper)} fill="none" stroke={id.lit} strokeWidth={i ? 1.4 : 1.7} opacity=".9" />
+          <polyline points={poly(a.lower)} fill="none" stroke={id.shade} strokeWidth="1.6" opacity=".9" />
+        </g>
+      ))}
+
+      {/* Gelenke: Ring mit Schraubenkranz — das Zeichen für "Maschine" */}
+      {[[sh, 12, 8], [el, 9.5, 6]].map(([c, r, n], i) => (
+        <g key={i}>
+          <circle cx={c[0]} cy={c[1]} r={r} fill={`url(#${k}rb)`} stroke={id.lit} strokeWidth="1.8" />
+          <circle cx={c[0]} cy={c[1]} r={r * 0.42} fill={id.shade} stroke={id.own} strokeWidth="1" />
+          {bolts(c, r * 0.72, n)}
+        </g>
+      ))}
+
+      {/* Greifer */}
+      <circle cx={wr[0]} cy={wr[1]} r="6" fill={id.deep} stroke={id.lit} strokeWidth="1.4" />
+      <path d={jaw(1)} fill="none" stroke={id.own} strokeWidth="4.5" strokeLinecap="round" />
+      <path d={jaw(-1)} fill="none" stroke={id.own} strokeWidth="4.5" strokeLinecap="round" />
+      <path d={jaw(1)} fill="none" stroke={id.lit} strokeWidth="1.4" strokeLinecap="round" opacity=".8" />
+      <path d={jaw(-1)} fill="none" stroke={id.lit} strokeWidth="1.4" strokeLinecap="round" opacity=".8" />
+
+      {sparks.map((s2, i) => <circle key={i} cx={s2.x} cy={s2.y} r={s2.r} fill={id.lit} opacity={s2.o} />)}
+    </g>
+  );
+}
+
+/* -------------------------------------------------------------- Consumer --
+   Eine Flasche mit Schulter, Hals und eingezogener Taille, davor und dahinter
+   gefächerte Blätter.
+
+   Drei Dinge machen aus der Silhouette ein Objekt: der Verlauf über den Bauch
+   (links Schatten, rechts Licht), ein schmaler Glanzstreifen auf der
+   Lichtseite und die helle Kante an der rechten Silhouette. Das Etikett liegt
+   als eigene Fläche darüber und bekommt eigene Kanten — sonst sieht es
+   aufgemalt aus statt aufgeklebt.
+
+   Die Blätter liegen in zwei Ebenen: hinten klein und dunkel, vorn größer, mit
+   Mittelrippe und heller Kante. Sie überlappen einander; ein Fächer aus
+   gleich hellen Blättern liest sich als Strahlenkranz, nicht als Pflanze.  */
+function Bottle({ rnd, id, k = "", glow = false }) {
+  const cx = 158 + rnd() * 10;
+  const base = 190, bodyTop = 122, neckTop = 74, capTop = 58;
+  const hw = 27 + rnd() * 3, nw = 9;
+
+  const body = `M${cx - hw} ${base} V${bodyTop + 4}
+    C${cx - hw} ${bodyTop - 8} ${cx - hw + 5} ${bodyTop - 16} ${cx - nw} ${neckTop + 22}
+    V${neckTop} H${cx + nw} V${neckTop + 22}
+    C${cx + hw - 5} ${bodyTop - 16} ${cx + hw} ${bodyTop - 8} ${cx + hw} ${bodyTop + 4}
+    V${base} Z`;
+  const rightEdge = `M${cx + hw} ${base - 6} V${bodyTop + 4}
+    C${cx + hw} ${bodyTop - 8} ${cx + hw - 5} ${bodyTop - 16} ${cx + nw} ${neckTop + 22} V${neckTop + 2}`;
+
+  // Blätter: Ansatz unten an der Flasche, Spitze nach außen oben
+  const leaf = (i, n, front) => {
+    const side = i % 2 ? 1 : -1, r = Math.floor(i / 2);
+    /* Vorne stehen die Blätter flach am Fuß und bleiben kurz — sonst decken
+       sie Etikett und Bauch ab, also genau das, was die Flasche ausmacht. */
+    const ang = front ? side * (62 + rnd() * 12) - 90 : side * (26 + r * 20 + rnd() * 10) - 90;
+    const len = front ? 38 + rnd() * 14 : 42 + rnd() * 26;
+    const a = front ? [cx + side * 15, 176] : [cx + side * (10 + r * 4), 158 - r * 8];
+    const rad = ang * Math.PI / 180;
+    const t = [a[0] + Math.cos(rad) * len, a[1] + Math.sin(rad) * len];
+    const nx = -(t[1] - a[1]) / len, ny = (t[0] - a[0]) / len, w = len * 0.4;
+    const m = [(a[0] + t[0]) / 2, (a[1] + t[1]) / 2];
+    return {
+      d: `M${a[0]} ${a[1]} Q${m[0] + nx * w} ${m[1] + ny * w} ${t[0]} ${t[1]}
+          Q${m[0] - nx * w} ${m[1] - ny * w} ${a[0]} ${a[1]} Z`,
+      rib: `M${a[0]} ${a[1]} Q${m[0] + nx * w * 0.12} ${m[1] + ny * w * 0.12} ${t[0]} ${t[1]}`,
+      lit: side > 0,
+    };
+  };
+  /* Der Fächer liegt fast vollständig hinter der Flasche. Vorne stehen nur
+     zwei Blätter am Fuß — als dunkle Form mit heller Kante, nicht als helle
+     Fläche: Ein helles Blatt vor dem Glas sieht aus wie Nebel darauf. */
+  const backLeaves = Array.from({ length: 8 }, (_, i) => leaf(i, 8, false));
+  const frontLeaves = Array.from({ length: 2 }, (_, i) => leaf(i, 2, true));
+
+  /* Der Leuchtdurchgang: der Glanzstreifen, die Lichtkante und der Deckel. */
+  if (glow) {
+    return (
+      <g>
+        <path d={rightEdge} fill="none" stroke={id.lit} strokeWidth="4" strokeLinecap="round" />
+        <rect x={cx + hw - 12} y="132" width="5" height="48" rx="2.5" fill={id.lit} />
+        <rect x={cx - 12} y={capTop} width="24" height="6" rx="3" fill={id.lit} />
+        {frontLeaves.filter((l) => l.lit).map((l, i) => (
+          <path key={i} d={l.rib} fill="none" stroke={id.lit} strokeWidth="2.5" />
+        ))}
+      </g>
+    );
+  }
+
+  return (
+    <g>
+      <defs>
+        <linearGradient id={k + "bg"} x1="0" y1="0" x2="1" y2="0.12">
+          <stop offset="0%" stopColor={id.shade} />
+          <stop offset="30%" stopColor={id.shade} />
+          <stop offset="62%" stopColor={id.deep} />
+          <stop offset="90%" stopColor={id.own} />
+          <stop offset="100%" stopColor={id.deep} />
+        </linearGradient>
+        <linearGradient id={k + "bl"} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={id.shade} stopOpacity=".2" />
+          <stop offset="100%" stopColor={id.lit} stopOpacity=".26" />
+        </linearGradient>
+        <radialGradient id={k + "bs"} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={id.shade} stopOpacity=".8" />
+          <stop offset="100%" stopColor={id.shade} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* Hintere Blätter: gestaffelt, weiter hinten dunkler */}
+      {backLeaves.map((l, i) => (
+        <g key={i}>
+          <path d={l.d} fill={id.deep} opacity={0.5 - (i % 4) * 0.09} />
+          <path d={l.rib} fill="none" stroke={id.own} strokeWidth=".8" opacity={0.3 - (i % 4) * 0.05} />
+        </g>
+      ))}
+
+      {/* Standschatten */}
+      <ellipse cx={cx} cy={base + 2} rx="54" ry="12" fill={`url(#${k}bs)`} />
+
+      {/* Flasche */}
+      <path d={body} fill={`url(#${k}bg)`} stroke={id.shade} strokeWidth="1.6" />
+      {/* Glanzstreifen auf der Lichtseite */}
+      <rect x={cx + hw - 11} y="126" width="5" height="56" rx="2.5" fill={id.lit} opacity=".7" />
+      <rect x={cx - hw + 6} y="140" width="2" height="30" rx="1" fill={id.lit} opacity=".18" />
+      <path d={rightEdge} fill="none" stroke={id.lit} strokeWidth="1.6" opacity=".85" />
+
+      {/* Etikett als eigene Fläche mit eigenen Kanten */}
+      <rect x={cx - hw + 1} y="136" width={hw * 2 - 2} height="38" fill={`url(#${k}bl)`} />
+      <line x1={cx - hw + 1} y1="136" x2={cx + hw - 1} y2="136" stroke={id.lit} strokeWidth="1" opacity=".5" />
+      <line x1={cx - hw + 1} y1="174" x2={cx + hw - 1} y2="174" stroke={id.shade} strokeWidth="1.2" opacity=".8" />
+      {Array.from({ length: 3 }, (_, i) => (
+        <rect key={i} x={cx - 13} y={145 + i * 8} width={i === 0 ? 26 : 20 - i * 4} height="2.2"
+          rx="1.1" fill={id.lit} opacity={i === 0 ? 0.55 : 0.3} />
+      ))}
+
+      {/* Verschluss mit Riffelung */}
+      <rect x={cx - 12} y={capTop} width="24" height="18" rx="3" fill={id.deep} stroke={id.shade} strokeWidth="1.2" />
+      {Array.from({ length: 5 }, (_, i) => (
+        <line key={i} x1={cx - 8 + i * 4} y1={capTop + 3} x2={cx - 8 + i * 4} y2={capTop + 15}
+          stroke={id.shade} strokeWidth="1" opacity=".7" />
+      ))}
+      <rect x={cx - 12} y={capTop} width="24" height="4" rx="2" fill={id.lit} opacity=".8" />
+
+      {/* Vordere Blätter: dunkle Form mit heller Kante — sie stehen vor dem
+          Glas und dürfen es nicht aufhellen */}
+      {frontLeaves.map((l, i) => (
+        <g key={i}>
+          <path d={l.d} fill={id.shade} opacity=".88" />
+          <path d={l.d} fill="none" stroke={l.lit ? id.lit : id.own} strokeWidth="1.3"
+            opacity={l.lit ? 0.75 : 0.45} />
+          <path d={l.rib} fill="none" stroke={l.lit ? id.lit : id.own} strokeWidth=".9" opacity=".5" />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/* ------------------------------------------------------ Business Services --
+   Ein Netz mit Zentrum: vorn ein großer Knoten, dahinter kleinere, die nach
+   hinten kleiner und dunkler werden, verbunden durch leicht gebogene Bögen.
+
+   Die Tiefe hängt an der Höhe im Bild — was weiter unten steht, ist näher.
+   Das ist die Regel, nach der man eine Landschaft liest, und sie macht aus
+   einer Punktwolke eine Fläche mit Vorder- und Hintergrund. Gerade Linien
+   zwischen den Knoten ergäben ein Diagramm; die Bögen machen daraus ein Netz.
+   Nur der vorderste Knoten trägt eine Figur, die übrigen sind Punkte.      */
+function Network({ rnd, id, glow = false }) {
+  const N = 9 + Math.floor(rnd() * 3);
+  /* Der Knotenpunkt steht fest, er wird nicht ausgewürfelt: Nähme man einfach
+     den vordersten der zufälligen Knoten, landete er je nach Startwert in der
+     unteren rechten Ecke — dort, wo der Anspruch des Sektors steht, und
+     angeschnitten obendrein. Die Streuung gehört den übrigen Knoten. */
+  const hub = { x: 154 + rnd() * 16, y: 122 + rnd() * 16, z: 1 };
+  const nodes = Array.from({ length: N - 1 }, () => {
+    const x = 96 + rnd() * 128, y = 34 + rnd() * 132;
+    return { x, y, z: Math.max(0, Math.min(0.88, (y - 34) / 150 + (rnd() - 0.5) * 0.2)) };
+  });
+  nodes.push(hub);
+  nodes.sort((a, b) => a.z - b.z);
+  const col = (u) => (u < 0.3 ? id.shade : u < 0.56 ? id.deep : u < 0.82 ? id.own : id.lit);
+
+  // Bögen nur zwischen benachbarten Knoten, sonst wird es ein Knäuel
+  const arcs = [];
+  nodes.forEach((a, i) => nodes.slice(i + 1).forEach((b) => {
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d > 74) return;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nx = -(b.y - a.y) / d, ny = (b.x - a.x) / d, bow = d * 0.17;
+    arcs.push({
+      d: `M${a.x} ${a.y} Q${mx + nx * bow} ${my + ny * bow} ${b.x} ${b.y}`,
+      u: Math.min(a.z, b.z), near: Math.max(a.z, b.z) > 0.9,
+    });
+  }));
+  const pulses = arcs.filter((a) => a.near).slice(0, 3);
+
+  const figure = (n, r) => (
+    <g>
+      <circle cx={n.x} cy={n.y - r * 0.3} r={r * 0.3} fill={id.lit} />
+      <path d={`M${n.x - r * 0.46} ${n.y + r * 0.52} a${r * 0.46} ${r * 0.46} 0 0 1 ${r * 0.92} 0`}
+        fill="none" stroke={id.lit} strokeWidth={r * 0.19} strokeLinecap="round" />
+    </g>
+  );
+
+  /* Der Leuchtdurchgang: der Ring des vordersten Knotens, die Figur darin und
+     die Bögen, die von ihm ausgehen. */
+  if (glow) {
+    return (
+      <g>
+        <circle cx={hub.x} cy={hub.y} r="15" fill="none" stroke={id.lit} strokeWidth="4" />
+        {figure(hub, 15)}
+        {pulses.map((a, i) => (
+          <path key={i} d={a.d} fill="none" stroke={id.lit} strokeWidth="3" strokeLinecap="round" />
+        ))}
+        {nodes.filter((n) => n.z > 0.72 && n !== hub).map((n, i) => (
+          <circle key={i} cx={n.x} cy={n.y} r={5 + n.z * 4} fill={id.lit} opacity=".7" />
+        ))}
+      </g>
+    );
+  }
+
+  return (
+    <g>
+      {/* Bögen: hinten fast im Grund, vorn kräftig */}
+      {arcs.map((a, i) => (
+        <path key={i} d={a.d} fill="none" stroke={col(a.u)} strokeWidth={0.7 + a.u * 1.3}
+          opacity={0.2 + a.u * 0.6} strokeLinecap="round" />
+      ))}
+      {nodes.map((n, i) => {
+        const isHub = n === hub, r = isHub ? 15 : 3.4 + n.z * 6;
+        return (
+          <g key={i}>
+            <circle cx={n.x} cy={n.y} r={r} fill={id.shade}
+              stroke={col(Math.min(1, n.z + 0.12))} strokeWidth={isHub ? 2.2 : 0.9 + n.z}
+              opacity={0.45 + n.z * 0.55} />
+            {isHub ? figure(n, r)
+              : n.z > 0.62
+                ? figure(n, r)
+                : <circle cx={n.x} cy={n.y} r={r * 0.34} fill={col(n.z)} opacity={0.4 + n.z * 0.5} />}
+          </g>
+        );
+      })}
+      {/* Der vorderste Knoten bekommt einen zweiten Ring — er ist das Zentrum */}
+      <circle cx={hub.x} cy={hub.y} r="21" fill="none" stroke={id.own} strokeWidth="1" opacity=".45" />
+      <circle cx={hub.x} cy={hub.y} r="27" fill="none" stroke={id.own} strokeWidth=".8" opacity=".2" />
+      {pulses.map((a, i) => (
+        <path key={"p" + i} d={a.d} fill="none" stroke={id.lit} strokeWidth="1.4" opacity=".8"
+          strokeLinecap="round" />
       ))}
     </g>
   );
@@ -418,7 +785,6 @@ function Pattern({ id }) {
    greifen auf var(--card) zu und folgen damit dem Theme.                     */
 export function HeroArt({ id, tier = "common" }) {
   const Scene = SCENES[id.scene] || Network;
-  const rnd = lcg(id.seed ^ 0x5bf03635);
   const u = id.uid;
   /* Zeichenfläche 300 x 200, an der rechten unteren Ecke verankert: Der
      Kartenkopf ist breiter als hoch, `slice` beschneidet also oben. Verankert
@@ -453,17 +819,24 @@ export function HeroArt({ id, tier = "common" }) {
             <stop offset="100%" stopColor="var(--card)" stopOpacity=".96" />
           </linearGradient>
           <filter id={u + "bl"} x="-25%" y="-25%" width="150%" height="150%">
-            <feGaussianBlur stdDeviation="6" />
+            <feGaussianBlur stdDeviation="5" />
           </filter>
         </defs>
         <rect width="300" height="200" fill={`url(#${u}sky)`} />
         <Pattern id={id} />
         <rect width="300" height="200" fill={`url(#${u}glow)`} />
-        {/* Der Leuchtabdruck der Szene liegt unscharf darunter — das gibt dem
-            Strich das Neon des Entwurfs, ohne jeden Pfad zu filtern. */}
+        {/* Zwei Durchgänge derselben Szene: erst nur das, was leuchtet, unscharf
+            und kräftig — dann die Szene selbst, scharf. So bekommt das Licht
+            einen Hof, ohne dass die ganze Zeichnung vernebelt.
+
+            Beide Durchgänge bekommen dieselbe Zufallsfolge. Vorher liefen sie
+            mit verschiedenen Startwerten: Der Hof gehörte zu einem anderen Bild
+            als die Zeichnung darüber, und genau das ergab den Matsch. */}
         <g transform="translate(80 0)">
-          <g filter={`url(#${u}bl)`} opacity=".38"><Scene rnd={lcg(id.seed)} id={id} /></g>
-          <Scene rnd={rnd} id={id} />
+          <g filter={`url(#${u}bl)`} opacity=".85">
+            <Scene rnd={lcg(id.seed)} id={id} k={u + "g"} glow />
+          </g>
+          <Scene rnd={lcg(id.seed)} id={id} k={u + "m"} />
         </g>
         <rect width="300" height="200" fill={`url(#${u}sh)`} />
         <rect width="300" height="200" fill={`url(#${u}sv)`} />
@@ -503,8 +876,12 @@ export function Ability({ kind = "risk", children }) {
 /* Kopfzeile der Karte: Bild, Signet, Name, Anspruch, Fähigkeiten, Sektoranspruch. */
 export function CardHero({ id, sector, name, claim, tier = "common", state = null,
                           meta = null, abilities = null }) {
+  /* Die beiden Randtöne der Firmenfarbe stehen als Variablen bereit, damit der
+     Anspruch des Sektors im hellen Theme den dunklen und im dunklen den hellen
+     nehmen kann. Fest verdrahtet auf den hellen Ton stand er auf weißem Grund
+     fast unsichtbar. */
   return (
-    <div className={"bhero tier-" + tier}>
+    <div className={"bhero tier-" + tier} style={{ "--lit": id.lit, "--deep": id.deep }}>
       <HeroArt id={id} tier={tier} />
       <div className="bheroin">
         <div className="bherotop">
@@ -520,7 +897,7 @@ export function CardHero({ id, sector, name, claim, tier = "common", state = nul
         </div>
         {claim && <p className="bclaim">{claim}</p>}
         {abilities}
-        <div className="bsecclaim" style={{ color: id.lit }}>
+        <div className="bsecclaim">
           {id.claim.map((l) => <span key={l}>{l}</span>)}
         </div>
       </div>
@@ -791,7 +1168,9 @@ export const BATTLE_CSS = `
 /* Der Anspruch des Sektors: zwei Zeilen, gesperrt, unten rechts im Bild. */
 .pel .bsecclaim{position:absolute;right:0;bottom:0;display:flex;flex-direction:column;
   align-items:flex-end;gap:2px;font-size:11.5px;font-weight:700;letter-spacing:.16em;
-  line-height:1.25;text-align:right;pointer-events:none;text-shadow:0 1px 10px var(--card);}
+  line-height:1.25;text-align:right;pointer-events:none;color:var(--deep);
+  text-shadow:0 1px 10px var(--card),0 0 3px var(--card);}
+.pel.dark .bsecclaim{color:var(--lit);text-shadow:0 1px 10px var(--card);}
 @media (max-width:379px){.pel .bsecclaim{font-size:10px;letter-spacing:.12em;}
   .pel .bclaim{max-width:100%;}}
 

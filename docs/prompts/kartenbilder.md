@@ -26,9 +26,10 @@ gebunden ist, die er beschreibt: Ändert sich `HeroArt` oder `identityOf` in
 >    bleibt ein Strichmännchen.
 > 2. **Kein Tiefenaufbau.** Vorder-, Mittel- und Hintergrund liegen auf
 >    derselben Helligkeit. Nichts steht vorn, nichts fällt zurück.
-> 3. **Nebel statt Leuchten.** Der unscharfe Doppelgänger unter der Szene
->    (`opacity .38`) liegt gleichmäßig hinter allem und vernebelt die Form,
->    statt einzelne Lichter hervorzuheben.
+> 3. **Nebel statt Leuchten.** Der unscharfe Doppelgänger unter der Szene liegt
+>    gleichmäßig hinter allem und vernebelt die Form, statt einzelne Lichter
+>    hervorzuheben. (Er lief obendrein mit einem anderen Startwert als die
+>    Zeichnung darüber — der Hof gehörte zu einem anderen Bild.)
 > 4. **Kein Blickpunkt.** Fünf gleich große Schränke, neun gleich große Knoten.
 >    Keine Hierarchie, kein Motiv, das die Karte trägt.
 > 5. **Zu viel gleichzeitig.** Muster, Farbfeld, Glühen, Szene und zwei
@@ -70,8 +71,16 @@ gebunden ist, die er beschreibt: Ändert sich `HeroArt` oder `identityOf` in
 >
 > ### Technische Bedingungen — jede einzelne ist bindend
 >
-> - **Signatur unverändert:** `function Racks({ rnd, id })` und so weiter, jede
->   gibt ein `<g>` zurück. `SCENES` bleibt wie es ist.
+> - **Signatur:** `function Racks({ rnd, id, k = "", glow = false })`, jede gibt
+>   ein `<g>` zurück. `SCENES` bleibt wie es ist. `k` ist der Namensraum für
+>   eigene Verlaufs-IDs, `glow` schaltet den Leuchtdurchgang.
+> - **Zwei Durchgänge:** `HeroArt` ruft jede Szene zweimal auf, mit derselben
+>   Zufallsfolge. Bei `glow` zeichnest du **nur, was Licht abgibt** — Dioden,
+>   Kanten im Licht, Funken —, kräftig und ohne Beiwerk; dieser Durchgang läuft
+>   unscharf unter der Zeichnung und gibt ihr den Hof. Beide Durchgänge müssen
+>   dieselbe Geometrie ergeben, also `rnd()` in beiden Zweigen gleich oft und in
+>   gleicher Reihenfolge aufrufen (am einfachsten: erst alles berechnen, dann
+>   auf `glow` verzweigen).
 > - **Koordinaten:** lokal `0..220` in x und `0..200` in y. `HeroArt` versetzt
 >   die Szene um `translate(80 0)` in eine `300 x 200`-Fläche mit
 >   `preserveAspectRatio="xMaxYMax slice"`. Sichtbar ist auf einem Telefon
@@ -98,9 +107,11 @@ gebunden ist, die er beschreibt: Ändert sich `HeroArt` oder `identityOf` in
 >   Elemente.
 > - **Der linke Bildbereich bleibt ruhig.** Über den ersten rund 40 % liegen
 >   Name und Anspruch. Kein Hauptmotiv links von `x = 60` (lokal).
-> - Wenn der unscharfe Doppelgänger in `HeroArt` deiner Szene im Weg steht,
->   darfst du ihn ersetzen — dann aber durch etwas Gezieltes, etwa eine
->   Leuchtmaske nur für die hellen Stellen. Begründe die Änderung im Kommentar.
+> - **Nichts dem Zufall überlassen, was die Bildaufteilung trägt.** Das
+>   Hauptobjekt gehört an eine feste Stelle; gestreut wird das Beiwerk. Nimmt
+>   man etwa den zufällig vordersten Knoten als Zentrum, landet er bei manchen
+>   Startwerten in der unteren rechten Ecke — dort steht der Anspruch des
+>   Sektors, und angeschnitten ist er obendrein.
 >
 > ### Was du nicht anfassen darfst
 >
