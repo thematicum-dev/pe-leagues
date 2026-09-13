@@ -33,14 +33,20 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Darstellung; welche Zahl wann sichtbar ist, entscheidet weiterhin
   `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
 
+- **`public/sektoren/`**
+  Die Fotos, die der Kartenkopf im Dealflow und im Portfolio zeigt. Der Ordner
+  ist leer ausgeliefert: Solange für einen Sektor kein Motiv hinterlegt und in
+  `PHOTO_VARIANTS` gezählt ist, zeichnet die Karte ihre Szene selbst. Wie ein
+  Motiv beschaffen sein muss und wie man es einhängt, steht in
+  `public/sektoren/README.md`.
+
 - **`docs/prompts/kartenbilder.md`**
-  Ein Arbeitsauftrag zum Einfügen in eine Claude-Code-Sitzung: die fünf
-  Bildszenen im Kopfbereich der Unternehmenskarten neu zeichnen. Er enthält die
-  Diagnose der jetzigen Bilder, die Regeln, an denen sich eine Illustration von
-  einem Schaubild unterscheidet, und die Schnittstelle, an die sich der Code
-  halten muss. Er ist an `HeroArt` und `identityOf` in
-  `components/pel/battle.tsx` gebunden und muss mitgeändert werden, wenn sich
-  dort etwas ändert.
+  Die Bildprompts für die fünf Sektormotive — Claude erzeugt keine
+  Rasterbilder, sie entstehen in einem Bildmodell — samt der technischen
+  Vorgaben, ohne die ein Motiv in der Karte nicht funktioniert (dunkel,
+  Lichtquelle oben rechts, Motiv in der rechten Bildhälfte). Im zweiten Teil
+  der Arbeitsauftrag für die gezeichneten Szenen, die zu sehen sind, solange
+  kein Foto hinterlegt ist.
 
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und

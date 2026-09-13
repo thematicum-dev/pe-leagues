@@ -116,6 +116,7 @@ export function identityOf(name, sector) {
   const l = cl(b.l + (rnd() * 2 - 1) * 6, 34, 66);
   return {
     seed,
+    sector,
     uid: "i" + (seed % 1000000),
     own: hsl(h, s, l),
     lit: hsl(h, Math.min(96, s + 10), Math.min(74, l + 16)),
@@ -131,6 +132,42 @@ export function identityOf(name, sector) {
     pattern: Math.floor(rnd() * 4),
     rnd,
   };
+}
+
+/* ================================================================= Fotos ==
+   Der Kartenkopf trägt entweder ein Foto oder die gezeichnete Szene. Welches
+   von beidem, entscheidet allein diese Tabelle: Sie sagt, wie viele Motive je
+   Sektor unter `public/sektoren/` liegen. Steht dort eine Null, zeichnet die
+   Karte weiter — es gibt also keinen Zustand, in dem ein fehlendes Bild ein
+   Loch hinterlässt.
+
+   Warum mehrere Motive je Sektor: Ein Foto je Sektor hieße, dass alle
+   Dentallabore gleich aussehen. Aus dem Startwert des Unternehmens wird eines
+   der vorhandenen Motive gewählt; mit drei Motiven je Sektor bleibt von der
+   Identität des einzelnen Unternehmens so viel übrig, wie mit fertigen Bildern
+   überhaupt möglich ist. Den Rest tragen weiterhin Farbton, Monogramm und
+   Signet.
+
+   Dateien heißen `<sektor>-<nummer>.webp`, durchnummeriert ab 1. Wer ein Motiv
+   hinzufügt, erhöht hier die Zahl — sonst wird es nie gezogen.             */
+export const PHOTO_VARIANTS = {
+  Software: 0, Healthcare: 0, Industrials: 0, Services: 0, Consumer: 0,
+};
+/* Die beiden Stellschrauben der Farbkorrektur, an einer Stelle, weil sie
+   zusammen wirken: Sättigung des Motivs und Deckkraft der Sektorfarbe
+   darüber. Voll gesättigt und ungetönt sähe jede Karte gleich aus, egal aus
+   welchem Sektor; ganz entsättigt und stark getönt wäre es eine Duplex-Grafik
+   und kein Foto mehr. Die Vorgabe ist der Punkt dazwischen. */
+export const PHOTO_SATURATION = 0.4;
+export const PHOTO_TINT = 0.38;
+const PHOTO_SLUG = {
+  Software: "software", Healthcare: "healthcare", Industrials: "industrials",
+  Services: "services", Consumer: "consumer",
+};
+export function photoOf(id) {
+  const n = PHOTO_VARIANTS[id.sector] || 0;
+  if (!n) return null;
+  return `/sektoren/${PHOTO_SLUG[id.sector]}-${1 + (id.seed % n)}.webp`;
 }
 
 /* ---------------------------------------------------------------- Wappen --
@@ -786,11 +823,13 @@ function Pattern({ id }) {
 export function HeroArt({ id, tier = "common" }) {
   const Scene = SCENES[id.scene] || Network;
   const u = id.uid;
+  const photo = photoOf(id);
   /* Zeichenfläche 300 x 200, an der rechten unteren Ecke verankert: Der
      Kartenkopf ist breiter als hoch, `slice` beschneidet also oben. Verankert
      man stattdessen mittig, verschwindet der Boden jeder Szene — die
-     Serverreihe stünde ohne Stellfläche da. Die Szene selbst sitzt um 80
-     nach rechts versetzt, damit links Platz für Name und Anspruch bleibt. */
+     Serverreihe stünde ohne Stellfläche da. Die gezeichnete Szene sitzt um 80
+     nach rechts versetzt, damit links Platz für Name und Anspruch bleibt; ein
+     Foto füllt die Fläche und wird von der Abdeckung nach links ausgeblendet. */
   return (
     <div className={"bheroart tier-" + tier} aria-hidden="true">
       <svg viewBox="0 0 300 200" preserveAspectRatio="xMaxYMax slice">
@@ -821,23 +860,42 @@ export function HeroArt({ id, tier = "common" }) {
           <filter id={u + "bl"} x="-25%" y="-25%" width="150%" height="150%">
             <feGaussianBlur stdDeviation="5" />
           </filter>
+          {/* Farbkorrektur für Fotos, Stellschrauben oben bei PHOTO_SATURATION */}
+          <filter id={u + "gr"} colorInterpolationFilters="sRGB">
+            <feColorMatrix type="saturate" values={String(PHOTO_SATURATION)} />
+          </filter>
         </defs>
-        <rect width="300" height="200" fill={`url(#${u}sky)`} />
-        <Pattern id={id} />
-        <rect width="300" height="200" fill={`url(#${u}glow)`} />
-        {/* Zwei Durchgänge derselben Szene: erst nur das, was leuchtet, unscharf
-            und kräftig — dann die Szene selbst, scharf. So bekommt das Licht
-            einen Hof, ohne dass die ganze Zeichnung vernebelt.
 
-            Beide Durchgänge bekommen dieselbe Zufallsfolge. Vorher liefen sie
-            mit verschiedenen Startwerten: Der Hof gehörte zu einem anderen Bild
-            als die Zeichnung darüber, und genau das ergab den Matsch. */}
-        <g transform="translate(80 0)">
-          <g filter={`url(#${u}bl)`} opacity=".85">
-            <Scene rnd={lcg(id.seed)} id={id} k={u + "g"} glow />
-          </g>
-          <Scene rnd={lcg(id.seed)} id={id} k={u + "m"} />
-        </g>
+        {photo ? (
+          <>
+            <image href={photo} x="0" y="0" width="300" height="200"
+              preserveAspectRatio="xMaxYMid slice" filter={`url(#${u}gr)`} />
+            {/* Die Sektorfarbe legt sich über das Foto, sonst hätte jede Karte
+                dieselbe Anmutung, egal aus welchem Sektor. */}
+            <rect width="300" height="200" fill={id.deep} opacity={PHOTO_TINT} />
+            <rect width="300" height="200" fill={`url(#${u}glow)`} />
+          </>
+        ) : (
+          <>
+            <rect width="300" height="200" fill={`url(#${u}sky)`} />
+            <Pattern id={id} />
+            <rect width="300" height="200" fill={`url(#${u}glow)`} />
+            {/* Zwei Durchgänge derselben Szene: erst nur das, was leuchtet,
+                unscharf und kräftig — dann die Szene selbst, scharf. So bekommt
+                das Licht einen Hof, ohne dass die ganze Zeichnung vernebelt.
+
+                Beide Durchgänge bekommen dieselbe Zufallsfolge. Vorher liefen
+                sie mit verschiedenen Startwerten: Der Hof gehörte zu einem
+                anderen Bild als die Zeichnung darüber. */}
+            <g transform="translate(80 0)">
+              <g filter={`url(#${u}bl)`} opacity=".85">
+                <Scene rnd={lcg(id.seed)} id={id} k={u + "g"} glow />
+              </g>
+              <Scene rnd={lcg(id.seed)} id={id} k={u + "m"} />
+            </g>
+          </>
+        )}
+
         <rect width="300" height="200" fill={`url(#${u}sh)`} />
         <rect width="300" height="200" fill={`url(#${u}sv)`} />
       </svg>
@@ -1126,6 +1184,9 @@ export const BATTLE_CSS = `
   background:linear-gradient(155deg,color-mix(in srgb, var(--own) 16%, var(--card)) 0%,var(--card) 68%);}
 .pel .bheroart{position:absolute;inset:0;z-index:0;}
 .pel .bheroart svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+/* Die Motive sind für dunklen Grund aufgenommen. Auf hellem Grund werden sie
+   zurückgenommen, sonst steht ein schwarzer Block in einer weißen Karte. */
+.pel:not(.dark) .bheroart image{opacity:.62;}
 /* Der Foliengang über Trophy Assets: einmal quer, dann Pause. */
 .pel .bheroart.tier-myth:after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.20) 50%,transparent 65%);

@@ -1,174 +1,186 @@
-# Prompt: Kartenbilder für Dealflow und Portfolio
+# Kartenbilder
 
-Zum Einfügen in eine Claude-Code-Sitzung in diesem Repository. Er beauftragt
-genau eine Sache: die fünf Bildszenen im Kopfbereich der Unternehmenskarten neu
-zu zeichnen. Alles andere an der Karte bleibt, wie es ist.
+Der Kartenkopf im Dealflow und im Portfolio zeigt entweder ein Foto oder eine
+gezeichnete Szene. Fotos sind der Zielzustand; gezeichnet wird nur, solange für
+einen Sektor kein Motiv hinterlegt ist.
 
-Der Prompt steht hier und nicht in einer Notiz, weil er an die Schnittstelle
-gebunden ist, die er beschreibt: Ändert sich `HeroArt` oder `identityOf` in
-`components/pel/battle.tsx`, muss er mitgeändert werden.
+Dieses Dokument enthält beides: die Bildprompts für die Fotos (unten Teil 1)
+und den Arbeitsauftrag für die gezeichneten Szenen (Teil 2), falls an ihnen
+weitergearbeitet werden soll.
 
 ---
 
-## Der Prompt
+## Teil 1 — Fotos
+
+### Woher sie kommen
+
+Claude erzeugt keine Rasterbilder. Die Motive entstehen in einem Bildmodell
+(Midjourney, Firefly, DALL·E, Flux — die Prompts sind so geschrieben, dass sie
+in allen funktionieren) oder kommen aus einer Bilddatenbank. Danach ablegen
+nach der Anleitung in `public/sektoren/README.md`.
+
+### Die technischen Vorgaben — gelten für alle fünf
+
+Diese vier Zeilen gehören an jeden Prompt, sie entscheiden darüber, ob das Bild
+in der Karte funktioniert:
+
+> Aspect ratio 3:2. Dark cinematic scene, single light source from the upper
+> right, deep shadows. The subject sits in the right half of the frame; the
+> left 45 percent falls off into near-black empty space. No text, no logos, no
+> watermarks, no recognisable faces.
+
+Warum: Die Karte legt die Sektorfarbe über das Bild und blendet es nach links
+zum Kartengrund aus — dort stehen Name und Anspruch. Ein hell und gleichmäßig
+ausgeleuchtetes Motiv verliert dabei jede Form, ein mittig platziertes Motiv
+verschwindet zur Hälfte unter der Schrift.
+
+### Die fünf Motive
+
+Je Sektor drei Fassungen erzeugen und die überzeugendste dreimal variieren
+(anderer Ausschnitt, andere Brennweite) — dann sehen nicht alle Unternehmen
+eines Sektors gleich aus.
+
+**Software & IT** — `software-1.webp` … Grundfarbe elektrisches Blau
+
+> Editorial photograph of a modern data centre aisle at night. A single black
+> server rack in sharp focus on the right, its status LEDs glowing electric
+> blue; the rest of the row falls away into darkness with shallow depth of
+> field. Cold blue key light from the upper right, faint volumetric haze, fine
+> film grain. Aspect ratio 3:2. Dark cinematic scene, single light source from
+> the upper right, deep shadows. The subject sits in the right half of the
+> frame; the left 45 percent falls off into near-black empty space. No text, no
+> logos, no watermarks, no recognisable faces.
+
+**Healthcare** — `healthcare-1.webp` … Grundfarbe Smaragd
+
+> Editorial photograph of a sterile laboratory clean room at night. Precision
+> instruments and glass vials on a stainless steel bench on the right, catching
+> emerald green light; the room behind dissolves into darkness. Shallow depth
+> of field, volumetric light, fine film grain. Aspect ratio 3:2. Dark cinematic
+> scene, single light source from the upper right, deep shadows. The subject
+> sits in the right half of the frame; the left 45 percent falls off into
+> near-black empty space. No text, no logos, no watermarks, no recognisable
+> faces.
+
+**Industrials** — `industrials-1.webp` … Grundfarbe Gold
+
+> Editorial photograph of an industrial robot arm in a dark machine shop. The
+> articulated arm fills the right of the frame, its metal edges catching warm
+> amber light, a shower of sparks from the tool head. Factory hall behind in
+> silhouette, shallow depth of field, fine film grain. Aspect ratio 3:2. Dark
+> cinematic scene, single light source from the upper right, deep shadows. The
+> subject sits in the right half of the frame; the left 45 percent falls off
+> into near-black empty space. No text, no logos, no watermarks, no
+> recognisable faces.
+
+**Consumer & Retail** — `consumer-1.webp` … Grundfarbe Violett
+
+> Editorial product photograph of an unlabelled amber glass supplement bottle
+> on a dark stone surface, fresh botanicals and leaves arranged behind it.
+> Violet rim light from the upper right traces the shoulder of the bottle,
+> background falling to near black. Shallow depth of field, soft reflections,
+> fine film grain. Aspect ratio 3:2. Dark cinematic scene, single light source
+> from the upper right, deep shadows. The subject sits in the right half of the
+> frame; the left 45 percent falls off into near-black empty space. No text, no
+> logos, no watermarks, no recognisable faces.
+
+**Business Services** — `services-1.webp` … Grundfarbe Rosé
+
+> Editorial photograph of a modern operations floor at night, seen from a low
+> angle. Illuminated workstations and screens recede into the darkness on the
+> right, their glow tinted magenta rose; empty dark floor in the foreground.
+> Shallow depth of field, volumetric haze, fine film grain. Aspect ratio 3:2.
+> Dark cinematic scene, single light source from the upper right, deep shadows.
+> The subject sits in the right half of the frame; the left 45 percent falls
+> off into near-black empty space. No text, no logos, no watermarks, no
+> recognisable faces.
+
+### Wenn ein Modell Negativ-Prompts kennt
+
+> bright, flat lighting, white background, text, letters, watermark, logo,
+> collage, borders, faces, hands, cartoon, illustration, 3d render, low
+> contrast
+
+### Nach dem Erzeugen
+
+Auf 900 × 600 zuschneiden, als WebP mit Qualität um 72 speichern (Ziel unter
+120 KB), nach `public/sektoren/` legen und `PHOTO_VARIANTS` in
+`components/pel/battle.tsx` hochzählen. Details in
+`public/sektoren/README.md`.
+
+### Die zwei Stellschrauben danach
+
+`PHOTO_SATURATION` und `PHOTO_TINT` stehen in `components/pel/battle.tsx`. Die
+Vorgabe nimmt die Sättigung des Motivs auf 40 % zurück und legt die Sektorfarbe
+mit 38 % darüber — genug, dass fünf Sektoren als fünf Farbfamilien lesbar
+bleiben, wenig genug, dass das Motiv ein Foto bleibt. Wirken die Karten zu
+farbgleich, `PHOTO_TINT` senken.
+
+---
+
+## Teil 2 — Die gezeichneten Szenen
+
+Sie sind das, was ohne Foto zu sehen ist. Wer daran weiterarbeitet, kann den
+folgenden Auftrag in eine Claude-Code-Sitzung in diesem Repository einfügen.
+
+Vorweg der ehrliche Befund aus zwei Anläufen: Gezeichnetes SVG erreicht keine
+fotografische Anmutung. Was es erreichen kann, ist eine saubere, beleuchtete
+Illustration — und der Unterschied zwischen einem Schaubild und einer
+Illustration liegt in den fünf Regeln unten.
 
 > Zeichne die fünf Bildszenen der Unternehmenskarten in
 > `components/pel/battle.tsx` neu. Nur die Szenen — Aufbau, Daten, Text und
 > Kennzahlen der Karte bleiben unverändert.
 >
-> ### Was heute nicht funktioniert
+> **Die fünf Regeln, an denen es hängt:**
+> - **Ein Hauptobjekt** je Szene, groß genug, dass es vom rechten Rand
+>   angeschnitten wird. Alles andere ist Beiwerk und tritt deutlich zurück.
+> - **Eine Lichtquelle**, oben rechts. Jede Fläche bekommt eine helle und eine
+>   dunkle Seite; Kanten zum Licht tragen einen schmalen Saum (`id.lit`),
+>   abgewandte Flächen laufen nach `id.shade`.
+> - **Drei Tiefenebenen** mit deutlich verschiedenem Helligkeitswert.
+> - **Verläufe statt Volltonflächen** für Material. Ein Verlauf über einen
+>   Zylinder ergibt ein Rohr, eine Volltonfläche einen Balken.
+> - **Höchstens drei wirklich helle Stellen** je Szene. Sie sind der Grund,
+>   warum das Bild leuchtet.
 >
-> Sieh dir die Szenen zuerst an (`Racks`, `Helix`, `Robot`, `Bottle`,
-> `Network`). Sie sind Diagramme, keine Bilder. Konkret:
->
-> 1. **Kein Licht.** Jede Fläche ist ein Volltonwert. Ohne Lichtquelle gibt es
->    keine Kante, kein Volumen, kein Material. Ein Roboterarm aus drei Linien
->    bleibt ein Strichmännchen.
-> 2. **Kein Tiefenaufbau.** Vorder-, Mittel- und Hintergrund liegen auf
->    derselben Helligkeit. Nichts steht vorn, nichts fällt zurück.
-> 3. **Nebel statt Leuchten.** Der unscharfe Doppelgänger unter der Szene liegt
->    gleichmäßig hinter allem und vernebelt die Form, statt einzelne Lichter
->    hervorzuheben. (Er lief obendrein mit einem anderen Startwert als die
->    Zeichnung darüber — der Hof gehörte zu einem anderen Bild.)
-> 4. **Kein Blickpunkt.** Fünf gleich große Schränke, neun gleich große Knoten.
->    Keine Hierarchie, kein Motiv, das die Karte trägt.
-> 5. **Zu viel gleichzeitig.** Muster, Farbfeld, Glühen, Szene und zwei
->    Abdeckungen ergeben zusammen Matsch.
->
-> ### Wie es aussehen soll
->
-> Ein Bild, kein Schaubild. Die Vorlage ist die Bildsprache moderner
-> Sammelkartenspiele: ein Hauptobjekt, groß, klar in der Silhouette, vom
-> rechten Kartenrand angeschnitten, mit gerichtetem Licht auf dunklem Grund.
->
-> Halte dich an diese fünf Regeln, sie sind der Unterschied:
->
-> - **Ein Hauptobjekt je Szene**, groß genug, dass es angeschnitten wird. Alles
->   andere ist Beiwerk und muss deutlich zurücktreten.
-> - **Eine Lichtquelle**, oben rechts. Jede Fläche bekommt dadurch eine helle
->   und eine dunkle Seite. Kanten, die zum Licht zeigen, tragen einen schmalen
->   hellen Saum (`id.lit`), abgewandte Flächen laufen nach `id.shade`.
-> - **Drei Tiefenebenen** mit deutlich verschiedenem Helligkeitswert:
->   Hintergrund fast im Grund verschwindend, Mittelgrund gedämpft, Hauptobjekt
->   mit dem vollen Kontrastumfang.
-> - **Verläufe statt Volltonflächen** für Material. Ein `linearGradient` von
->   `id.shade` nach `id.own` über einen Zylinder gelesen ergibt ein Rohr; eine
->   Volltonfläche ergibt einen Balken.
-> - **Wenige Lichter, gezielt gesetzt.** Höchstens drei wirklich helle Stellen
->   je Szene. Sie sind der Grund, warum das Bild leuchtet.
->
-> ### Die fünf Motive
->
-> Sektor, Szene, Hauptobjekt — die Bildidee bleibt, die Ausführung ändert sich:
->
-> | Sektor | Funktion | Hauptobjekt |
-> |---|---|---|
-> | Software & IT | `Racks` | Ein einzelner Serverschrank in Dreiviertelansicht, angeschnitten. Offene Front, Einschübe in perspektivischer Staffelung, wenige helle Dioden. Der Gang dahinter verliert sich im Dunkeln. |
-> | Healthcare | `Helix` | Eine Doppelhelix in Aufsicht mit Tiefe: die vordere Strebe deckt die hintere ab, die Sprossen verkürzen sich zur Mitte. Vorn dick und hell, hinten dünn und dunkel. |
-> | Industrials | `Robot` | Ein Roboterarm als Maschine: Gehäuse mit Fase, sichtbare Gelenkringe, Kabelführung, ein Greifer mit zwei Backen. Halle dahinter nur als Silhouette. |
-> | Consumer | `Bottle` | Eine Flasche mit Glanzkante, Schulter und eingezogener Taille, Etikett mit Prägung. Blätter dahinter gefächert, mit Mittelrippe und überlappend — nicht als Strahlenkranz. |
-> | Business Services | `Network` | Ein Netz mit Zentrum: ein großer Knoten vorn, kleinere nach hinten kleiner und dunkler werdend, Verbindungen als leicht gebogene Bögen statt gerader Linien. |
->
-> ### Technische Bedingungen — jede einzelne ist bindend
->
-> - **Signatur:** `function Racks({ rnd, id, k = "", glow = false })`, jede gibt
->   ein `<g>` zurück. `SCENES` bleibt wie es ist. `k` ist der Namensraum für
->   eigene Verlaufs-IDs, `glow` schaltet den Leuchtdurchgang.
-> - **Zwei Durchgänge:** `HeroArt` ruft jede Szene zweimal auf, mit derselben
->   Zufallsfolge. Bei `glow` zeichnest du **nur, was Licht abgibt** — Dioden,
->   Kanten im Licht, Funken —, kräftig und ohne Beiwerk; dieser Durchgang läuft
->   unscharf unter der Zeichnung und gibt ihr den Hof. Beide Durchgänge müssen
->   dieselbe Geometrie ergeben, also `rnd()` in beiden Zweigen gleich oft und in
->   gleicher Reihenfolge aufrufen (am einfachsten: erst alles berechnen, dann
->   auf `glow` verzweigen).
-> - **Koordinaten:** lokal `0..220` in x und `0..200` in y. `HeroArt` versetzt
->   die Szene um `translate(80 0)` in eine `300 x 200`-Fläche mit
->   `preserveAspectRatio="xMaxYMax slice"`. Sichtbar ist auf einem Telefon
->   ungefähr `y = 26..200`; unter `y = 20` zeichnen ist verlorene Arbeit. Der
->   Boden der Szene gehört auf `y ≈ 185`.
-> - **Nur die vier Farbmarken** aus `id`: `id.shade` (fast schwarz),
->   `id.deep`, `id.own`, `id.lit`. Keine festen Hex-Werte, kein `#fff`, kein
->   `black`. Grund: Der Farbton ist je Unternehmen ein anderer, und die Karte
->   steht in beiden Themes.
-> - **Prüfe beide Themes.** Der Kartengrund ist im hellen Theme `#FFFFFF`. Eine
->   Szene, die nur auf Dunkel funktioniert, ist nicht fertig.
-> - **Eigene Verlaufs- und Filter-IDs** müssen `id.uid` enthalten
->   (`` `${id.uid}rack` ``). Auf einem Bildschirm stehen bis zu zehn Karten;
->   doppelte IDs greifen quer über Karten hinweg.
-> - **`rnd()` ist die einzige Zufallsquelle** und muss in fester Reihenfolge
->   aufgerufen werden. Kein `Math.random`, kein `Date`. Dieselbe Firma muss
->   über die ganze Partie dasselbe Bild behalten.
-> - **Variation je Unternehmen:** Zwei Karten desselben Sektors dürfen nicht
->   dasselbe Bild zeigen. Variiere aus `rnd()` Stellung, Anzahl, Staffelung und
->   Blickwinkel — aber nie so weit, dass der Sektor als Gruppe zerfällt.
-> - **Aufwand begrenzen:** Jede Szene wird zweimal gerendert (scharf und
->   unscharf), bei zehn Karten also zwanzigmal. Höchstens etwa 120 Knoten je
->   Szene, keine Filter innerhalb der Szene, keine Schleife über hundert
->   Elemente.
-> - **Der linke Bildbereich bleibt ruhig.** Über den ersten rund 40 % liegen
->   Name und Anspruch. Kein Hauptmotiv links von `x = 60` (lokal).
+> **Die Schnittstelle:**
+> - `function Racks({ rnd, id, k = "", glow = false })`, gibt ein `<g>` zurück.
+>   `k` ist der Namensraum für eigene Verlaufs-IDs (auf einem Bildschirm stehen
+>   bis zu zehn Karten, doppelte IDs greifen quer darüber hinweg), `glow`
+>   schaltet den Leuchtdurchgang.
+> - **Zwei Durchgänge:** `HeroArt` ruft jede Szene zweimal mit derselben
+>   Zufallsfolge auf. Bei `glow` zeichnest du **nur, was Licht abgibt** —
+>   Dioden, Kanten im Licht, Funken —, kräftig und ohne Beiwerk; dieser
+>   Durchgang läuft unscharf darunter und gibt der Zeichnung ihren Hof. Erst
+>   alles berechnen, dann auf `glow` verzweigen, damit beide Durchgänge
+>   dieselbe Geometrie ergeben.
+> - **Koordinaten:** lokal `0..220` in x, `0..200` in y; `HeroArt` versetzt die
+>   Szene um `translate(80 0)` in eine `300 x 200`-Fläche mit
+>   `preserveAspectRatio="xMaxYMax slice"`. Sichtbar ist auf einem Telefon etwa
+>   `y = 26..200`, der Boden gehört auf `y ≈ 185`. Über den ersten rund 60 % der
+>   Breite liegt die Abdeckung, die den Text lesbar hält — was dort steht, ist
+>   gedämpft.
+> - **Nur die vier Farbmarken** aus `id`: `id.shade`, `id.deep`, `id.own`,
+>   `id.lit`. Keine festen Hex-Werte: Der Farbton ist je Unternehmen ein
+>   anderer, und die Karte steht in beiden Themes.
+> - **`rnd()` ist die einzige Zufallsquelle**, in fester Reihenfolge. Dieselbe
+>   Firma muss über die ganze Partie dasselbe Bild behalten.
 > - **Nichts dem Zufall überlassen, was die Bildaufteilung trägt.** Das
->   Hauptobjekt gehört an eine feste Stelle; gestreut wird das Beiwerk. Nimmt
+>   Hauptobjekt gehört an eine feste Stelle, gestreut wird das Beiwerk. Nimmt
 >   man etwa den zufällig vordersten Knoten als Zentrum, landet er bei manchen
 >   Startwerten in der unteren rechten Ecke — dort steht der Anspruch des
 >   Sektors, und angeschnitten ist er obendrein.
+> - **Aufwand:** höchstens etwa 120 Knoten je Szene, keine Filter innerhalb der
+>   Szene.
 >
-> ### Was du nicht anfassen darfst
+> **Vorgehen.** Zeichnen ohne Hinsehen führt zurück zu Schaubildern. Leg dir
+> eine Seite mit einer Karte je Sektor an (`newDeal` mit fester Zufallsinstanz,
+> im Client erzeugt, sonst Hydration-Fehler), nimm den Kopfbereich mit
+> Playwright auf (`/opt/pw-browsers/chromium` ist installiert) und sieh dir
+> jedes Bild an, bevor du weitermachst. Eine Szene nach der anderen. Zum
+> Schluss beide Themes, 320/360/412 px und zwei Karten desselben Sektors
+> nebeneinander.
 >
-> Kennzahlen, Sichtbarkeitsregeln (was ohne Datenraum verdeckt bleibt),
-> Kartenaufbau, `lib/engine`, Tests. Das hier ist reine Darstellung.
->
-> ### Vorgehen
->
-> Zeichnen ohne Hinsehen führt zurück zu Schaubildern. Arbeite deshalb am Bild:
->
-> 1. Starte den Entwicklungsserver und lege dir eine Seite an, die eine Karte je
->    Sektor rendert (`newDeal` mit fester Zufallsinstanz über `createRng`).
->    Achtung: Erzeuge die Deals im Client, sonst gibt es einen
->    Hydration-Fehler. Räume die Seite am Ende wieder weg.
-> 2. Nimm mit Playwright den Kopfbereich jeder Karte auf
->    (`/opt/pw-browsers/chromium` ist installiert) und **sieh dir jedes Bild
->    an**, bevor du weitermachst.
-> 3. Eine Szene nach der anderen: zeichnen, ansehen, nachbessern. Erst wenn eine
->    überzeugt, die nächste.
-> 4. Zum Schluss alle fünf in beiden Themes und auf 320, 360 und 412 px prüfen,
->    dazu zwei Karten desselben Sektors nebeneinander — sehen sie verwandt aus,
->    ohne gleich zu sein?
->
-> ### Wann es fertig ist
->
-> - Jede Szene hat ein erkennbares Hauptobjekt, gerichtetes Licht und drei
->   unterscheidbare Tiefenebenen.
-> - Die Silhouette ist lesbar, wenn man die Augen zusammenkneift.
-> - Name und Anspruch links bleiben in beiden Themes gut lesbar.
-> - Zwei Unternehmen desselben Sektors sind auf einen Blick auseinanderzuhalten.
-> - `npm run build`, `npm test` und `npx eslint .` laufen ohne neue Befunde.
-> - Du hast die Bilder selbst gesehen und würdest sie zeigen.
-
----
-
-## Falls es doch gerenderte Bilder sein sollen
-
-Der Prompt oben bleibt bei gezeichnetem SVG, und zwar aus einem Grund, der die
-Sache entscheidet: Die Zielunternehmen entstehen erst zur Laufzeit aus einem
-Archetypenkatalog. Ein Bildmodell liefert fünf Bilder — eines je Sektor —, kein
-Bild je Unternehmen. Die Identität der einzelnen Firma, die gerade das Ziel des
-Umbaus war, ginge damit verloren; alle Dentallabore sähen wieder gleich aus.
-
-Wenn das in Kauf genommen wird, ist der Weg: fünf Bilder in einem Bildmodell
-erzeugen (Claude erzeugt selbst keine Rasterbilder), unter `public/sektoren/`
-ablegen und in `HeroArt` statt der Szene ein `<image>` einsetzen. Als Vorlage
-für das Bildmodell, hier am Beispiel Healthcare:
-
-> Dark editorial hero illustration for a private equity trading card, healthcare
-> sector. A single luminous DNA double helix rising from the lower right,
-> cropped by the right edge of the frame. Deep near-black emerald background,
-> one light source from the upper right, strong rim light on the front strand,
-> the rear strand falling into darkness. Volumetric glow, subtle depth of field.
-> No text, no logos, no people. The left 45 percent of the frame is near-empty
-> dark space for typography. Aspect ratio 3:2.
-
-Die übrigen vier analog: Serverschrank in Elektrikblau, Roboterarm in Gold vor
-einer Werkhalle, Flasche mit Botanik in Violett, Standortnetz in Rosé. Immer
-mit denselben drei Vorgaben am Ende — freie dunkle Fläche links, kein Text,
-Seitenverhältnis 3:2.
+> **Nicht anfassen:** Kennzahlen, Sichtbarkeitsregeln, Kartenaufbau,
+> `lib/engine`, Tests.
