@@ -23,6 +23,13 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Zinsschranke …), je mit Befund im Code und der Korrektur, die daraus folgte.
   Jeder Punkt ist in `lib/engine/__tests__/realityChecks.test.ts` festgehalten.
 
+- **`docs/management-bandwidth.md`**
+  Ein Entwurf, noch nicht umgesetzt: Vorschlag für eine Spiellogik, in der die
+  Qualität des Managements einer Beteiligung darüber entscheidet, wie viele
+  Wertsteigerungsprogramme sie gleichzeitig tragen kann ("Management
+  Bandwidth"). Enthält Formeln, Kalibrierung, die Stellen im Code, die
+  anzufassen wären, und die Balancerisiken.
+
 - **`app/access/page.tsx`, `app/onboarding/`, `lib/access/context.ts`**
   Die Zugangskontrolle. Wer sich neu registriert, beantragt unter
   `/onboarding` einen Zugang (Anzeigename + optionale Nachricht) und wartet
