@@ -23,6 +23,14 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Zinsschranke …), je mit Befund im Code und der Korrektur, die daraus folgte.
   Jeder Punkt ist in `lib/engine/__tests__/realityChecks.test.ts` festgehalten.
 
+- **`docs/unternehmenskonfiguration.md`**
+  Entwurf, wie ein Zielunternehmen eine eigene Struktur bekommt: ein
+  Konfigurationsvektor je Geschäftsmodell, aus dem sich die Eignung jeder
+  Value-Creation-Maßnahme ableitet, Belege statt fertiger Antworten im
+  Maßnahmenpicker, Wechselwirkungen zwischen den Maßnahmen und die
+  Kalibrierung, ab der sich das Entschlüsseln überhaupt lohnt. Neun
+  Vorschläge in drei Stufen, je mit Mechanik, Fundstelle und Zusage.
+
 - **`app/access/page.tsx`, `app/onboarding/`, `lib/access/context.ts`**
   Die Zugangskontrolle. Wer sich neu registriert, beantragt unter
   `/onboarding` einen Zugang (Anzeigename + optionale Nachricht) und wartet
