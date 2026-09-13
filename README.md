@@ -17,12 +17,21 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   wurde nichts verändert.
 
 - **`components/pel/battle.tsx`**
-  Die grafische Grundausstattung der Unternehmenskarten in Dealflow und
-  Portfolio ("Battle Cards"): Rahmen und Seltenheitsstufen, Sektorwappen, das
-  aus dem Firmennamen berechnete Artwork, Kennzahlenkacheln, Messbalken,
-  Notenplakette und Netzdiagramm — dazu die zugehörigen Stilregeln. Die Datei
-  enthält ausschließlich Darstellung; welche Zahl wann sichtbar ist, entscheidet
-  weiterhin `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
+  Die visuelle Identität der Unternehmenskarten in Dealflow und Portfolio
+  ("Battle Cards"), auf zwei Ebenen. Der **Sektor** trägt eine Farbe (`SECCOLOR`
+  in `lib/engine/engine.ts`), ein Wappen, eine Bildszene und einen Anspruch —
+  Serverreihe und "INNOVATION SCALES" für Software, Doppelhelix und "BETTER
+  LIVES" für Healthcare, Roboterarm und "REAL ASSETS" für Industrials, Flasche
+  mit Botanik und "BRANDS PEOPLE LOVE" für Consumer, Standortnetz und
+  "EXPERTISE AT WORK" für Services. Das einzelne **Unternehmen** bekommt daraus
+  eine eigene Ausprägung: Farbton innerhalb der Sektorfamilie, Monogramm im
+  Signet, Bildvariante und Hintergrundmuster, alles aus dem Firmennamen
+  abgeleitet und damit über die ganze Partie stabil — zwei Ziele desselben
+  Sektors sehen verwandt aus, aber nicht gleich. Dazu die Bausteine der Karte
+  (Kopfbereich, Kopfzahlen, Kennzahlenzeile, Abschnitte, Messbalken,
+  Netzdiagramm) und ihre Stilregeln. Die Datei enthält ausschließlich
+  Darstellung; welche Zahl wann sichtbar ist, entscheidet weiterhin
+  `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
 
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
