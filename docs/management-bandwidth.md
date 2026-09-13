@@ -321,6 +321,125 @@ sauber zu bauen. Als Ausbaustufe notiert, nicht als Teil dieses Vorschlags.
 
 ---
 
+### 3.6 Abnehmende Erträge — vier Schichten, die es schon gibt
+
+Die Beobachtung ist richtig, und sie ist bereits modelliert. Ein Programm hebt
+das Unternehmen, und genau dadurch bringt das nächste in dieselbe Richtung
+weniger. Die Engine bildet das an vier Stellen ab, jede an eine andere Größe
+gebunden:
+
+| Schicht | Funktion | Bemessen an |
+| --- | --- | --- |
+| **Eignung** | `fitOf(id, c)` | dem konkreten Defizit, an dem die Maßnahme ansetzt |
+| **Reifegraddecke** | `ceilingFactor(lvl)` | dem Niveau der *Dimension* (`c.plat` / `c.acc`) |
+| **Wiederholung** | `repeatMalus(n)` | der Zahl früherer Auflagen *derselben* Maßnahme |
+| **Harte Grenze** | `REPEAT_MAX = 4` | dito |
+
+Die Beträge, damit die Größenordnung greifbar ist:
+
+| Reifegrad | `ceilingFactor` | | Auflage | `repeatMalus.gm` |
+| --- | --- | --- | --- | --- |
+| 2,0 | 1,000 | | 1. | 1,000 |
+| 3,0 | 0,870 | | 2. | 0,820 |
+| 4,0 | 0,740 | | 3. | 0,672 |
+| 5,0 | 0,610 | | 4. | 0,551 |
+
+Am schärfsten wirkt aber `fitOf`, weil es über den Umweg der Wirkung greift:
+Ein Cost-out hebt `c.plat`, `c.plat` hebt über `targetMargin()` die Marge, und
+die Eignung des nächsten Cost-outs misst genau gegen diese Marge.
+
+| `c.plat` | Marge (Bench 14) | `fitOf("opex")` |
+| --- | --- | --- |
+| 2,0 | 13,0 | 0,83 |
+| 3,0 | 14,0 | 0,55 |
+| 4,0 | 15,0 | 0,27 |
+| 5,0 | 16,0 | 0,10 |
+
+Das ist die stärkste Bremse im Katalog, und sie ist die inhaltlich richtige:
+Nicht eine Regel verbietet das zweite Cost-out, sondern es ist schlicht nichts
+mehr zu holen. Dazu kommt `decayOf(lvl)` — oberhalb des Branchenniveaus fällt
+ein Reifegrad zurück, solange in der Dimension kein Programm läuft.
+
+**Wichtig für den Rest dieses Dokuments: Die Kanäle überschneiden sich kaum.**
+Innerhalb einer Dimension greift `fitOf` je Maßnahme an einer *anderen* Größe an
+— `opex` an der Marge, `nwc` an der Kapitalbindung, `erp` und `ai` an der Größe.
+Geteilt wird nur `ceilingFactor`, weil alle Plattformmaßnahmen dasselbe
+`c.plat` heben.
+
+#### Wo Stufe 2 das aushebelt
+
+Der Ertrag einer Maßnahme wird **beim Start** festgeschrieben
+(`engine.ts:906`) und erst bei Abschluss gebucht (`engine.ts:1521`). Heute ist
+das folgenlos: Pro Dimension läuft genau ein Programm, das nächste startet also
+zwangsläufig *nach* dem vorigen und sieht dessen Wirkung in `fitOf` und
+`ceilingFactor`. Die Serialisierung erledigt die Abnahme von selbst.
+
+**Stufe 2 nimmt genau diese Serialisierung weg.** Laufen `opex`, `nwc` und `erp`
+gleichzeitig, rechnen alle drei ihren `ceilingFactor` gegen dasselbe
+Ausgangsniveau — die Decke wird dreimal gegen einen Stand bemessen, den die
+ersten beiden Programme längst gehoben haben.
+
+Drei Plattformmaßnahmen mit je 0,70 Rohertrag, Start bei `c.plat` 2,0:
+
+| | Verlauf | Endstand |
+| --- | --- | --- |
+| sequenziell | +0,700 → +0,636 → +0,578 | **3,915** |
+| parallel | 3 × 0,700 | **4,100** |
+
+Ein Zuwachs von 2,10 statt 1,91, also **rund 10 % zu viel** — nicht dramatisch
+für ein Paar, aber es wächst mit der Zahl paralleler Programme, und es zeigt
+in die falsche Richtung: Es belohnt genau das Stapeln in einer Dimension, das
+die Bandbreite eigentlich bepreisen soll.
+
+#### Die Korrektur
+
+`fitOf` und `ceilingFactor` gehören **beim Abschluss** ausgewertet, nicht beim
+Start. `ok` und die Streuung `sp` bleiben, wo sie sind — der Zufallsstrom wird
+nicht angefasst, nur die deterministischen Faktoren wandern ans Ende der
+Laufzeit. Drei Folgen, alle gewollt:
+
+- Überlappende Programme teilen sich die Reserve automatisch und richtig, ohne
+  eine eigene Buchführung über beanspruchte Reifegradanteile.
+- Ein lange laufendes Programm liefert weniger, wenn ein anderes den Abstand
+  inzwischen geschlossen hat. Das ist keine Härte, sondern der Vorgang selbst:
+  Das Cost-out landet auf einer Basis, die die ERP-Ablösung schon schlanker
+  gemacht hat.
+- Der Spieler sieht beim Start eine **Prognose**, keine Zusage. Der
+  Maßnahmenpicker rechnet sie pro forma gegen den Zustand, der sich ergibt,
+  wenn die laufenden Programme liefern — damit wird die Überlappung sichtbar,
+  *bevor* man sich bindet, statt als Enttäuschung bei Abschluss.
+
+Für Stufe 1 ändert die Korrektur praktisch nichts (bei einem Programm je
+Dimension sind Start- und Abschlusszustand in derselben Dimension identisch).
+Sie ist trotzdem dort einzubauen, nicht erst in Stufe 2: als Vorarbeit, die
+unter der heutigen Slotregel nachweislich wirkungsfrei ist und sich deshalb
+sauber testen lässt.
+
+#### Was dabei *nicht* doppelt zählt
+
+Die Intensität aus 3.5 und die Abnahme aus diesem Abschnitt sind verschiedene
+Achsen, und ihre multiplikative Verknüpfung ist richtig: `gainFactor(i)` sagt,
+wie hart man *ein* Programm fährt, `fitOf × ceilingFactor` sagt, wie viel in der
+Dimension überhaupt noch liegt. Eine Task Force auf einer ausgereizten
+Dimension bleibt teuer und ertraglos — 1,183 × 0,74 × 0,27, und die Bandbreite
+kostet sie voll.
+
+**Und das ist die Pointe:** Die Kosten in BP sinken *nicht* mit der Reserve. Der
+organisatorische Aufwand eines Cost-outs schrumpft nicht, weil die Marge schon
+gut ist. Ertrag fällt, Preis bleibt — erst diese Asymmetrie macht „gar nicht
+machen" zu einem echten Zug statt zu einer verpassten Gelegenheit.
+
+#### Eine Nebenwirkung, die bleiben darf
+
+Weil `decayOf()` nur greift, solange in der Dimension *kein* Programm läuft,
+wird ein Dauerläufer auf Sparflamme (0,7 BP) zur Rückfallversicherung: Bei
+`c.plat` 4,5 hält er 0,20 Reifegrad je Halbjahr, die sonst verfallen. Das ist
+kein Schlupfloch, sondern genau die Aussage, mit der `DECAY` eingeführt wurde —
+„Halten ist nicht mehr kostenlos". Neu ist nur, dass das Halten jetzt einen
+ausgewiesenen Preis in Bandbreite hat statt eines versteckten.
+
+---
+
 ---
 
 ## 4 — Kalibrierung
@@ -413,6 +532,10 @@ fällt, die Bandbreite ist die einzige Schranke. Damit werden echte Allokationen
 möglich: zwei Performance-Programme parallel auf einer Beteiligung mit starkem
 CFO, während die Wachstumsseite ruht — heute unmöglich, inhaltlich völlig
 normal.
+
+**Voraussetzung ist die Korrektur aus 3.6:** Ohne sie rechnen parallele
+Maßnahmen derselben Dimension ihre Reifegraddecke alle gegen den Ausgangsstand,
+und das Stapeln in einer Dimension wird belohnt statt bepreist.
 
 Berührt zusätzlich: `initsOf`, `initIn`, `anyInit`, `sumInit` (`engine.ts:701–705`),
 die `["initP","initA"]`-Schleife in `maturePeople()` (`engine.ts:1495`), den
@@ -558,6 +681,15 @@ Für die Intensität (3.5) kommen dazu:
 - Bei `i = 1` liefert `buildInit()` in allen drei Kanälen bitgleich dasselbe
   wie vor der Änderung — der Regressionstest gegen die heutige Engine.
 
+Für die Auswertung beim Abschluss (3.6):
+
+- Unter der heutigen Slotregel (ein Programm je Dimension) liefert die
+  Verlegung von Start auf Abschluss **identische** Ergebnisse — das ist die
+  Zusage, die sie zu einer sicheren Vorarbeit macht.
+- Zwei parallele Plattformmaßnahmen heben `c.plat` zusammen um weniger als die
+  Summe ihrer Einzelerträge, und um genau so viel wie dieselben beiden
+  nacheinander.
+
 ---
 
 ## 7 — Was ich nicht vorschlage, und warum
@@ -594,17 +726,20 @@ bereits ab.
    `intensity` in `InitiativeIntent`, serverseitig gegen die freie Bandbreite
    geprüft. Voreinstellung überall „Normal" — bis der Spieler etwas anderes
    wählt, verhält sich das Spiel wie in Schritt 2.
-5. KI-Zweig auf dieselbe Prüfung (6.2). Die Allokationsregel aus 6.2 wird dabei
+5. `fitOf` und `ceilingFactor` von der Start- an die Abschlussauswertung
+   verlegen (3.6). Unter der heutigen Slotregel wirkungsfrei und genau deshalb
+   hier, vor Stufe 2, einzubauen und zu testen.
+6. KI-Zweig auf dieselbe Prüfung (6.2). Die Allokationsregel aus 6.2 wird dabei
    zweidimensional: erst welche Maßnahme, dann mit welcher Intensität.
    Vorschlag: `tr`-Klassen nie unter Normal, Rest greedy nach Ertrag je Punkt.
-6. `EngineCompat`-Schalter und `LEGACY_COMPAT` (6.3).
-7. Tests (6.5), dann 60 nachgespielte Partien: Median-TVPI Spieler und Kohorte
+7. `EngineCompat`-Schalter und `LEGACY_COMPAT` (6.3).
+8. Tests (6.5), dann 60 nachgespielte Partien: Median-TVPI Spieler und Kohorte
    vorher/nachher. Zielmarke: Median unverändert ±0,05, aber deutlich größere
    Spreizung zwischen gut und schlecht geführten Beteiligungen. Verschiebt sich
    der Median, greift 4.1.
-8. Oberfläche (6.4) — inklusive der drei Intensitätsstufen im Maßnahmenpicker.
-9. Erst danach Stufe 2 (Abschnitt 5).
+9. Oberfläche (6.4) — inklusive der drei Intensitätsstufen im Maßnahmenpicker.
+10. Erst danach Stufe 2 (Abschnitt 5).
 
-Schritte 1–8 sind Stufe 1 und in sich abgeschlossen. Wenn die Messung in
-Schritt 7 die Spreizung nicht zeigt, ist der Vorschlag gescheitert und
+Schritte 1–9 sind Stufe 1 und in sich abgeschlossen. Wenn die Messung in
+Schritt 8 die Spreizung nicht zeigt, ist der Vorschlag gescheitert und
 zurückzubauen — nicht nachzujustieren, bis die Zahl passt.
