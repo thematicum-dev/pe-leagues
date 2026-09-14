@@ -17,7 +17,7 @@ export default async function Home() {
     <main className="landing">
       <div className="landingcard">
         <Logo />
-        <p className="tagline">500 Mio. € Commitment. Fünf Fonds. Ein Dealflow.</p>
+        <p className="tagline">500 Mio. € Commitment. Invest. Build. Exit. Outperform.</p>
         <h1>Manage deinen Private-Equity-Fonds durch einen vollen Zyklus.</h1>
         <p>
           Investment, Value Creation, Exit: Einstiegsmultiple und Kapitalstruktur, das

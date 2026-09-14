@@ -47,6 +47,53 @@ body {
   box-sizing: border-box;
 }
 
+/* Kulisse hinter Startseite und Anmeldung. Das Dashboard bekommt sie
+   bewusst nicht: Dort wird gearbeitet, hier wird empfangen.
+
+   Das Motiv liegt unter /kulisse/eingang.webp. Fehlt die Datei, bleiben die
+   beiden Verläufe über var(--paper) stehen — das sieht gewollt aus und nicht
+   nach einem kaputten Bild. Die Reihenfolge der Ebenen ist von vorn nach
+   hinten: erst der Schleier, der die Schrift trägt, dann eine Abdunklung zu
+   den Rändern, zuletzt das Foto.
+
+   Die Verläufe sind nicht Deko, sondern Voraussetzung: Über einem
+   nächtlichen Motiv mit goldenen Lichtern liest sich graue Fließschrift
+   sonst nicht mehr. Gemessen wurde gegen die hellste Stelle des Motivs. */
+.landing,
+.authwrap {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(
+      100deg,
+      rgba(12, 18, 20, 0.6) 0%,
+      rgba(12, 18, 20, 0.42) 34%,
+      rgba(12, 18, 20, 0.1) 66%,
+      rgba(12, 18, 20, 0.34) 100%
+    ),
+    radial-gradient(135% 100% at 52% 44%, rgba(12, 18, 20, 0) 0%, rgba(12, 18, 20, 0.34) 100%),
+    url("/kulisse/eingang.webp");
+  background-size: cover, cover, cover;
+  background-position: center, center, 68% center;
+  background-repeat: no-repeat;
+  /* Vor dem Motiv braucht die Fließschrift etwas mehr Helligkeit als auf der
+     ruhigen Fläche des Dashboards -- sie ist es, die zuerst an die
+     Kontrastgrenze stößt, nicht die Überschriften. Erst dadurch kann die
+     Karte so weit zurücktreten. */
+  --ink2: #b4c0bf;
+}
+
+/* Auf dem Telefon füllt die Karte die Breite; vom Motiv bleiben nur die
+   Bänder darüber und darunter, und die zeigen bei "cover" gerade die
+   dunkelsten Stellen — Decke und Stuhllehne. Ein engerer Ausschnitt holt
+   stattdessen die beleuchtete Modellanlage ins obere Band. */
+@media (max-width: 560px) {
+  .landing,
+  .authwrap {
+    background-size: cover, cover, auto 220%;
+    background-position: center, center, 60% 95%;
+  }
+}
+
 .mono {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-variant-numeric: tabular-nums;
@@ -57,16 +104,44 @@ body {
   display: block;
 }
 
+/* Die Karte steht auf dem Motiv, nicht davor: leicht durchscheinend, mit
+   einer Unschärfe dahinter, damit die Lichter der Kulisse durchkommen, ohne
+   unter der Schrift zu flimmern. Ohne Motiv fällt sie auf var(--card)
+   zurück und sieht aus wie vorher. Die Kante trägt einen Hauch Gold — dieselbe
+   Farbe, mit der das Spiel seine seltenen Karten fasst. */
 .landingcard,
 .authcard {
   width: 100%;
   max-width: 420px;
-  background: var(--card);
-  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--card) 14%, transparent);
+  /* Nicht die Karte deckt die Schrift ab, sondern der Filter dahinter: Die
+     Unschärfe nimmt den Lichtern ihre Kanten, brightness dämpft sie leicht.
+     Dadurch bleibt die Karte weitgehend durchscheinend -- das Motiv wandert
+     erkennbar darunter durch -- und die Fließschrift steht trotzdem auf
+     ruhigem Grund. Eine deckende Fläche hätte beides nicht gleichzeitig
+     gekonnt.
+
+     Die drei Werte sind gemessen, nicht geschätzt (Verfahren in
+     docs/prompts/eingangsbild.md). Unter 16 Pixel Unschärfe kippt es: Bei 10
+     fällt der Fließtext der Startseite auf 4,44:1 und damit unter die
+     Anforderung, bei 6 auf 3,48:1. */
+  -webkit-backdrop-filter: blur(16px) saturate(118%) brightness(0.85);
+  backdrop-filter: blur(16px) saturate(118%) brightness(0.85);
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, var(--rule));
   border-radius: var(--r);
   padding: 28px 24px;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 26px 64px -34px rgba(0, 0, 0, 0.95), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Ohne backdrop-filter gäbe es nichts, was die Lichter dämpft -- dort muss
+   die Karte selbst decken. Betrifft ältere Browser und Firefox mit
+   abgeschalteter Einstellung. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .landingcard,
+  .authcard {
+    background: color-mix(in srgb, var(--card) 94%, transparent);
+  }
 }
 
 .brandmark {
