@@ -1321,6 +1321,40 @@ export const BATTLE_CSS = `
 .pel .bchip.teal{background:var(--teal);color:#06201B;}
 .pel .bchip.ox{background:var(--ox);color:#2A0C09;}
 
+/* ---------- Hinweisfeld mit Handlung ----------
+   Für den Fall, dass an der Karte etwas fehlt und genau eine Schaltfläche das
+   behebt. Es steht dort, wo die Lücke sichtbar wird, trägt die Warnfarbe im
+   Rahmen statt als nackten Text darunter und hält die Schaltfläche in
+   derselben Zeile — ein Knopf über die volle Breite hätte mehr Gewicht
+   bekommen als die Kennzahlen, um die es geht. */
+.pel .bcallout{display:flex;align-items:flex-start;gap:10px;margin:14px 15px 0;
+  padding:10px 11px;border-radius:12px;
+  border:1px solid color-mix(in srgb, var(--ox) 40%, transparent);
+  background:color-mix(in srgb, var(--ox) 9%, transparent);}
+.pel .bcicon{flex:none;width:32px;height:32px;border-radius:9px;display:flex;
+  align-items:center;justify-content:center;font-size:16px;line-height:1;
+  background:color-mix(in srgb, var(--ox) 16%, transparent);
+  border:1px solid color-mix(in srgb, var(--ox) 32%, transparent);}
+.pel .bcbody{flex:1;min-width:0;}
+/* Überschrift und Schaltfläche teilen sich die erste Zeile, der erklärende
+   Satz bekommt darunter die volle Breite. Stünde die Schaltfläche neben dem
+   ganzen Textblock, blieben der Erklärung rund 150 px — sie brach dort auf
+   vier Zeilen um und machte das Feld höher als die Kennzahlen darüber. */
+.pel .bchead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  min-height:32px;}
+.pel .bchead b{font-size:12.5px;font-weight:650;color:var(--ox);letter-spacing:-.01em;}
+.pel .bcbody p{margin:4px 0 2px;font-size:11.5px;line-height:1.45;color:var(--ink2);}
+.pel .bcallout button{flex:none;padding:8px 11px;font-size:11.5px;font-weight:600;
+  border-color:color-mix(in srgb, var(--ox) 55%, transparent);color:var(--ox);
+  background:var(--card);white-space:nowrap;}
+.pel .bcallout button:hover:not(:disabled){background:var(--ox);color:var(--card);
+  border-color:var(--ox);}
+/* Unter 340 px passen Überschrift und Schaltfläche nicht mehr nebeneinander. */
+@media (max-width:339px){
+  .pel .bchead{flex-wrap:wrap;}
+  .pel .bcallout button{width:100%;}
+}
+
 /* ---------- Abschnitte ---------- */
 .pel .bsec{padding:16px 15px 0;}
 .pel .bsec.flush{padding-left:0;padding-right:0;}

@@ -942,7 +942,11 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
      Farbe, Monogramm und Bild — die Karte wechselt den Stapel, nicht das
      Gesicht. */
   const id = useMemo(() => identityOf(c.name, c.sector), [c.name, c.sector]);
-  const { lead, rest } = useMemo(() => splitDesc(c.desc), [c.desc]);
+  /* Nur der erste Satz: Er steht als Anspruch im Kartenkopf. Die ausführliche
+     These gehört zur Kaufentscheidung und bleibt deshalb der Karte im Dealflow
+     vorbehalten — auf einer gehaltenen Beteiligung zählt, wie sie sich
+     entwickelt, nicht mehr, warum sie einmal gekauft wurde. */
+  const { lead } = useMemo(() => splitDesc(c.desc), [c.desc]);
 
   return (
     <div className={"bcard tier-" + tier} id={"h_" + c.uid}
@@ -1001,9 +1005,25 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           sub: `Cov ${x(covLim)}`, info: <Info k="cov" /> },
       ]} />
 
-      <Section title="Investment Thesis">
-        <p className="bthesis">{rest || lead}</p>
-      </Section>
+      {/* Die Branchenreferenz gehört unter die Kennzahlen, nicht ans Ende der
+          Karte: Sie ist genau das, was in der Zeile darüber als "Bench. ?" und
+          "Markt ?" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
+          Knopf über die volle Breite — die Lücke und ihre Behebung stehen
+          damit an einer Stelle. */}
+      {!c.dd && act.study && (
+        <div className="bcallout">
+          <span className="bcicon">📊</span>
+          <div className="bcbody">
+            <div className="bchead">
+              <b>Branchenreferenz fehlt</b>
+              <button className={sp("study").trim()} onClick={() => { haptic(8); act.study(); }}>
+                Studie · {eur(DD_COST / 2)}
+              </button>
+            </div>
+            <p>Ohne sie sind Marge und Wachstum nicht einzuordnen.</p>
+          </div>
+        </div>
+      )}
 
       <More>
         {/* Der Leverage als Lebensbalken: die Marke ist der Covenant. Solange
@@ -1085,15 +1105,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · ein Halbjahr
         </p>
       </Section>
-
-      {!c.dd && act.study && (
-        <div className="bacts">
-          <button className={sp("study").trim()} style={{ width: "100%" }} onClick={() => { haptic(8); act.study(); }}>
-            📊 Benchmarkstudie · {eur(DD_COST / 2)}
-          </button>
-          <p className="hint ox" style={{ marginTop: 6 }}>Branchenreferenz fehlt — ohne sie sind Marge und Wachstum nicht einzuordnen.</p>
-        </div>
-      )}
 
       <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
         <div className="bactgrid">
