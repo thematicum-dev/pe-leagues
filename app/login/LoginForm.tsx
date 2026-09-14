@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { login } from "./actions";
 import { safeNext } from "@/lib/auth/next";
 import Logo from "@/components/Logo";
+import { TAGLINE } from "@/lib/brand";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -16,7 +17,7 @@ export default function LoginForm() {
     <main className="authwrap">
       <form className="authcard" action={formAction}>
         <Logo />
-        <p className="tagline">Beweise deine PE Investment Skills - gegen echte Gegner</p>
+        <p className="tagline">{TAGLINE}</p>
         <h1>Anmelden</h1>
         <input type="hidden" name="next" value={next} />
         <label>
