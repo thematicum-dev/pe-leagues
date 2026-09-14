@@ -76,11 +76,13 @@ export const SECTOR_ID = {
   Software:    { scene: "racks",   claim: ["INNOVATION", "SCALES"] },
   Healthcare:  { scene: "helix",   claim: ["BETTER", "LIVES"] },
   /* Nicht "Real Assets": Das benennt in der Anlagenwelt eine eigene Klasse —
-     Infrastruktur, Immobilien, Rohstoffe — und trifft auf Dichtungstechnik,
-     Sondermaschinenbau und Messtechnik nicht zu. Der Katalog dieses Sektors
-     ist deutscher Maschinen- und Anlagenbau; sein Versprechen ist Haltbarkeit
-     durch Konstruktion. */
-  Industrials: { scene: "robot",   claim: ["ENGINEERED", "TO LAST"] },
+     Infrastruktur, Immobilien, Rohstoffe — und trifft auf den Katalog dieses
+     Sektors nicht zu. Und nicht "to automate": Von den sieben
+     Geschäftsmodellen automatisiert nur der Anlagenbau, ein Lohnbeschichter
+     trüge den Anspruch gegen seine eigene Beschreibung auf derselben Karte.
+     "To run" deckt alle sieben — Anlagen, Schaltanlagen und Prüfmaschinen
+     laufen, beschichtete Teile halten den Betrieb am Laufen. */
+  Industrials: { scene: "robot",   claim: ["ENGINEERED", "TO RUN"] },
   Consumer:    { scene: "bottle",  claim: ["BRANDS", "PEOPLE LOVE"] },
   Services:    { scene: "network", claim: ["EXPERTISE", "AT WORK"] },
 };
