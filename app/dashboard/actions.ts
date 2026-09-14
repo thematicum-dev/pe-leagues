@@ -3,12 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-
-export interface UniverseSwitchState {
-  error: string | null;
-}
-
-export const UNIVERSE_SWITCH_IDLE: UniverseSwitchState = { error: null };
+import { UNIVERSE_SWITCH_IDLE, type UniverseSwitchState } from "./universe-switch";
 
 /**
  * Wechselt das aktive Universum. Ob der Nutzer das darf, entscheidet nicht
