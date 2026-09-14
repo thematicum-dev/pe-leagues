@@ -75,7 +75,12 @@ const hsl = (h, s, l, a = 1) =>
 export const SECTOR_ID = {
   Software:    { scene: "racks",   claim: ["INNOVATION", "SCALES"] },
   Healthcare:  { scene: "helix",   claim: ["BETTER", "LIVES"] },
-  Industrials: { scene: "robot",   claim: ["REAL", "ASSETS"] },
+  /* Nicht "Real Assets": Das benennt in der Anlagenwelt eine eigene Klasse —
+     Infrastruktur, Immobilien, Rohstoffe — und trifft auf Dichtungstechnik,
+     Sondermaschinenbau und Messtechnik nicht zu. Der Katalog dieses Sektors
+     ist deutscher Maschinen- und Anlagenbau; sein Versprechen ist Haltbarkeit
+     durch Konstruktion. */
+  Industrials: { scene: "robot",   claim: ["ENGINEERED", "TO LAST"] },
   Consumer:    { scene: "bottle",  claim: ["BRANDS", "PEOPLE LOVE"] },
   Services:    { scene: "network", claim: ["EXPERTISE", "AT WORK"] },
 };
