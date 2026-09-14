@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Logo from "@/components/Logo";
+import { TAGLINE } from "@/lib/brand";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -17,7 +18,7 @@ export default async function Home() {
     <main className="landing">
       <div className="landingcard">
         <Logo />
-        <p className="tagline">500 Mio. € Commitment. Invest. Build. Exit. Outperform.</p>
+        <p className="tagline">{TAGLINE}</p>
         <h1>Manage deinen Private-Equity-Fonds durch einen vollen Zyklus.</h1>
         <p>
           Investment, Value Creation, Exit: Einstiegsmultiple und Kapitalstruktur, das
