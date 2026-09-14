@@ -24,9 +24,8 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   LIVES" für Healthcare, Roboterarm und "ENGINEERED TO LAST" für Industrials, Flasche
   mit Botanik und "BRANDS PEOPLE LOVE" für Consumer, Standortnetz und
   "EXPERTISE AT WORK" für Services. Das einzelne **Unternehmen** bekommt daraus
-  eine eigene Ausprägung: Farbton innerhalb der Sektorfamilie, Monogramm im
-  Signet, Bildvariante und Hintergrundmuster, alles aus dem Firmennamen
-  abgeleitet und damit über die ganze Partie stabil — zwei Ziele desselben
+  eine eigene Ausprägung: Farbton innerhalb der Sektorfamilie, Bildvariante und
+  Hintergrundmuster, alles aus dem Firmennamen abgeleitet und damit über die ganze Partie stabil — zwei Ziele desselben
   Sektors sehen verwandt aus, aber nicht gleich. Dazu die Bausteine der Karte
   (Kopfbereich, Kopfzahlen, Kennzahlenzeile, Abschnitte, Messbalken,
   Netzdiagramm) und ihre Stilregeln. Die Datei enthält ausschließlich

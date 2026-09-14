@@ -17,10 +17,10 @@
 
    2. Das einzelne Unternehmen. Zwei Zielobjekte aus demselben Sektor dürfen
       nicht austauschbar aussehen. Aus dem Firmennamen wird deshalb eine eigene
-      Identität abgeleitet: ein Farbton innerhalb der Sektorfamilie, ein
-      Monogramm, eine Bildvariante und ein Hintergrundmuster. Alles
-      deterministisch — dasselbe Unternehmen sieht über die ganze Partie gleich
-      aus, ohne dass irgendwo ein Bild gespeichert werden müsste.
+      Identität abgeleitet: ein Farbton innerhalb der Sektorfamilie, eine
+      Bildvariante und ein Hintergrundmuster. Alles deterministisch — dasselbe
+      Unternehmen sieht über die ganze Partie gleich aus, ohne dass irgendwo ein
+      Bild gespeichert werden müsste.
 
    Warum überhaupt gezeichnet und nicht fotografiert: Die Zielobjekte entstehen
    zur Laufzeit aus einem Katalog von Archetypen. Es gibt kein Bild, das man
@@ -87,19 +87,7 @@ export const SECTOR_ID = {
 const secId = (sector) => SECTOR_ID[sector] || SECTOR_ID.Services;
 
 /* ------------------------------------------------ Identität der Firma --
-   Der Name eines Zielobjekts ist "Hausname + Geschäftsfeld" ("Markmont
-   Dentallabore"). Beides wird gebraucht: das Monogramm kommt aus dem
-   Hausnamen, das Geschäftsfeld steht als Zeile unter dem Namen.             */
-export function houseOf(name) { return (name || "").split(" ")[0] || ""; }
-export function tradeOf(name) { return (name || "").split(" ").slice(1).join(" "); }
-
-function monogramOf(name) {
-  const parts = (name || "?").split(" ").filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return (parts[0] || "?").slice(0, 2).toUpperCase();
-}
-
-/* Der Anspruch der Karte in einem Satz: der erste Satz der Beschreibung. Er
+   Der Anspruch der Karte in einem Satz: der erste Satz der Beschreibung. Er
    ist im Katalog immer die Zusammenfassung des Geschäftsmodells, der Rest die
    Begründung. So steht oben eine Zeile und unten die These — ohne dass ein
    Text doppelt erscheint oder irgendwo erfunden werden müsste.              */
@@ -130,7 +118,6 @@ export function identityOf(name, sector) {
        Strich als Kante wirkt. Ohne diesen Ton verschwimmen die goldenen und
        roséfarbenen Sektoren zu einer einzigen Mitteltönung. */
     shade: hsl(h, Math.min(70, s * 0.5), 10),
-    mono: monogramOf(name),
     scene: secId(sector).scene,
     claim: secId(sector).claim,
     variant: Math.floor(rnd() * 1000),
@@ -196,29 +183,6 @@ export function SectorEmblem({ sector, style = undefined, className = "" }) {
       fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       {P[sector] || P.Services}
     </svg>
-  );
-}
-
-/* --------------------------------------------------------------- Signet --
-   Das Monogramm im Sechseck ist das Firmenzeichen: dieselbe Stelle auf jeder
-   Karte, eigene Farbe je Unternehmen. Es ist das, was im Regal und in der
-   Kopfzeile wiedererkannt wird.                                             */
-export function Sigil({ id, size = 40, className = "" }) {
-  return (
-    <span className={"bsigil " + className} style={{ width: size, height: size * 1.1 }}>
-      <svg viewBox="0 0 40 44" aria-hidden="true">
-        <defs>
-          <linearGradient id={id.uid + "sg"} x1="0" y1="0" x2="0.4" y2="1">
-            <stop offset="0%" stopColor={id.lit} /><stop offset="100%" stopColor={id.own} />
-          </linearGradient>
-        </defs>
-        <polygon points="20,1 39,11.5 39,32.5 20,43 1,32.5 1,11.5"
-          fill={`url(#${id.uid}sg)`} fillOpacity=".16"
-          stroke={`url(#${id.uid}sg)`} strokeWidth="1.4" />
-        <text x="20" y="27.5" textAnchor="middle" fontSize="15" fontWeight="700"
-          fontFamily="Inter, system-ui, sans-serif" letterSpacing="-.5" fill={id.lit}>{id.mono}</text>
-      </svg>
-    </span>
   );
 }
 
@@ -968,7 +932,6 @@ export function CardHero({ id, sector, name, claim, tier = "common", state = nul
           {state}
         </div>
         <div className="bheroname">
-          <Sigil id={id} />
           <div className="bnamewrap">
             <h3 className="bname">{name}</h3>
             {meta && <div className="bmeta">{meta}</div>}
@@ -1277,9 +1240,7 @@ export const BATTLE_CSS = `
   border-color:var(--rule);}
 
 /* Signet und Name stehen nebeneinander: das Zeichen zuerst, wie auf einem Wappen. */
-.pel .bheroname{display:flex;align-items:flex-start;gap:11px;margin-top:2px;max-width:80%;}
-.pel .bsigil{flex:none;display:block;filter:drop-shadow(0 2px 10px color-mix(in srgb, var(--own) 55%, transparent));}
-.pel .bsigil svg{width:100%;height:100%;display:block;}
+.pel .bheroname{display:flex;align-items:flex-start;margin-top:2px;max-width:82%;}
 .pel .bnamewrap{min-width:0;flex:1;}
 /* Firmennamen sind lang und zusammengesetzt. hyphens:auto trennt nach den
    deutschen Regeln (die Seite ist als lang="de" ausgezeichnet), overflow-wrap
@@ -1602,9 +1563,15 @@ export const BATTLE_CSS = `
   background:linear-gradient(100deg,color-mix(in srgb, var(--own) 17%, var(--card)),var(--card) 62%);
   color:var(--ink);}
 .pel .bshelf:active{transform:scale(.985);}
-.pel .bshelf .bsigil{flex:none;}
 /* Die Kinder sind <span>, weil die ganze Kachel ein <button> ist — ohne
    display:block flössen sie als Fließtext um die Sparkline herum. */
+/* Die Regalkachel behält ein Zeichen links, jetzt wieder das Wappen des
+   Sektors — ohne eines fiele die Zeile auf reinen Text zurück. */
+.pel .bshelfcrest{flex:none;width:30px;height:30px;border-radius:9px;display:flex;
+  align-items:center;justify-content:center;color:var(--own);
+  background:color-mix(in srgb, var(--own) 15%, transparent);
+  border:1px solid color-mix(in srgb, var(--own) 38%, transparent);}
+.pel .bshelfcrest .bemb{width:16px;height:16px;}
 .pel .bshelfmain{flex:1;min-width:0;display:block;}
 .pel .bshelfname{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:650;
   letter-spacing:-.015em;white-space:nowrap;overflow:hidden;}

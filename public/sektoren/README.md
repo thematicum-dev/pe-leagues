@@ -55,4 +55,5 @@ Motiv sichtbar um.
 Ein Motiv je Sektor hieße: Alle Dentallabore sehen gleich aus. Aus dem
 Startwert des Unternehmens wird eines der vorhandenen Motive gezogen, drei je
 Sektor reichen dafür gut aus. Was ein Foto nicht leisten kann — die Identität
-des einzelnen Unternehmens — tragen weiterhin Farbton, Monogramm und Signet.
+des einzelnen Unternehmens — trägt weiterhin der Farbton: Er wandert je Firma
+um bis zu 15 Grad innerhalb der Sektorfamilie.

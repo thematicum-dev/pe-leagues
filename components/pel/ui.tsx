@@ -29,7 +29,7 @@ import {
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
-  Sigil, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
+  SectorEmblem, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
 } from "./battle";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
@@ -2062,7 +2062,7 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
           <button className="bshelf" key={c.uid}
             style={{ "--sec": SECCOLOR[c.sector], "--own": identityOf(c.name, c.sector).own }}
             onClick={() => onPick && onPick(c.uid)}>
-            <Sigil id={identityOf(c.name, c.sector)} size={30} />
+            <span className="bshelfcrest"><SectorEmblem sector={c.sector} /></span>
             <span className="bshelfmain">
               <span className="bshelfname">
                 <i className="hdot" style={{ background: col, marginRight: 0 }} /><span>{c.name}</span>
