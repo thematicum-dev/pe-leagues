@@ -93,10 +93,25 @@ die Karte die Breite; vom Motiv bleiben nur die Bänder darüber und darunter,
 und die zeigen bei `cover` ausgerechnet die dunkelsten Stellen. Der engere
 Ausschnitt holt stattdessen den hellsten Teil des Motivs ins obere Band.
 
-Die Karte deckt zu 88 % und trägt ihre Schrift unabhängig vom Motiv — geprüft
-gegen ein Prüfbild, dasselbe Prüfbild um Faktor 2,6 aufgehellt und das jetzige
-Motiv, je auf 412 und 1280 Pixel Breite. Die Deckkraft der Verläufe entscheidet
-deshalb nicht über die Lesbarkeit, sondern darüber, wie viel vom Motiv
-überhaupt zu sehen ist. Beim jetzigen, sehr dunklen Motiv mussten sie von
-0,86/0,74/0,42/0,66 auf 0,6/0,42/0,1/0,34 herunter; ein helleres Motiv braucht
-sie wieder höher.
+Die Karte selbst deckt nur zu 58 % — das Motiv wandert sichtbar unter ihr
+durch. Was die Schrift trägt, ist nicht ihre Fläche, sondern der
+`backdrop-filter` dahinter: Die Unschärfe nimmt den Lichtern ihre Kanten,
+`brightness(0.55)` dämpft sie. Eine deckende Fläche hätte beides nicht
+gleichzeitig gekonnt. Wo es keinen `backdrop-filter` gibt, deckt die Karte
+über `@supports` zu 94 %, weil dort nichts die Lichter dämpfen würde.
+
+Nachgemessen wurde nicht geschätzt: Die Seite wird zweimal aufgenommen, einmal
+mit und einmal ohne Schrift; aus der zweiten Aufnahme kommt der tatsächliche
+Grund hinter jeder Textstelle, dagegen wird die Textfarbe gerechnet. Über
+beide Seiten, 412 und 1280 Pixel Breite, liegt der engste Wert bei **4,77:1**
+gegen die Anforderung 4,5:1 (Fließtext) beziehungsweise 3:1 (große Schrift) —
+gemessen jeweils gegen das hellste Prozent des Grundes, nicht den Mittelwert.
+
+Wer das Motiv austauscht, sollte diese Messung wiederholen. Ein helleres Motiv
+kostet zuerst die Feldbeschriftungen der Anmeldung; Stellschrauben sind
+`brightness` im `backdrop-filter` und die Deckkraft der Karte.
+
+Die Deckkraft der Verläufe entscheidet dagegen nicht über die Lesbarkeit,
+sondern darüber, wie viel vom Motiv überhaupt zu sehen ist. Beim jetzigen, sehr
+dunklen Motiv mussten sie von 0,86/0,74/0,42/0,66 auf 0,6/0,42/0,1/0,34
+herunter; ein helleres Motiv braucht sie wieder höher.

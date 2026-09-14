@@ -108,14 +108,29 @@ body {
 .authcard {
   width: 100%;
   max-width: 420px;
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(115%);
-  backdrop-filter: blur(16px) saturate(115%);
-  border: 1px solid color-mix(in srgb, var(--gold) 20%, var(--rule));
+  background: color-mix(in srgb, var(--card) 58%, transparent);
+  /* Nicht die Karte deckt die Schrift ab, sondern der Filter dahinter: Die
+     Unschärfe nimmt den Lichtern ihre Kanten, brightness dämpft sie. Dadurch
+     bleibt die Karte sichtbar durchscheinend -- das Motiv wandert darunter
+     durch -- und die Fließschrift steht trotzdem auf ruhigem Grund. Eine
+     deckende Fläche hätte beides nicht gleichzeitig gekonnt. */
+  -webkit-backdrop-filter: blur(22px) saturate(118%) brightness(0.55);
+  backdrop-filter: blur(22px) saturate(118%) brightness(0.55);
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, var(--rule));
   border-radius: var(--r);
   padding: 28px 24px;
   box-sizing: border-box;
   box-shadow: 0 26px 64px -34px rgba(0, 0, 0, 0.95), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Ohne backdrop-filter gäbe es nichts, was die Lichter dämpft -- dort muss
+   die Karte selbst decken. Betrifft ältere Browser und Firefox mit
+   abgeschalteter Einstellung. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .landingcard,
+  .authcard {
+    background: color-mix(in srgb, var(--card) 94%, transparent);
+  }
 }
 
 .brandmark {
