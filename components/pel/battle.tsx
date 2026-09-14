@@ -151,15 +151,19 @@ export function identityOf(name, sector) {
    Dateien heißen `<sektor>-<nummer>.webp`, durchnummeriert ab 1. Wer ein Motiv
    hinzufügt, erhöht hier die Zahl — sonst wird es nie gezogen.             */
 export const PHOTO_VARIANTS = {
-  Software: 1, Healthcare: 0, Industrials: 0, Services: 0, Consumer: 0,
+  Software: 1, Healthcare: 1, Industrials: 1, Services: 1, Consumer: 1,
 };
 /* Die beiden Stellschrauben der Farbkorrektur, an einer Stelle, weil sie
-   zusammen wirken: Sättigung des Motivs und Deckkraft der Sektorfarbe
-   darüber. Voll gesättigt und ungetönt sähe jede Karte gleich aus, egal aus
-   welchem Sektor; ganz entsättigt und stark getönt wäre es eine Duplex-Grafik
-   und kein Foto mehr. Die Vorgabe ist der Punkt dazwischen. */
-export const PHOTO_SATURATION = 0.4;
-export const PHOTO_TINT = 0.38;
+   zusammen wirken: Sättigung des Motivs und Deckkraft der Firmenfarbe darüber.
+
+   Die Farbe wird im Modus `color` aufgetragen, nicht als deckende Fläche: Er
+   nimmt Farbton und Sättigung aus der Auflage und die Helligkeit aus dem Foto
+   darunter. Eine deckende Fläche hätte die Tiefen angehoben — aus einem
+   nächtlichen Rechenzentrum wurde damit ein milchiger blauer Schleier. Weil
+   die Helligkeit unangetastet bleibt, darf das Motiv auch fast seine volle
+   Sättigung behalten. */
+export const PHOTO_SATURATION = 0.85;
+export const PHOTO_TINT = 0.18;
 const PHOTO_SLUG = {
   Software: "software", Healthcare: "healthcare", Industrials: "industrials",
   Services: "services", Consumer: "consumer",
@@ -877,10 +881,15 @@ export function HeroArt({ id, tier = "common" }) {
             <image href={photo} x="0" y="0" width="300" height="200"
               preserveAspectRatio="xMaxYMid slice" filter={`url(#${u}gr)`}
               onError={() => setFailed(true)} />
-            {/* Die Sektorfarbe legt sich über das Foto, sonst hätte jede Karte
-                dieselbe Anmutung, egal aus welchem Sektor. */}
-            <rect width="300" height="200" fill={id.deep} opacity={PHOTO_TINT} />
-            <rect width="300" height="200" fill={`url(#${u}glow)`} />
+            {/* Die Farbe der Firma legt sich über das Motiv — im Modus `color`,
+                also nur Farbton und Sättigung, ohne die Helligkeit anzutasten.
+                So bleibt ein nächtliches Motiv nachts und bekommt trotzdem den
+                Ton seines Sektors und seines Unternehmens. */}
+            <rect width="300" height="200" fill={id.own} opacity={PHOTO_TINT}
+              style={{ mixBlendMode: "color" }} />
+            {/* Die Tiefen zurückholen, die jede Auflage anhebt */}
+            <rect width="300" height="200" fill={id.shade} opacity=".2"
+              style={{ mixBlendMode: "multiply" }} />
           </>
         ) : (
           <>

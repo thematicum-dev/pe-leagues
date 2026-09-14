@@ -36,9 +36,19 @@ ist, erscheint sie von selbst.
 ## Zwei Stellschrauben
 
 `PHOTO_SATURATION` (Sättigung des Motivs) und `PHOTO_TINT` (Deckkraft der
-Sektorfarbe darüber) stehen in `components/pel/battle.tsx` direkt unter
-`PHOTO_VARIANTS`. Wirken die Karten zu farbgleich, `PHOTO_TINT` senken; sehen
-sie aus wie fünf verschiedene Anwendungen, erhöhen.
+Firmenfarbe darüber) stehen in `components/pel/battle.tsx` direkt unter
+`PHOTO_VARIANTS`.
+
+Die Farbe wird im Modus `color` aufgetragen: Farbton und Sättigung kommen aus
+der Auflage, die Helligkeit bleibt die des Fotos. Eine deckende Fläche hätte
+die Tiefen angehoben — aus einem nächtlichen Rechenzentrum wurde damit ein
+milchiger blauer Schleier.
+
+Die Vorgabe ist mit 18 % bewusst zurückhaltend, weil die vorhandenen Motive
+bereits auf ihren Sektor abgestimmt sind; sie trägt vor allem die kleine
+Abweichung des einzelnen Unternehmens ein. Wer Motive einsetzt, die farblich
+neutral sind, darf deutlich höher gehen — bei rund 35 % färbt die Auflage das
+Motiv sichtbar um.
 
 ## Warum mehrere Motive je Sektor
 
