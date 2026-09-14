@@ -748,13 +748,15 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           tone: hidden ? "dim" : "", sub: "von 100", info: <Info k="quality" /> },
       ]} />
 
-      <Section title="Investment Thesis">
-        <p className="bthesis">{rest || lead}</p>
-      </Section>
-
       {/* Alles, was zur Beurteilung gehört, aber nicht auf den ersten Blick
-          gebraucht wird. Nichts verschwindet — es liegt eine Geste entfernt. */}
+          gebraucht wird. Nichts verschwindet — es liegt eine Geste entfernt.
+          Die ausführliche Beschreibung steht mit darin: Der erste Satz ist
+          bereits im Kartenkopf zu lesen, der Rest wird gelesen, wenn ein Ziel
+          in die engere Wahl kommt. */}
       <More>
+        <Section title="Investment Thesis">
+          <p className="bthesis">{rest || lead}</p>
+        </Section>
         <div className="bstats">
           <StatTile label="Erw. Wachstum vs. Sektor" info={<Info k="drift" />}
             value={dd ? grow(dEst) : "—"}
@@ -773,13 +775,15 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
               { k: "Marge", v: AX.margin(d.margin) },
               { k: "Wachstum", v: AX.growth(d.growth) },
               { k: "Größe", v: AX.size(eb) },
-              { k: "Cash", v: AX.conv(conv) },
+              { k: "Cash gen", v: AX.conv(conv) },
               { k: "Qualität", v: AX.quality(d.quality) },
             ]} />
           <p className="bprofnote">
             {hidden
               ? "Ohne Datenraum bleibt das Profil verdeckt — aus der Fläche ließe sich zurückrechnen, was die Karte gerade nicht zeigt."
-              : `Profil gegen die Skala aller Zielobjekte: ${SECLABEL[d.sector]}, Marktreferenz ${x(market[d.sector])}, Erwartung ${x(d.askMult)}.`}
+              : `Die Skala ist über alle Geschäftsmodelle des Spiels gerechnet, nicht
+                 innerhalb von ${SECLABEL[d.sector]}: Der volle Ring heißt auf jeder Karte
+                 dasselbe.`}
           </p>
         </div>
         <div className="bacts">
@@ -1053,12 +1057,13 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               { k: "Marge", v: AX.margin(c.margin) },
               { k: "Wachstum", v: AX.growth(cagr == null ? SECTORS[c.sector].g : cagr) },
               { k: "Größe", v: AX.size(eb) },
-              { k: "Cash", v: AX.conv(conv == null ? 0 : conv) },
+              { k: "Cash gen", v: AX.conv(conv == null ? 0 : conv) },
               { k: "Bilanz", v: AX.headroom(head) },
             ]} />
           <p className="bprofnote">
-            Profil auf derselben Skala wie jedes Zielobjekt im Dealflow — so lässt
-            sich eine Beteiligung mit dem vergleichen, was gerade am Markt ist.
+            Dieselbe Skala wie jedes Zielobjekt im Dealflow, über alle
+            Geschäftsmodelle des Spiels gerechnet — so lässt sich eine Beteiligung
+            mit dem vergleichen, was gerade am Markt ist.
           </p>
         </div>
         <PerformanceCompare c={c} market={market} />

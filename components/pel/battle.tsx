@@ -28,7 +28,7 @@
    ========================================================================== */
 
 import React from "react";
-import { SECCOLOR, SECLABEL } from "@/lib/engine";
+import { BOOK, COV_HEADROOM, SECCOLOR, SECLABEL, SECNAMES, SIZE_SCALE } from "@/lib/engine";
 
 /* ---------------------------------------------------------------- Zufall --
    FNV-1a über den Namen, danach ein linearer Kongruenzgenerator. Reicht
@@ -1157,17 +1157,60 @@ export function StatRadar({ axes, color, redacted = false, note = null }) {
   );
 }
 
-/* Normierung der Radarachsen. Steht hier und nicht bei den Aufrufern, damit
-   Dealflow und Portfolio dieselbe Skala benutzen — sonst wäre ein Zielobjekt
-   nicht mit der eigenen Beteiligung vergleichbar.                            */
+/* --------------------------------------------------- Skala des Netzdiagramms --
+   Die Achsen sind über alle Unternehmen des Spiels normiert, nicht innerhalb
+   eines Sektors: Nur so heißt "voller Ring" auf jeder Karte dasselbe und lässt
+   sich ein Softwarehaus mit einem Zerspaner vergleichen.
+
+   Die Grenzen sind nicht gesetzt, sondern aus dem Katalog der Geschäftsmodelle
+   gerechnet — über alle 35 Archetypen aller fünf Sektoren. Vorher standen dort
+   runde Zahlen, und die trafen nicht: Die Wachstumsachse endete bei 13 %,
+   während der Katalog bis 22 % reicht, und die Größenachse bei 32 Mio. €,
+   während ein Zielobjekt 49 Mio. € EBITDA erreichen kann. Beide Achsen liefen
+   oben an, und genau die stärksten Unternehmen waren dann nicht mehr zu
+   unterscheiden.
+
+   Auf die Bandbreite kommt ein Zuschlag: `newDeal` legt auf Marge, Wachstum
+   und Qualität eine Streuung, und eine Beteiligung wächst über die
+   Halteperiode über ihr Einstiegsband hinaus.                                */
+const CATALOG = SECNAMES.flatMap((s) => BOOK[s]);
+const AX_SPAN = (() => {
+  let mMax = 0, gMin = 1e9, gMax = -1e9, ebMax = 0, cMin = 1e9, cMax = -1e9;
+  for (const a of CATALOG) {
+    mMax = Math.max(mMax, a.m[1]);
+    gMin = Math.min(gMin, a.g[0]); gMax = Math.max(gMax, a.g[1]);
+    ebMax = Math.max(ebMax, (a.rb[1] * SIZE_SCALE * a.m[1]) / 100);
+    /* Cash Generation = (EBITDA − Capex − ΔNWC) / EBITDA, aufgelöst nach den
+       Kennwerten des Archetyps. Der untere Rand ist negativ: Ein
+       kapitalintensives Geschäft mit dünner Marge verbrennt Geld, während es
+       wächst, und das soll die Achse zeigen statt es bei null abzuschneiden. */
+    cMax = Math.max(cMax, 100 * (1 - a.cx / a.m[1] - (a.nw * a.g[0]) / (100 * a.m[1])));
+    cMin = Math.min(cMin, 100 * (1 - a.cx / a.m[0] - (a.nw * a.g[1]) / (100 * a.m[0])));
+  }
+  return {
+    margin: [0, mMax + 3],
+    growth: [gMin - 3, gMax + 3],
+    quality: [0, 97],              // Obergrenze der Qualität in newDeal
+    conv: [cMin - 4, cMax + 3],
+    size: [0, ebMax * 1.15],
+    headroom: [0, COV_HEADROOM * 2],
+  };
+})();
+const norm = (v, [lo, hi]) => cl(((v ?? lo) - lo) / (hi - lo || 1));
+
+/* Steht hier und nicht bei den Aufrufern, damit Dealflow und Portfolio
+   dieselbe Skala benutzen — sonst wäre ein Zielobjekt nicht mit der eigenen
+   Beteiligung vergleichbar.                                                  */
 export const AX = {
-  margin: (v) => cl((v ?? 0) / 28),
-  growth: (v) => cl(((v ?? 0) + 3) / 16),
-  quality: (v) => cl((v ?? 0) / 100),
-  conv: (v) => cl((v ?? 0) / 95),
-  size: (v) => cl((v ?? 0) / 32),
-  headroom: (v) => cl((v ?? 0) / 2.2),
+  margin: (v) => norm(v, AX_SPAN.margin),
+  growth: (v) => norm(v, AX_SPAN.growth),
+  quality: (v) => norm(v, AX_SPAN.quality),
+  conv: (v) => norm(v, AX_SPAN.conv),
+  size: (v) => norm(v, AX_SPAN.size),
+  headroom: (v) => norm(v, AX_SPAN.headroom),
 };
+/* Für die Bildunterschrift unter dem Diagramm: die Enden der Skala im Klartext. */
+export const AX_RANGE = AX_SPAN;
 
 /* ----------------------------------------------------------------- CSS -- */
 export const BATTLE_CSS = `
