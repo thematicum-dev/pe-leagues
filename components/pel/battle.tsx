@@ -151,7 +151,7 @@ export function identityOf(name, sector) {
    Dateien heißen `<sektor>-<nummer>.webp`, durchnummeriert ab 1. Wer ein Motiv
    hinzufügt, erhöht hier die Zahl — sonst wird es nie gezogen.             */
 export const PHOTO_VARIANTS = {
-  Software: 1, Healthcare: 1, Industrials: 1, Services: 2, Consumer: 1,
+  Software: 1, Healthcare: 1, Industrials: 1, Services: 1, Consumer: 1,
 };
 /* Die beiden Stellschrauben der Farbkorrektur, an einer Stelle, weil sie
    zusammen wirken: Sättigung des Motivs und Deckkraft der Firmenfarbe darüber.
