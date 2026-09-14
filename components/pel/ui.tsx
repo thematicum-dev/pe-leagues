@@ -237,6 +237,25 @@ export const CSS = `
 .pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
   font-family:'Inter',system-ui,sans-serif;white-space:normal;}
 .pel table.cmp tr:last-child td{border-bottom:0;}
+/* Auf 360 px stand die Tabelle neun Pixel über den Kartenrand hinaus: drei
+   Spalten mit nowrap und je 20 px Innenabstand geben nicht nach. Eng gesetzt
+   passt sie. */
+@media (max-width:379px){
+  .pel table.cmp th,.pel table.cmp td{padding:8px 6px;font-size:12px;}
+  .pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:12px;}
+  .pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:12px;}
+  /* "SEIT EINSTIEG" allein verlangte 123 px und gab nicht nach. Zweizeilig
+     gesetzt kostet der Kopf eine Zeile Höhe und die Tabelle passt. */
+  .pel table.cmp th{letter-spacing:.06em;white-space:normal;}
+  .pel table.cmp tr.det td:first-child{padding-left:22px;}
+}
+/* Auf 320 px bleiben der Tabelle noch 254 px; eng gesetzt braucht sie 260. */
+@media (max-width:339px){
+  .pel table.cmp th,.pel table.cmp td{padding:8px 4px;font-size:11.5px;}
+  .pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:10px;}
+  .pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:10px;}
+  .pel table.cmp tr.det td:first-child{padding-left:18px;}
+}
 /* Abschnittszeile und Summenzeile wie in der Berichtsansicht (table.fin):
    Die Überschrift steht ohne Unterstrich über ihrem Abschnitt, die Summe wird
    durch eine Linie darüber abgesetzt. Beide Tabellen zeigen Zahlen zur selben
@@ -770,7 +789,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         </div>
         <div className="bprofile">
           <StatRadar color={id.own} redacted={hidden}
-            note={hidden ? "Datenraum erforderlich" : null}
+            note={hidden ? "Datenraum erforderlich" : "relativ zu Investmentuniversum"}
             axes={[
               { k: "Marge", v: AX.margin(d.margin) },
               { k: "Wachstum", v: AX.growth(d.growth) },
@@ -778,13 +797,6 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
               { k: "Cash gen", v: AX.conv(conv) },
               { k: "Qualität", v: AX.quality(d.quality) },
             ]} />
-          <p className="bprofnote">
-            {hidden
-              ? "Ohne Datenraum bleibt das Profil verdeckt — aus der Fläche ließe sich zurückrechnen, was die Karte gerade nicht zeigt."
-              : `Die Skala ist über alle Geschäftsmodelle des Spiels gerechnet, nicht
-                 innerhalb von ${SECLABEL[d.sector]}: Der volle Ring heißt auf jeder Karte
-                 dasselbe.`}
-          </p>
         </div>
         <div className="bacts">
           <StatementsButton statements={statements} hidden={hidden}
@@ -1043,16 +1055,18 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         <div className="bstats">
           <StatTile label="Adj. EBITDA − Capex" value={cf ? eur(cf.eb - cf.capex) : "—"}
             tone={cf ? "" : "dim"} sub={cf ? `Capex ${eur(cf.capex)}` : "—"} />
-          <StatTile label="Assetqualität" info={<Info k="quality" />}
+          <StatTile label={"Asset\u00ADqualit\u00e4t"} info={<Info k="quality" />}
             value={<>{Math.round(c.quality)}<GradeChip score={c.quality} /></>}
             sub={c.entryQuality != null
               ? `${grow(c.quality - c.entryQuality, 0)} seit Einstieg`
               : "von 100"} />
-          <StatTile label="Marktmultiple" value={x(markMultiple(c, market))}
+          {/* Weiches Trennzeichen: "MARKTMULTIPLE" ist in Versalien breiter als
+              die Kachel und brach sonst mitten im Wort um. */}
+          <StatTile label={"Markt\u00ADmultiple"} value={x(markMultiple(c, market))}
             sub={c.equityIn > 0.5 ? `inkl. ${eur(c.equityIn)} Nachschuss` : `Einstieg ${x(c.entryMult)}`} />
         </div>
         <div className="bprofile">
-          <StatRadar color={id.own}
+          <StatRadar color={id.own} note="relativ zu Investmentuniversum"
             axes={[
               { k: "Marge", v: AX.margin(c.margin) },
               { k: "Wachstum", v: AX.growth(cagr == null ? SECTORS[c.sector].g : cagr) },
@@ -1060,11 +1074,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               { k: "Cash gen", v: AX.conv(conv == null ? 0 : conv) },
               { k: "Bilanz", v: AX.headroom(head) },
             ]} />
-          <p className="bprofnote">
-            Dieselbe Skala wie jedes Zielobjekt im Dealflow, über alle
-            Geschäftsmodelle des Spiels gerechnet — so lässt sich eine Beteiligung
-            mit dem vergleichen, was gerade am Markt ist.
-          </p>
         </div>
         <PerformanceCompare c={c} market={market} />
         <Track c={c} />
@@ -1477,6 +1486,10 @@ const VIEWS = [
 
 function StatementsSheet({ st, hidden, close }) {
   const [view, setView] = useState("pl");
+  /* Der Bericht trägt die Farbe des Unternehmens, zu dem er gehört. Name und
+     Sektor stehen im Abschluss selbst, die Identität lässt sich daraus
+     ableiten — es muss nichts durch die Karte durchgereicht werden. */
+  const cid = useMemo(() => identityOf(st.name, st.sector), [st.name, st.sector]);
   const P = st.periods;
   const rows = (VIEWS.find((v) => v.id === view) || VIEWS[0]).rows(st);
   /* Die Tabelle startet am rechten Rand. Ein Abschluss wird von links nach
@@ -1495,7 +1508,8 @@ function StatementsSheet({ st, hidden, close }) {
   return (
     <div className="modal" role="dialog" aria-modal="true"
       aria-label={`Financial Statements ${st.name}`} onClick={close}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet bfin" onClick={(e) => e.stopPropagation()}
+        style={{ "--own": cid.own, "--lit": cid.lit }}>
         <div className="tomb">
           <div className="sub">Financial Statements</div>
           <div className="amt" style={{ fontSize: 22 }}>{st.name}</div>

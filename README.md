@@ -19,11 +19,10 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
 - **`components/pel/battle.tsx`**
   Die visuelle Identität der Unternehmenskarten in Dealflow und Portfolio
   ("Battle Cards"), auf zwei Ebenen. Der **Sektor** trägt eine Farbe (`SECCOLOR`
-  in `lib/engine/engine.ts`), ein Wappen, eine Bildszene und einen Anspruch —
-  Serverreihe und "INNOVATION SCALES" für Software, Doppelhelix und "BETTER
-  LIVES" für Healthcare, Roboterarm und "ENGINEERED TO RUN" für Industrials, Flasche
-  mit Botanik und "BRANDS PEOPLE LOVE" für Consumer, Standortnetz und
-  "EXPERTISE AT WORK" für Services. Das einzelne **Unternehmen** bekommt daraus
+  in `lib/engine/engine.ts`), ein Wappen und eine Bildszene — Serverreihe für
+  Software, Doppelhelix für Healthcare, Roboterarm für Industrials, Flasche mit
+  Botanik für Consumer, Standortnetz für Services. Das einzelne **Unternehmen**
+  bekommt daraus
   eine eigene Ausprägung: Farbton innerhalb der Sektorfamilie, Bildvariante und
   Hintergrundmuster, alles aus dem Firmennamen abgeleitet und damit über die ganze Partie stabil — zwei Ziele desselben
   Sektors sehen verwandt aus, aber nicht gleich. Dazu die Bausteine der Karte

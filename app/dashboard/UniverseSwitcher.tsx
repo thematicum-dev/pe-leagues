@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { setActiveUniverse, UNIVERSE_SWITCH_IDLE } from "./actions";
+import { setActiveUniverse } from "./actions";
+import { UNIVERSE_SWITCH_IDLE } from "./universe-switch";
 import type { Universe } from "@/lib/access/context";
 
 export default function UniverseSwitcher({
