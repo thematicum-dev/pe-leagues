@@ -46,6 +46,14 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   der Arbeitsauftrag für die gezeichneten Szenen, die zu sehen sind, solange
   kein Foto hinterlegt ist.
 
+- **`public/kulisse/`**
+  Das Motiv hinter Startseite und Anmeldung — eine einzelne Datei,
+  `eingang.webp`. Der Ordner ist ohne Bild ausgeliefert: Fehlt die Datei,
+  bleiben die beiden Verläufe über dem Grundton stehen, die Seite sieht
+  gewollt aus und nicht nach einem kaputten Bild. Anleitung in
+  `public/kulisse/README.md`, der Bildprompt in
+  `docs/prompts/eingangsbild.md`.
+
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
   PE-Praktiker: achtzehn Prüfungen an der Spiellogik (Covenant-Basis, IRR,
