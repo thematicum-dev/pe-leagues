@@ -65,16 +65,28 @@ body {
   background-image:
     linear-gradient(
       100deg,
-      rgba(12, 18, 20, 0.86) 0%,
-      rgba(12, 18, 20, 0.74) 34%,
-      rgba(12, 18, 20, 0.42) 66%,
-      rgba(12, 18, 20, 0.66) 100%
+      rgba(12, 18, 20, 0.6) 0%,
+      rgba(12, 18, 20, 0.42) 34%,
+      rgba(12, 18, 20, 0.1) 66%,
+      rgba(12, 18, 20, 0.34) 100%
     ),
-    radial-gradient(130% 95% at 52% 46%, rgba(12, 18, 20, 0) 0%, rgba(12, 18, 20, 0.52) 100%),
+    radial-gradient(135% 100% at 52% 44%, rgba(12, 18, 20, 0) 0%, rgba(12, 18, 20, 0.34) 100%),
     url("/kulisse/eingang.webp");
   background-size: cover, cover, cover;
   background-position: center, center, 68% center;
   background-repeat: no-repeat;
+}
+
+/* Auf dem Telefon füllt die Karte die Breite; vom Motiv bleiben nur die
+   Bänder darüber und darunter, und die zeigen bei "cover" gerade die
+   dunkelsten Stellen — Decke und Stuhllehne. Ein engerer Ausschnitt holt
+   stattdessen die beleuchtete Modellanlage ins obere Band. */
+@media (max-width: 560px) {
+  .landing,
+  .authwrap {
+    background-size: cover, cover, auto 220%;
+    background-position: center, center, 60% 95%;
+  }
 }
 
 .mono {

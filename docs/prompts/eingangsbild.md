@@ -50,11 +50,13 @@ allen funktioniert) oder kommt aus einer Bilddatenbank.
 Diese Punkte entscheiden darüber, ob das Bild an seiner Stelle funktioniert —
 sie sind nicht Geschmack, sondern gemessen.
 
-**Format.** Hochformat 9:16, **1080 × 1920 Pixel**. Die Seite wird zuerst auf
-einem Telefon gesehen. Auf dem Rechner wird das Motiv seitlich angeschnitten;
-das ist eingeplant, der Bildausschnitt liegt auf `68% center`.
+**Format.** Hochformat 9:16, **mindestens 900 Pixel breit** (das eingesetzte
+Motiv hat 941 × 1672). Die Seite wird zuerst auf einem Telefon gesehen. Auf dem
+Rechner wird das Motiv seitlich angeschnitten; das ist eingeplant, der
+Bildausschnitt liegt auf `68% center`.
 
-**Datei.** **WebP, Qualität um 76, höchstens 250 KB.** Es ist ein einzelnes
+**Datei.** **WebP, höchstens 250 KB.** Das eingesetzte Motiv liegt bei
+Qualität 86 und 113 KB. Es ist ein einzelnes
 Bild auf einer einzelnen Seite und darf deutlich mehr wiegen als ein
 Kartenmotiv (die liegen bei 20–27 KB). Es steht aber vor der Anmeldung und
 damit vor allem anderen — wer es auf 600 KB aufbläst, verlängert genau den
@@ -62,7 +64,8 @@ einen Moment, in dem noch niemand Geduld hat.
 
 **Helligkeit.** Dunkel, mit warmen Lichtern. Die mittlere Helligkeit gehört
 unter etwa 12 % — ein Nachtbild, kein abgedunkeltes Tagbild. Lichtquellen nur
-als kleine Punkte und Kanten, nicht als Flächen.
+als kleine Punkte und Kanten, nicht als Flächen. Das eingesetzte Motiv liegt
+bei 7,5 %, seine linken 45 % bei 1,8 %.
 
 **Farbe.** Bernstein, Messing, Gold gegen Fast-Schwarz. Kein Weiß, kein
 Tageslicht, keine kalten Blautöne. Dieselbe Sprache wie die Kartenmotive in
@@ -85,12 +88,15 @@ In `app/globals.css` unter `.landing, .authwrap` stehen drei Ebenen, von vorn
 nach hinten: ein gerichteter Verlauf, der die Schrift trägt; eine Abdunklung
 zu den Rändern; das Motiv selbst.
 
-Nachgemessen mit einem Prüfbild und demselben Prüfbild um Faktor 2,6
-aufgehellt: Die Karte deckt zu 88 % und trägt ihre Schrift in beiden Fällen.
-Ein zu helles Motiv macht die Seite also nicht unlesbar, es macht sie fade —
-die Tiefe geht verloren, auf die der ganze Entwurf gebaut ist.
+Unter 560 Pixel Breite kommt ein eigener Ausschnitt dazu. Auf dem Telefon füllt
+die Karte die Breite; vom Motiv bleiben nur die Bänder darüber und darunter,
+und die zeigen bei `cover` ausgerechnet die dunkelsten Stellen. Der engere
+Ausschnitt holt stattdessen den hellsten Teil des Motivs ins obere Band.
 
-Ist das eigene Motiv heller oder unruhiger als vorgesehen, ist der erste
-Verlauf die Stellschraube: seine vier Deckkraftwerte gemeinsam anheben. Wandert
-der Bildinhalt aus dem sichtbaren Ausschnitt, ist es die `background-position`
-der dritten Ebene.
+Die Karte deckt zu 88 % und trägt ihre Schrift unabhängig vom Motiv — geprüft
+gegen ein Prüfbild, dasselbe Prüfbild um Faktor 2,6 aufgehellt und das jetzige
+Motiv, je auf 412 und 1280 Pixel Breite. Die Deckkraft der Verläufe entscheidet
+deshalb nicht über die Lesbarkeit, sondern darüber, wie viel vom Motiv
+überhaupt zu sehen ist. Beim jetzigen, sehr dunklen Motiv mussten sie von
+0,86/0,74/0,42/0,66 auf 0,6/0,42/0,1/0,34 herunter; ein helleres Motiv braucht
+sie wieder höher.
