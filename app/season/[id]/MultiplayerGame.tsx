@@ -21,6 +21,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
+  LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
   Offers, Sheet, Info, SeasonDrivers,
 } from "@/components/pel/ui";
@@ -1175,19 +1176,7 @@ export default function MultiplayerGame({
               </tbody></table>
             </div>
             {landmark && quarter >= LM_ANNOUNCE && quarter < LM_DEAL && (
-              <div className="card lm">
-                <h3 className="disp">{landmark.name}</h3>
-                <div className="pad">
-                  <span className="tag prop">Trophy Asset</span>
-                  <span className="tag"><i className="sdot" style={{ background: SECCOLOR[landmark.sector] }} />{landmark.sector}</span>
-                  <p className="biz">{landmark.desc}</p>
-                  <table className="ledger"><tbody>
-                    <tr><td className="lab">Umsatz</td><td>{eur(landmark.revenue)}</td></tr>
-                    <tr><td className="lab">Kennzahlen</td><td>Erst mit dem Datenraum</td></tr>
-                    <tr><td className="lab">Am Markt in</td><td>{hj(LM_DEAL - quarter)}</td></tr>
-                  </tbody></table>
-                </div>
-              </div>
+              <LandmarkTeaser landmark={landmark} quarter={quarter} />
             )}
             {bootstrapPending && (
               <div className="card">

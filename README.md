@@ -16,6 +16,37 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   der ursprünglichen Datei `pe-leagues-mvp7.tsx` übernommen — an der Logik
   wurde nichts verändert.
 
+- **`components/pel/battle.tsx`**
+  Die visuelle Identität der Unternehmenskarten in Dealflow und Portfolio
+  ("Battle Cards"), auf zwei Ebenen. Der **Sektor** trägt eine Farbe (`SECCOLOR`
+  in `lib/engine/engine.ts`), ein Wappen, eine Bildszene und einen Anspruch —
+  Serverreihe und "INNOVATION SCALES" für Software, Doppelhelix und "BETTER
+  LIVES" für Healthcare, Roboterarm und "ENGINEERED TO RUN" für Industrials, Flasche
+  mit Botanik und "BRANDS PEOPLE LOVE" für Consumer, Standortnetz und
+  "EXPERTISE AT WORK" für Services. Das einzelne **Unternehmen** bekommt daraus
+  eine eigene Ausprägung: Farbton innerhalb der Sektorfamilie, Bildvariante und
+  Hintergrundmuster, alles aus dem Firmennamen abgeleitet und damit über die ganze Partie stabil — zwei Ziele desselben
+  Sektors sehen verwandt aus, aber nicht gleich. Dazu die Bausteine der Karte
+  (Kopfbereich, Kopfzahlen, Kennzahlenzeile, Abschnitte, Messbalken,
+  Netzdiagramm) und ihre Stilregeln. Die Datei enthält ausschließlich
+  Darstellung; welche Zahl wann sichtbar ist, entscheidet weiterhin
+  `components/pel/ui.tsx`, gerechnet wird in `lib/engine/`.
+
+- **`public/sektoren/`**
+  Die Fotos, die der Kartenkopf im Dealflow und im Portfolio zeigt. Der Ordner
+  ist leer ausgeliefert: Solange für einen Sektor kein Motiv hinterlegt und in
+  `PHOTO_VARIANTS` gezählt ist, zeichnet die Karte ihre Szene selbst. Wie ein
+  Motiv beschaffen sein muss und wie man es einhängt, steht in
+  `public/sektoren/README.md`.
+
+- **`docs/prompts/kartenbilder.md`**
+  Die Bildprompts für die fünf Sektormotive — Claude erzeugt keine
+  Rasterbilder, sie entstehen in einem Bildmodell — samt der technischen
+  Vorgaben, ohne die ein Motiv in der Karte nicht funktioniert (dunkel,
+  Lichtquelle oben rechts, Motiv in der rechten Bildhälfte). Im zweiten Teil
+  der Arbeitsauftrag für die gezeichneten Szenen, die zu sehen sind, solange
+  kein Foto hinterlegt ist.
+
 - **`docs/reality-checks.md`**
   Der Fragenkatalog aus der Durchsicht durch einen Corporate-Finance- und
   PE-Praktiker: achtzehn Prüfungen an der Spiellogik (Covenant-Basis, IRR,

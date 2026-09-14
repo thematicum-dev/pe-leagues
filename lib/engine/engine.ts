@@ -31,9 +31,16 @@ export const SECLABEL = {
   Industrials: "Industrials", Healthcare: "Healthcare", Software: "Software & IT Services",
   Services: "Business Services", Consumer: "Consumer & Retail",
 };
+/* Jeder Sektor trägt eine eigene Farbe — sie ist die Grundfarbe seiner Karten,
+   seines Wappens und seiner Fläche in jedem Diagramm. Die fünf Töne liegen im
+   Farbkreis bewusst weit auseinander (Gold 42°, Smaragd 160°, Blau 217°,
+   Violett 280°, Rosé 330°), damit sich zwei Sektoren auch als kleiner Punkt in
+   einer Tabellenzeile noch unterscheiden. Die Helligkeit ist so gewählt, dass
+   derselbe Wert auf hellem wie auf dunklem Grund trägt: als Fläche, als Linie
+   und als Rahmen.                                                            */
 export const SECCOLOR = {
-  Industrials: "#7C8B96", Healthcare: "#3E9B8F", Software: "#8478BE",
-  Services: "#B4894C", Consumer: "#C4635C",
+  Industrials: "#D2A03F", Healthcare: "#12B886", Software: "#3B82F6",
+  Services: "#D9538E", Consumer: "#A855F7",
 };
 
 export const P1 = ["Bren", "Aur", "Kalt", "Hoch", "Stein", "Wald", "Rhein", "Nord", "Vel", "Mark", "Trave", "Isar", "Ober", "Sal", "Ferr", "Lind", "Grün", "Alt"];

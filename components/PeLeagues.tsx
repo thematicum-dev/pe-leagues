@@ -27,6 +27,7 @@ import {
 
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
+  LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
   Shortlist, Offers, Sheet, FundProfileEditor,
 } from "@/components/pel/ui";
@@ -1004,22 +1005,8 @@ function finalize(c, gross, buyer, feeRate, extra) {
         {tab === "deals" && (
           <>
             {landmark && quarter >= LM_ANNOUNCE && quarter < LM_DEAL && (
-              <div className={"card lm" + (quarter === LM_ANNOUNCE ? " fresh" : "")}>
-                <h3 className="disp">{landmark.name}</h3>
-                <div className="pad">
-                  <span className="tag prop">Trophy Asset</span>
-                  <span className="tag"><i className="sdot" style={{ background: SECCOLOR[landmark.sector] }} />{landmark.sector}</span>
-                  <p className="biz">{landmark.desc}</p>
-                  <table className="ledger" style={{ marginTop: 10 }}><tbody>
-                    <tr><td className="lab">Umsatz</td><td>{eur(landmark.revenue)}</td></tr>
-                    <tr><td className="lab">Kennzahlen</td><td>Erst mit dem Datenraum</td></tr>
-                    <tr><td className="lab">Am Markt in</td><td>{hj(LM_DEAL - quarter)}</td></tr>
-                  </tbody></table>
-                  <p style={{ fontSize: 12, color: "var(--gold)", marginTop: 10, marginBottom: 0 }}>
-                    Der größte Prozess des Zyklus. Alle fünf Fonds der Kohorte bieten mit — wer sein Kapital vorher bindet, ist raus.
-                  </p>
-                </div>
-              </div>
+              <LandmarkTeaser landmark={landmark} quarter={quarter} fresh={quarter === LM_ANNOUNCE}
+                note="Der größte Prozess des Zyklus. Alle fünf Fonds der Kohorte bieten mit — wer sein Kapital vorher bindet, ist raus." />
             )}
             {deals.map((d) => <DealCard key={d.id} d={d} me={me} bid={bids[d.id]} dd={!!dd[d.id]} onDD={() => runDD(d.id)}
                   ddUsed={Object.keys(dd).length} ddCap={ddCapOf(me.attrs.analysis)} quarter={quarter}
