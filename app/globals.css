@@ -75,6 +75,11 @@ body {
   background-size: cover, cover, cover;
   background-position: center, center, 68% center;
   background-repeat: no-repeat;
+  /* Vor dem Motiv braucht die Fließschrift etwas mehr Helligkeit als auf der
+     ruhigen Fläche des Dashboards -- sie ist es, die zuerst an die
+     Kontrastgrenze stößt, nicht die Überschriften. Erst dadurch kann die
+     Karte so weit zurücktreten. */
+  --ink2: #b4c0bf;
 }
 
 /* Auf dem Telefon füllt die Karte die Breite; vom Motiv bleiben nur die
@@ -108,14 +113,20 @@ body {
 .authcard {
   width: 100%;
   max-width: 420px;
-  background: color-mix(in srgb, var(--card) 58%, transparent);
+  background: color-mix(in srgb, var(--card) 14%, transparent);
   /* Nicht die Karte deckt die Schrift ab, sondern der Filter dahinter: Die
-     Unschärfe nimmt den Lichtern ihre Kanten, brightness dämpft sie. Dadurch
-     bleibt die Karte sichtbar durchscheinend -- das Motiv wandert darunter
-     durch -- und die Fließschrift steht trotzdem auf ruhigem Grund. Eine
-     deckende Fläche hätte beides nicht gleichzeitig gekonnt. */
-  -webkit-backdrop-filter: blur(22px) saturate(118%) brightness(0.55);
-  backdrop-filter: blur(22px) saturate(118%) brightness(0.55);
+     Unschärfe nimmt den Lichtern ihre Kanten, brightness dämpft sie leicht.
+     Dadurch bleibt die Karte weitgehend durchscheinend -- das Motiv wandert
+     erkennbar darunter durch -- und die Fließschrift steht trotzdem auf
+     ruhigem Grund. Eine deckende Fläche hätte beides nicht gleichzeitig
+     gekonnt.
+
+     Die drei Werte sind gemessen, nicht geschätzt (Verfahren in
+     docs/prompts/eingangsbild.md). Unter 16 Pixel Unschärfe kippt es: Bei 10
+     fällt der Fließtext der Startseite auf 4,44:1 und damit unter die
+     Anforderung, bei 6 auf 3,48:1. */
+  -webkit-backdrop-filter: blur(16px) saturate(118%) brightness(0.85);
+  backdrop-filter: blur(16px) saturate(118%) brightness(0.85);
   border: 1px solid color-mix(in srgb, var(--gold) 26%, var(--rule));
   border-radius: var(--r);
   padding: 28px 24px;

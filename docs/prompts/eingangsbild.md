@@ -93,23 +93,43 @@ die Karte die Breite; vom Motiv bleiben nur die Bänder darüber und darunter,
 und die zeigen bei `cover` ausgerechnet die dunkelsten Stellen. Der engere
 Ausschnitt holt stattdessen den hellsten Teil des Motivs ins obere Band.
 
-Die Karte selbst deckt nur zu 58 % — das Motiv wandert sichtbar unter ihr
+Die Karte selbst deckt nur zu 14 % — das Motiv wandert erkennbar unter ihr
 durch. Was die Schrift trägt, ist nicht ihre Fläche, sondern der
 `backdrop-filter` dahinter: Die Unschärfe nimmt den Lichtern ihre Kanten,
-`brightness(0.55)` dämpft sie. Eine deckende Fläche hätte beides nicht
-gleichzeitig gekonnt. Wo es keinen `backdrop-filter` gibt, deckt die Karte
-über `@supports` zu 94 %, weil dort nichts die Lichter dämpfen würde.
+`brightness(0.85)` dämpft sie leicht. Eine deckende Fläche hätte beides nicht
+gleichzeitig gekonnt. Dazu setzt `.landing, .authwrap` ein helleres `--ink2`
+(#b4c0bf) als der Rest der Anwendung: Vor einem Motiv stößt die Fließschrift
+zuerst an die Grenze, nicht die Überschriften. Wo es keinen `backdrop-filter`
+gibt, deckt die Karte über `@supports` zu 94 %, weil dort nichts die Lichter
+dämpfen würde.
 
-Nachgemessen wurde nicht geschätzt: Die Seite wird zweimal aufgenommen, einmal
-mit und einmal ohne Schrift; aus der zweiten Aufnahme kommt der tatsächliche
-Grund hinter jeder Textstelle, dagegen wird die Textfarbe gerechnet. Über
-beide Seiten, 412 und 1280 Pixel Breite, liegt der engste Wert bei **4,77:1**
-gegen die Anforderung 4,5:1 (Fließtext) beziehungsweise 3:1 (große Schrift) —
-gemessen jeweils gegen das hellste Prozent des Grundes, nicht den Mittelwert.
+### Das Messverfahren
 
-Wer das Motiv austauscht, sollte diese Messung wiederholen. Ein helleres Motiv
-kostet zuerst die Feldbeschriftungen der Anmeldung; Stellschrauben sind
-`brightness` im `backdrop-filter` und die Deckkraft der Karte.
+Die Seite wird zweimal aufgenommen, einmal mit und einmal ohne Schrift; aus der
+zweiten Aufnahme kommt der tatsächliche Grund hinter jeder Textstelle, dagegen
+wird die Textfarbe gerechnet — gegen das hellste Prozent des Grundes, nicht den
+Mittelwert.
+
+Zwei Fallen dabei, beide selbst hineingetappt:
+
+- **Den Textkasten nehmen, nicht den Elementkasten.** `<label>` umschließt sein
+  Eingabefeld; wer die Bounding Box des Labels misst, misst den Grund des
+  Feldes mit und bekommt eine Zahl, die sich nicht mehr bewegt. Richtig ist der
+  Zeilenkasten des Textknotens (`Range.getClientRects`).
+- **Die eigenen Flächen stehen lassen.** Wer für die Grundaufnahme auch die
+  Hintergründe der Knöpfe entfernt, misst deren dunkle Schrift gegen die Karte
+  statt gegen die helle Knopffläche und liest 1,05:1.
+
+### Die Werte
+
+Über beide Seiten, 412 und 1280 Pixel Breite, liegt der engste Wert bei
+**5,79:1** gegen die Anforderung 4,5:1 (Fließtext) beziehungsweise 3:1 (große
+Schrift) — beim Fließtext der Startseite auf dem Rechner.
+
+Die 16 Pixel Unschärfe sind die Grenze, nicht der Geschmack: bei 10 fällt
+derselbe Text auf 4,44:1 und damit durch, bei 6 auf 3,48:1. Wer das Motiv
+austauscht, sollte die Messung wiederholen; Stellschrauben sind in dieser
+Reihenfolge `blur`, `brightness` und die Deckkraft der Karte.
 
 Die Deckkraft der Verläufe entscheidet dagegen nicht über die Lesbarkeit,
 sondern darüber, wie viel vom Motiv überhaupt zu sehen ist. Beim jetzigen, sehr
