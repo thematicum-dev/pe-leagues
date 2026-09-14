@@ -1336,7 +1336,7 @@ export const BATTLE_CSS = `
    ganzen Textblock, blieben der Erklärung rund 150 px — sie brach dort auf
    vier Zeilen um und machte das Feld höher als die Kennzahlen darüber. */
 .pel .bchead{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  min-height:32px;}
+  row-gap:8px;flex-wrap:wrap;min-height:32px;}
 .pel .bchead b{font-size:12.5px;font-weight:650;color:var(--ox);letter-spacing:-.01em;}
 .pel .bcbody p{margin:4px 0 2px;font-size:11.5px;line-height:1.45;color:var(--ink2);}
 .pel .bcallout button{flex:none;padding:8px 11px;font-size:11.5px;font-weight:600;
@@ -1344,9 +1344,12 @@ export const BATTLE_CSS = `
   background:var(--card);white-space:nowrap;}
 .pel .bcallout button:hover:not(:disabled){background:var(--ox);color:var(--card);
   border-color:var(--ox);}
-/* Unter 340 px passen Überschrift und Schaltfläche nicht mehr nebeneinander. */
+/* Die Zeile bricht von selbst um, sobald "Branchenreferenz fehlt" und die
+   Schaltfläche nicht mehr nebeneinander passen — ab rund 400 px abwärts. Eine
+   feste Schwelle traf das nicht: Bei 390 px fehlten zwei Pixel und die
+   Schaltfläche stand vier Pixel außerhalb der Karte. Unter 340 px nimmt sie
+   dann die ganze Breite. */
 @media (max-width:339px){
-  .pel .bchead{flex-wrap:wrap;}
   .pel .bcallout button{width:100%;}
 }
 
@@ -1397,9 +1400,13 @@ export const BATTLE_CSS = `
 @media (prefers-reduced-motion:reduce){.pel .bmore > summary .mi,.pel .bmore > summary .mc{transition:none;}}
 
 /* ---------- Kennzahlenkacheln (Detailbereich) ---------- */
-.pel .bstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;padding:14px 15px 0;}
+/* Drei Kacheln auf 412 px lassen je 81 px netto. "10,9 Mio. €" braucht 82 und
+   "MARKTMULTIPLE" 79 — beides wurde abgeschnitten beziehungsweise mitten im
+   Wort umgebrochen. Engere Innenabstände und weniger Sperrung in der
+   Bezeichnung geben die fehlenden Pixel her. */
+.pel .bstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:14px 15px 0;}
 .pel .bstats.two{grid-template-columns:1fr 1fr;}
-.pel .btile{border:1px solid var(--rule);border-radius:10px;padding:9px 9px 10px;min-width:0;
+.pel .btile{border:1px solid var(--rule);border-radius:10px;padding:9px 7px 10px;min-width:0;
   background:var(--card);display:flex;flex-direction:column;}
 .pel .btile.wide{grid-column:span 3;}
 .pel .bstats.two .btile.wide{grid-column:span 2;}
@@ -1407,19 +1414,26 @@ export const BATTLE_CSS = `
    zweier Kacheln auf verschiedenen Linien und die Zeile liest sich nicht mehr
    als Zeile. Der Erklär-Punkt läuft im Text mit, statt eine eigene Zeile zu
    erzwingen — deshalb kein Flex-Container. */
-.pel .btilelab{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);
-  font-weight:600;line-height:1.35;min-height:23px;}
+.pel .btilelab{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);
+  font-weight:600;line-height:1.35;min-height:23px;hyphens:auto;overflow-wrap:break-word;}
 .pel .btileval{font-size:14.5px;font-weight:650;line-height:1.3;margin-top:5px;white-space:nowrap;
   letter-spacing:-.03em;overflow:hidden;text-overflow:ellipsis;}
 .pel .btileval.teal{color:var(--teal);} .pel .btileval.ox{color:var(--ox);}
 .pel .btileval.gold{color:var(--gold);} .pel .btileval.dim{color:var(--ink2);}
+/* Zusammengesetzte Substantive wie "Reservationspreis" oder "Assetqualität"
+   sind breiter als eine Kachel von rund 100 px. Ohne Umbruchpunkt schnitt
+   overflow:hidden sie stumm ab. Die Seite ist lang="de", deshalb trennt
+   hyphens:auto sie an der richtigen Stelle und mit Strich; break-word ist nur
+   der Notnagel für Wörter ohne Trennstelle. */
 .pel .btilesub{font-size:9.5px;line-height:1.35;color:var(--ink2);margin-top:4px;min-height:26px;
-  overflow:hidden;}
+  hyphens:auto;overflow-wrap:break-word;}
 .pel .btilesub.teal{color:var(--teal);} .pel .btilesub.ox{color:var(--ox);}
-/* Drei Spalten lassen der Zahl auf 390 px rund 96 px. Ein Geldbetrag braucht
-   dort etwa 100 px — unter 380 px stehen deshalb nur noch zwei nebeneinander. */
+/* Drei Spalten lassen der Zahl auf 390 px rund 73 px, sobald die Kacheln im
+   aufgeklappten Bereich stehen. "10,2 Mio. €" braucht 82 px und wurde dort
+   stumm abgeschnitten — unter 400 px stehen deshalb nur noch zwei
+   nebeneinander. */
 @media (max-width:430px){.pel .btileval{font-size:13px;}}
-@media (max-width:379px){
+@media (max-width:399px){
   .pel .bstats{grid-template-columns:1fr 1fr;}
   .pel .bstats .btile.wide{grid-column:span 2;}
 }
@@ -1514,8 +1528,12 @@ export const BATTLE_CSS = `
 
 /* ---------- Handlungsflächen ---------- */
 .pel .bacts{padding:14px 15px 0;}
+/* Zwei Schaltflächen je Zeile. "Verkaufsprozess" braucht 135 px und hatte auf
+   320 px nur 122 — die Beschriftung darf dort kleiner werden, statt über den
+   Rand zu laufen. */
 .pel .bactgrid{display:flex;gap:8px;}
 .pel .bactgrid > *{flex:1;min-width:0;}
+@media (max-width:339px){.pel .bactgrid > button{font-size:12px;padding-left:6px;padding-right:6px;}}
 .pel .bcard .hint{padding:0;}
 .pel .bnote{margin:14px 15px 0;padding:11px 13px;border-radius:12px;font-size:12px;line-height:1.5;
   border:1px solid var(--rule);color:var(--ink2);}
