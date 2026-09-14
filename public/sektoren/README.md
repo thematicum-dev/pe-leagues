@@ -15,6 +15,11 @@ ist, zeichnet die Karte ihre Szene selbst.
 Beispiel: `software-1.webp`, `software-2.webp`, `software-3.webp` ablegen und
 `Software: 3` eintragen.
 
+Die Reihenfolge der beiden Schritte ist gleichgültig: Lässt sich ein
+gezähltes Motiv nicht laden, zeichnet die Karte weiter. Ein Sektor darf also
+scharfgeschaltet werden, bevor seine Datei im Ordner liegt — sobald sie da
+ist, erscheint sie von selbst.
+
 ## Wie ein Motiv beschaffen sein muss
 
 - **Seitenverhältnis 3:2**, 900 × 600 Pixel. Größer bringt nichts, die Fläche

@@ -151,7 +151,7 @@ export function identityOf(name, sector) {
    Dateien heißen `<sektor>-<nummer>.webp`, durchnummeriert ab 1. Wer ein Motiv
    hinzufügt, erhöht hier die Zahl — sonst wird es nie gezogen.             */
 export const PHOTO_VARIANTS = {
-  Software: 0, Healthcare: 0, Industrials: 0, Services: 0, Consumer: 0,
+  Software: 1, Healthcare: 0, Industrials: 0, Services: 0, Consumer: 0,
 };
 /* Die beiden Stellschrauben der Farbkorrektur, an einer Stelle, weil sie
    zusammen wirken: Sättigung des Motivs und Deckkraft der Sektorfarbe
@@ -823,7 +823,13 @@ function Pattern({ id }) {
 export function HeroArt({ id, tier = "common" }) {
   const Scene = SCENES[id.scene] || Network;
   const u = id.uid;
-  const photo = photoOf(id);
+  /* Lässt sich das Motiv nicht laden — Datei fehlt, Name vertippt, in
+     PHOTO_VARIANTS eine Nummer zu hoch —, fällt die Karte auf ihre gezeichnete
+     Szene zurück, statt eine leere getönte Fläche zu zeigen. Damit darf ein
+     Sektor scharfgeschaltet werden, bevor seine Datei im Ordner liegt: Sobald
+     sie da ist, erscheint sie, ohne dass am Code etwas zu ändern wäre. */
+  const [failed, setFailed] = React.useState(false);
+  const photo = failed ? null : photoOf(id);
   /* Zeichenfläche 300 x 200, an der rechten unteren Ecke verankert: Der
      Kartenkopf ist breiter als hoch, `slice` beschneidet also oben. Verankert
      man stattdessen mittig, verschwindet der Boden jeder Szene — die
@@ -869,7 +875,8 @@ export function HeroArt({ id, tier = "common" }) {
         {photo ? (
           <>
             <image href={photo} x="0" y="0" width="300" height="200"
-              preserveAspectRatio="xMaxYMid slice" filter={`url(#${u}gr)`} />
+              preserveAspectRatio="xMaxYMid slice" filter={`url(#${u}gr)`}
+              onError={() => setFailed(true)} />
             {/* Die Sektorfarbe legt sich über das Foto, sonst hätte jede Karte
                 dieselbe Anmutung, egal aus welchem Sektor. */}
             <rect width="300" height="200" fill={id.deep} opacity={PHOTO_TINT} />
