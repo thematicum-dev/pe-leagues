@@ -11,7 +11,7 @@
    Zwei Ebenen von Identität:
 
    1. Der Sektor. Er ist der Typ der Karte und trägt eine Farbe (SECCOLOR in
-      lib/engine), ein Wappen, ein Motiv und einen Anspruch ("BETTER LIVES").
+      lib/engine), ein Wappen und ein Motiv.
       Fünf Sektoren, fünf klar getrennte Farbfamilien — man erkennt den Typ,
       bevor man das Etikett liest.
 
@@ -70,23 +70,14 @@ const hsl = (h, s, l, a = 1) =>
          : `hsl(${h.toFixed(1)} ${s.toFixed(1)}% ${l.toFixed(1)}% / ${a})`;
 
 /* -------------------------------------------------- Identität des Sektors --
-   Der Anspruch ist bewusst kurz und englisch: Er steht als Signet im Bild,
-   nicht als Satz im Fließtext, und soll auf zwei Zeilen passen.             */
-export const SECTOR_ID = {
-  Software:    { scene: "racks",   claim: ["INNOVATION", "SCALES"] },
-  Healthcare:  { scene: "helix",   claim: ["BETTER", "LIVES"] },
-  /* Nicht "Real Assets": Das benennt in der Anlagenwelt eine eigene Klasse —
-     Infrastruktur, Immobilien, Rohstoffe — und trifft auf den Katalog dieses
-     Sektors nicht zu. Und nicht "to automate": Von den sieben
-     Geschäftsmodellen automatisiert nur der Anlagenbau, ein Lohnbeschichter
-     trüge den Anspruch gegen seine eigene Beschreibung auf derselben Karte.
-     "To run" deckt alle sieben — Anlagen, Schaltanlagen und Prüfmaschinen
-     laufen, beschichtete Teile halten den Betrieb am Laufen. */
-  Industrials: { scene: "robot",   claim: ["ENGINEERED", "TO RUN"] },
-  Consumer:    { scene: "bottle",  claim: ["BRANDS", "PEOPLE LOVE"] },
-  Services:    { scene: "network", claim: ["EXPERTISE", "AT WORK"] },
+   Welche Bildszene ein Sektor trägt, wenn kein Foto hinterlegt ist. Werbesätze
+   ("Better lives", "Engineered to run") standen hier einmal als zweizeiliges
+   Signet im Bild und sind wieder raus: Sie behaupteten für sieben
+   Geschäftsmodelle dasselbe und nahmen dem Namen die Fläche.               */
+export const SECTOR_SCENE = {
+  Software: "racks", Healthcare: "helix", Industrials: "robot",
+  Consumer: "bottle", Services: "network",
 };
-const secId = (sector) => SECTOR_ID[sector] || SECTOR_ID.Services;
 
 /* ------------------------------------------------ Identität der Firma --
    Der Anspruch der Karte in einem Satz: der erste Satz der Beschreibung. Er
@@ -120,8 +111,7 @@ export function identityOf(name, sector) {
        Strich als Kante wirkt. Ohne diesen Ton verschwimmen die goldenen und
        roséfarbenen Sektoren zu einer einzigen Mitteltönung. */
     shade: hsl(h, Math.min(70, s * 0.5), 10),
-    scene: secId(sector).scene,
-    claim: secId(sector).claim,
+    scene: SECTOR_SCENE[sector] || "network",
     variant: Math.floor(rnd() * 1000),
     pattern: Math.floor(rnd() * 4),
     rnd,
@@ -897,7 +887,7 @@ export function HeroArt({ id, tier = "common" }) {
 export function SectorPill({ sector }) {
   return (
     <span className="bpill">
-      <SectorEmblem sector={sector} />{SECLABEL[sector] || sector}
+      <SectorEmblem sector={sector} /><span>{SECLABEL[sector] || sector}</span>
     </span>
   );
 }
@@ -941,9 +931,6 @@ export function CardHero({ id, sector, name, claim, tier = "common", state = nul
         </div>
         {claim && <p className="bclaim">{claim}</p>}
         {abilities}
-        <div className="bsecclaim">
-          {id.claim.map((l) => <span key={l}>{l}</span>)}
-        </div>
       </div>
     </div>
   );
@@ -1224,12 +1211,18 @@ export const BATTLE_CSS = `
 @media (prefers-reduced-motion:reduce){.pel .bheroart.tier-myth:after{animation:none;opacity:0;}}
 .pel .bheroin{position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;flex:1;}
 
-.pel .bherotop{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+/* Sektorname und Zustand passen auf 320 px nicht nebeneinander — "Software &
+   IT Services" allein ist dort breiter als die halbe Karte. Die Plakette kürzt
+   deshalb, und wenn das nicht reicht, bricht die Zeile um. */
+.pel .bherotop{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  flex-wrap:wrap;row-gap:6px;}
 .pel .bpill{display:inline-flex;align-items:center;gap:6px;font-size:9.5px;letter-spacing:.13em;
   text-transform:uppercase;font-weight:700;border-radius:99px;padding:5px 11px 5px 8px;
   color:var(--sec);background:color-mix(in srgb, var(--sec) 15%, var(--card));
-  border:1px solid color-mix(in srgb, var(--sec) 48%, transparent);white-space:nowrap;}
+  border:1px solid color-mix(in srgb, var(--sec) 48%, transparent);white-space:nowrap;
+  min-width:0;overflow:hidden;}
 .pel .bpill .bemb{width:13px;height:13px;flex:none;}
+.pel .bpill span{overflow:hidden;text-overflow:ellipsis;}
 .pel .bstate{flex:none;display:inline-flex;align-items:center;gap:5px;font-size:9.5px;
   letter-spacing:.1em;text-transform:uppercase;font-weight:700;border-radius:99px;padding:5px 10px;
   white-space:nowrap;color:var(--teal);background:color-mix(in srgb, var(--teal) 16%, var(--card));
@@ -1251,21 +1244,12 @@ export const BATTLE_CSS = `
   hyphens:auto;overflow-wrap:break-word;}
 .pel .bmeta{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);
   font-weight:600;margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;}
-.pel .bclaim{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink2);max-width:62%;}
+.pel .bclaim{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink2);max-width:70%;}
 
-/* Der Anspruch des Sektors: zwei Zeilen, gesperrt, unten rechts im Bild. */
-.pel .bsecclaim{position:absolute;right:0;bottom:0;display:flex;flex-direction:column;
-  align-items:flex-end;gap:2px;font-size:11.5px;font-weight:700;letter-spacing:.16em;
-  line-height:1.25;text-align:right;pointer-events:none;color:var(--deep);
-  text-shadow:0 1px 10px var(--card),0 0 3px var(--card);}
-.pel.dark .bsecclaim{color:var(--lit);text-shadow:0 1px 10px var(--card);}
-@media (max-width:379px){.pel .bsecclaim{font-size:10px;letter-spacing:.12em;}
-  .pel .bclaim{max-width:100%;}}
+@media (max-width:379px){.pel .bclaim{max-width:100%;}}
 
 /* Fähigkeiten */
-/* Bis 68 % der Breite: rechts unten steht der Anspruch des Sektors, und die
-   Fähigkeiten dürfen nicht darunterlaufen. */
-.pel .babils{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:4px;max-width:68%;}
+.pel .babils{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:4px;max-width:82%;}
 .pel .babil{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
   border-radius:99px;padding:5px 11px;line-height:1.25;
   color:var(--ox);background:color-mix(in srgb, var(--ox) 13%, var(--card));
@@ -1366,6 +1350,24 @@ export const BATTLE_CSS = `
   .pel .bcallout button{width:100%;}
 }
 
+/* ---------- Financial Statements in der Farbe des Unternehmens ----------
+   Der Bericht öffnet aus der Karte heraus und gehört zu ihr; in Gold sah er
+   aus wie ein eigener Bereich der Anwendung. Die Regeln stehen unter
+   .sheet.bfin, weil .tomb auch der Grabstein beim Exit ist — der bleibt
+   golden. */
+.pel .sheet.bfin .tomb{
+  background:linear-gradient(158deg,color-mix(in srgb, var(--own) 26%, var(--panel)),var(--panel) 72%);
+  border-color:color-mix(in srgb, var(--own) 30%, var(--panel));}
+.pel .sheet.bfin .tomb:before{border-color:color-mix(in srgb, var(--own) 55%, transparent);}
+.pel .sheet.bfin .tomb .sub{color:var(--lit);}
+/* Der aktive Umschalter wird getönt, nicht gefüllt: Die Firmenfarben liegen in
+   der mittleren Helligkeit, dort trägt weder schwarze noch weiße Schrift
+   verlässlich. */
+.pel .sheet.bfin .finseg button.on{background:color-mix(in srgb, var(--own) 20%, transparent);
+  border-color:color-mix(in srgb, var(--own) 58%, transparent);color:var(--ink);}
+.pel .sheet.bfin table.fin tr.sum td{border-top-color:color-mix(in srgb, var(--own) 42%, var(--rule));}
+.pel .sheet.bfin .finnote b{color:var(--ink);}
+
 /* ---------- Abschnitte ---------- */
 .pel .bsec{padding:16px 15px 0;}
 .pel .bsec.flush{padding-left:0;padding-right:0;}
@@ -1442,11 +1444,14 @@ export const BATTLE_CSS = `
 .pel .bprofile{display:flex;align-items:center;gap:8px;padding:14px 15px 0;}
 .pel .bradar{flex:none;width:138px;}
 .pel .bradar svg{width:100%;display:block;}
-.pel .bradarnote{font-size:9.5px;color:var(--ink2);text-align:center;margin-top:-2px;}
-.pel .bprofile .bprofnote{flex:1;min-width:0;font-size:11.5px;line-height:1.55;color:var(--ink2);}
+.pel .bradarnote{font-size:10px;letter-spacing:.04em;color:var(--ink2);text-align:center;margin-top:2px;}
+/* Ohne Fließtext daneben steht das Diagramm mittig und bekommt mehr Fläche —
+   die Beschriftung der Achsen trägt die Aussage, darunter nur noch, wogegen
+   gemessen wird. */
+.pel .bprofile{justify-content:center;}
+.pel .bradar{width:186px;}
 @media (max-width:339px){
-  .pel .bprofile{flex-direction:column;align-items:stretch;}
-  .pel .bradar{width:100%;max-width:180px;margin:0 auto;}
+  .pel .bradar{width:100%;max-width:180px;}
 }
 
 /* ---------- Kartenfuß: Preisschild und Rechnung ---------- */

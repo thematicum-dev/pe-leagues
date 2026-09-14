@@ -770,7 +770,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         </div>
         <div className="bprofile">
           <StatRadar color={id.own} redacted={hidden}
-            note={hidden ? "Datenraum erforderlich" : null}
+            note={hidden ? "Datenraum erforderlich" : "relativ zu Investmentuniversum"}
             axes={[
               { k: "Marge", v: AX.margin(d.margin) },
               { k: "Wachstum", v: AX.growth(d.growth) },
@@ -778,13 +778,6 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
               { k: "Cash gen", v: AX.conv(conv) },
               { k: "Qualität", v: AX.quality(d.quality) },
             ]} />
-          <p className="bprofnote">
-            {hidden
-              ? "Ohne Datenraum bleibt das Profil verdeckt — aus der Fläche ließe sich zurückrechnen, was die Karte gerade nicht zeigt."
-              : `Die Skala ist über alle Geschäftsmodelle des Spiels gerechnet, nicht
-                 innerhalb von ${SECLABEL[d.sector]}: Der volle Ring heißt auf jeder Karte
-                 dasselbe.`}
-          </p>
         </div>
         <div className="bacts">
           <StatementsButton statements={statements} hidden={hidden}
@@ -1052,7 +1045,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             sub={c.equityIn > 0.5 ? `inkl. ${eur(c.equityIn)} Nachschuss` : `Einstieg ${x(c.entryMult)}`} />
         </div>
         <div className="bprofile">
-          <StatRadar color={id.own}
+          <StatRadar color={id.own} note="relativ zu Investmentuniversum"
             axes={[
               { k: "Marge", v: AX.margin(c.margin) },
               { k: "Wachstum", v: AX.growth(cagr == null ? SECTORS[c.sector].g : cagr) },
@@ -1060,11 +1053,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               { k: "Cash gen", v: AX.conv(conv == null ? 0 : conv) },
               { k: "Bilanz", v: AX.headroom(head) },
             ]} />
-          <p className="bprofnote">
-            Dieselbe Skala wie jedes Zielobjekt im Dealflow, über alle
-            Geschäftsmodelle des Spiels gerechnet — so lässt sich eine Beteiligung
-            mit dem vergleichen, was gerade am Markt ist.
-          </p>
         </div>
         <PerformanceCompare c={c} market={market} />
         <Track c={c} />
@@ -1477,6 +1465,10 @@ const VIEWS = [
 
 function StatementsSheet({ st, hidden, close }) {
   const [view, setView] = useState("pl");
+  /* Der Bericht trägt die Farbe des Unternehmens, zu dem er gehört. Name und
+     Sektor stehen im Abschluss selbst, die Identität lässt sich daraus
+     ableiten — es muss nichts durch die Karte durchgereicht werden. */
+  const cid = useMemo(() => identityOf(st.name, st.sector), [st.name, st.sector]);
   const P = st.periods;
   const rows = (VIEWS.find((v) => v.id === view) || VIEWS[0]).rows(st);
   /* Die Tabelle startet am rechten Rand. Ein Abschluss wird von links nach
@@ -1495,7 +1487,8 @@ function StatementsSheet({ st, hidden, close }) {
   return (
     <div className="modal" role="dialog" aria-modal="true"
       aria-label={`Financial Statements ${st.name}`} onClick={close}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet bfin" onClick={(e) => e.stopPropagation()}
+        style={{ "--own": cid.own, "--lit": cid.lit }}>
         <div className="tomb">
           <div className="sub">Financial Statements</div>
           <div className="amt" style={{ fontSize: 22 }}>{st.name}</div>
