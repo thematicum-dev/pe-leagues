@@ -317,12 +317,17 @@ export interface EngineCompat {
      Branchenmarge statt über die Ist-Marge der Plattform herein (siehe
      maturePeople).                                                          */
   legacyAddonBenchMargin?: boolean;
+  /* Bis 15.09.2026 wurde die Akquisitionsschuld eines Zukaufs beim START der
+     Maßnahme gebucht, das zugekaufte EBITDA aber erst beim Abschluss. Die
+     Plattform trug die volle Schuld über das ganze Integrationsfenster gegen
+     ihr altes Ergebnis — siehe buildInit/maturePeople.                      */
+  addonDebtAtStart?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
-  legacyNoIntBarrier: true, legacyAddonBenchMargin: true,
+  legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -911,21 +916,42 @@ export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineC
   if (spec.ma) {
     chk = addonCheck(c, market, equity);
     if (!chk.ok) return { blocked: chk };
-    /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung hier —
+    /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung ganz —
        im Mehrspieler- und KI-Pfad kam das EBITDA des Add-ons an, ohne dass
        die Akquisitionsschuld je gebucht wurde, während der Übungsmodus sie
-       (in seiner eigenen Kopie der Mechanik) korrekt buchte.               */
-    /* Nur der fremdfinanzierte Teil des Kaufpreises erhöht die Schuld; den
+       (in seiner eigenen Kopie der Mechanik) korrekt buchte.
+
+       Nur der fremdfinanzierte Teil des Kaufpreises erhöht die Schuld; den
        Rest schießt der Fonds als Eigenkapital nach (siehe fundEquityIn beim
-       Aufrufer). Ohne Nachschuss ist chk.debt der volle Kaufpreis, das
-       Verhalten also unverändert.                                          */
-    if (!compat.addonWithoutDebt) debt += chk.debt;
+       Aufrufer). Das Eigenkapital fließt beim Signing an den Verkäufer, senkt
+       die Nettoverschuldung aber nicht (toDebt: false) — der Leverage bleibt
+       davon unberührt.
+
+       Gezogen wird die Akquisitionsschuld beim ABSCHLUSS, nicht beim Start.
+       Bis 15.09.2026 stand sie ab dem Start in der Bilanz, während das
+       gekaufte EBITDA erst mit der Integration ankam. Das war keine
+       Vorsichtsannahme, sondern eine falsche Bilanz: Die Karte prüft die
+       Finanzierbarkeit pro forma, also (Schuld + Kaufpreis) / (EBITDA +
+       EBITDA des Ziels), und genehmigt den Zukauf nur unterhalb der
+       Finanzierungsgrenze. Der Covenant wird aber jede Periode auf dem
+       tatsächlichen Leverage getestet — und der lief im Integrationsfenster
+       gegen das ALTE EBITDA. Gemessen über 121 Zukäufe: Karte im Schnitt
+       3,6×, tatsächlich 4,3×, Spitze 8,3× gegen einen Covenant von 6,5 — in
+       54 Halbjahren stand die Plattform über ihrem Covenant, auf einer Zahl,
+       die nirgends stand.
+
+       Jetzt kommen Schuld und EBITDA zusammen an (maturePeople). Damit ist
+       der Leverage nach dem Abschluss genau die Pro-forma-Zahl, auf der
+       entschieden wurde — und das Integrationsrisiko trägt weiter, was es
+       tragen soll: Scheitert sie, steht die Schuld trotzdem voll.          */
+    if (compat.addonDebtAtStart && !compat.addonWithoutDebt) debt += chk.debt;
+    const addDebt = compat.addonDebtAtStart || compat.addonWithoutDebt ? 0 : chk.debt;
     /* Der Reifegradgewinn ist bewusst klein: Der Wert eines Zukaufs steckt im
        zugekauften EBITDA, nicht in einer dauerhaft schnelleren Organik. Vorher
        gab es hier eine volle Stufe obendrauf — rund zwei Drittel des gemessenen
        Vorteils kamen aus dieser Doppelzählung.                               */
     patch = { ...patch, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price,
-      equity: chk.equity, gain: 0.35, ok };
+      equity: chk.equity, addDebt, gain: 0.35, ok };
   } else {
     patch = { ...patch, gain: initGain(E) * sp * (spec.gm || 1) * rep.gm * fitOf(id, c)
       * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
@@ -1522,6 +1548,15 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
     if (!IN || q < IN.doneQ) return;
     const spec = IN.id ? initById(IN.dim, IN.id) : null;
     if (IN.ma) {
+      /* Abschluss des Zukaufs: Jetzt wird die Akquisitionsschuld gezogen, und
+         zwar in beiden Fällen. Scheitert die Integration, steht sie voll und
+         das EBITDA kommt nicht — genau der Weg in den Covenant Breach, den
+         die Karte ankündigt.
+
+         `addDebt` fehlt in Beteiligungen, deren Zukauf vor dem 15.09.2026
+         gestartet wurde: Dort steckt die Schuld bereits seit dem Start in
+         netDebt, und sie darf hier nicht ein zweites Mal gebucht werden. */
+      if (IN.addDebt) { c.netDebt += IN.addDebt; bookOff(c, "addon", IN.addDebt); }
       /* Gekauft wird EBITDA, geliefert wird im Modell Umsatz — die Umrechnung
          muss deshalb über die Marge laufen, mit der die Plattform das EBITDA
          tatsächlich verdient. Bis zum 11.09.2026 stand hier die Branchenmarge:
@@ -1539,8 +1574,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
         c.marginDrift = (c.marginDrift || 0) - 1.0; c.quality -= 7;
       }
       /* Zukaufshistorie mitschreiben. Ein Add-on ist die einzige Maßnahme, die
-         die Beteiligung dauerhaft umbaut, und die einzige, deren Kaufpreis
-         schon beim Start in der Bilanz steht. Ohne diese Zeile ließ sich nach
+         die Beteiligung dauerhaft umbaut. Ohne diese Zeile ließ sich nach
          der Integration nirgends mehr ablesen, wann zugekauft wurde und wie
          oft — `done` zählt nur die Kennung mit, nicht den Zeitpunkt.       */
       c.addons = [...(c.addons || []), { q, eb: IN.addEb, mult: IN.mult, ok: !!IN.ok }];
@@ -1574,7 +1608,9 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
       tone: IN.ok ? "pos" : "neg",
       t: IN.ma
         ? (IN.ok
-          ? `<b>${c.name}</b>: Add-on integriert — ${eur(IN.addEb)} EBITDA zu ${x(IN.mult)} gekauft, Bewertung der Plattform liegt bei ${x(markMultiple(c, mk))}.`
+          ? `<b>${c.name}</b>: Add-on abgeschlossen und integriert — ${eur(IN.addEb)} EBITDA zu ${x(IN.mult)} gekauft`
+            + `${IN.addDebt ? `, ${eur(IN.addDebt)} Akquisitionsschuld gezogen` : ""}.`
+            + ` Leverage jetzt ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}, Bewertung der Plattform ${x(markMultiple(c, mk))}.`
           : `<b>${c.name}</b>: Integration des Add-ons gescheitert. Nur ein gutes Drittel des Umsatzes kommt an, die Akquisitionsschuld steht voll — Leverage jetzt ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}.`)
         : IN.ok
           ? `<b>${c.name}</b>: ${IN.name || "Maßnahme"} abgeschlossen, Reifegrad +${IN.gain.toFixed(2)}${IN.dim === "acc" && IN.gain < 0.5 ? " — deutlich unter Erwartung." : IN.dim === "acc" && IN.gain > 1.1 ? " — weit über Erwartung." : "."}`

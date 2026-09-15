@@ -399,6 +399,41 @@ Frage des Spiels — wann verkauft man ein Asset, das noch weiterläuft — nich
 tun hat. Sie ist hier notiert, damit sie eine Entscheidung bleibt und nicht zum
 Versehen wird.
 
+### 19 — Wann wird die Akquisitionsschuld eines Zukaufs gezogen?
+
+**Frage.** Ein Add-on läuft über mehrere Halbjahre, bis die Integration steht.
+Steht die Akquisitionsschuld in dieser Zeit schon in der Bilanz?
+
+**Befund.** Bis zum 15.09.2026 ja — und das gekaufte EBITDA nicht.
+`buildInit()` addierte den Kaufpreis sofort auf `c.netDebt`, `maturePeople()`
+lieferte den Umsatz erst beim Abschluss. Dazwischen trug die Plattform die volle
+Schuld gegen ihr altes Ergebnis.
+
+Das ist nicht nur eine Anzeigefrage. Die Karte genehmigt einen Zukauf auf der
+**Pro-forma-Verschuldung** — `(netDebt + Kaufpreis) / (EBITDA + EBITDA des
+Ziels)`, geprüft gegen Covenant minus `ADDON_HEADROOM`. Der Covenant selbst wird
+in `stepCompany()` jede Periode auf dem **tatsächlichen** Leverage getestet, und
+der lief im Integrationsfenster gegen den alten Nenner. Gemessen über 121 Zukäufe
+in acht Partien: Karte im Schnitt 3,6×, tatsächlich 4,3×, Spitze 8,3× gegen einen
+Covenant von 6,5 — in 54 Halbjahren stand die Plattform über ihrem Covenant, auf
+einer Zahl, die nirgends in der Ansicht stand.
+
+Der Realität entspricht es ohnehin nicht: Akquisitionsfinanzierung wird beim
+Closing gezogen, nicht beim Signing, und konsolidiert wird zum selben Zeitpunkt.
+
+**Konsequenz.** Geändert. Die Schuld hängt jetzt als `addDebt` am Vorgang und
+wird in `maturePeople()` beim Abschluss gebucht — zusammen mit dem gekauften
+EBITDA und in beiden Fällen: Scheitert die Integration, steht sie trotzdem voll,
+und genau daraus entsteht der Covenant Breach, den die Karte ankündigt. Der
+Eigenkapitalanteil fließt weiterhin beim Signing an den Verkäufer; er erhöht die
+Kostenbasis, nicht die Verschuldung (`toDebt: false`), und lässt den Leverage
+deshalb unberührt.
+
+Dieselbe Messung danach: tatsächlicher Leverage im Integrationsfenster 2,6×,
+Spitze 6,5×, vier Halbjahre über Covenant — und die übrig gebliebenen haben
+andere Ursachen als den Zukauf. Der Leverage nach dem Abschluss ist jetzt die
+Pro-forma-Zahl, auf der entschieden wurde.
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -421,8 +456,12 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
    nicht.
 8. **MOIC-Basis vereinheitlicht** (13).
 
-Die beiden Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge
-eines bereits ausgewerteten Halbjahres verschieben, tragen Schalter in
-`EngineCompat` (`legacyNoIntBarrier`, `legacyAddonBenchMargin`) und stehen in
-`LEGACY_COMPAT`, damit sich alte Halbjahre weiterhin exakt nachrechnen lassen
+9. **Akquisitionsschuld beim Abschluss** (19). Ein Zukauf belastet den Leverage
+   nicht mehr über das ganze Integrationsfenster, sondern ab dem Abschluss — und
+   dann genau um die Pro-forma-Zahl, auf der er genehmigt wurde.
+
+Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
+bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`
+(`legacyNoIntBarrier`, `legacyAddonBenchMargin`, `addonDebtAtStart`) und stehen
+in `LEGACY_COMPAT`, damit sich alte Halbjahre weiterhin exakt nachrechnen lassen
 (`lib/engine/replay.ts`).

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
   BASE_RATE, LEGACY_COMPAT, SECNAMES, SECTORS,
-  addonCheck, buildInit, maturePeople, nwcPctOf, stepCompany,
+  addonCheck, buildInit, ebitdaOf, maturePeople, nwcPctOf, stepCompany,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,18 +31,62 @@ function holding(over: Partial<Any> = {}): Any {
 }
 
 describe("Add-on: der Zukauf wird bezahlt", () => {
-  it("bucht den Kaufpreis gegen die Nettoverschuldung", () => {
+  it("zieht die Akquisitionsschuld erst beim Abschluss, nicht beim Start", () => {
     const c = holding();
     const chk = addonCheck(c, market);
     expect(chk.ok, "Testaufbau: der Zukauf muss finanzierbar sein").toBe(true);
     expect(chk.price).toBeGreaterThan(0);
 
-    const B = buildInit(createRng(7), c, "acc", "ma", market, 3);
+    const B = buildInit(createRng(7), c, "acc", "ma", market, 3) as Any;
     expect(B).not.toBeNull();
-    expect((B as Any).blocked).toBeUndefined();
-    // Die Maßnahme hat keinen eigenen Einmalaufwand, die Schuld ist also
-    // genau der Kaufpreis aus der Pro-forma-Rechnung.
-    expect((B as Any).debt).toBeCloseTo(chk.price, 9);
+    expect(B.blocked).toBeUndefined();
+    /* Beim Start bewegt sich nichts an der Verschuldung: Die Maßnahme hat
+       keinen eigenen Einmalaufwand, und der Kaufpreis wird erst beim
+       Abschluss gezogen. Er hängt so lange am Vorgang. */
+    expect(B.debt).toBe(0);
+    expect(B.init.addDebt).toBeCloseTo(chk.price, 9);
+
+    const nd0 = c.netDebt;
+    c.netDebt += B.debt;
+    c[B.slot] = B.init;
+    const rng = createRng(7);
+    // Halbjahre vor dem Abschluss: die Schuld ist nirgends
+    for (let q = 3; q < B.init.doneQ; q++) {
+      maturePeople(rng, c, market, q, false, [], []);
+      expect(c.netDebt, `HJ ${q}: Schuld vor dem Abschluss`).toBe(nd0);
+      expect(c.initA, `HJ ${q}: Maßnahme läuft noch`).toBeTruthy();
+    }
+    // Abschluss: Schuld und EBITDA kommen zusammen
+    const rev0 = c.revenue;
+    maturePeople(rng, c, market, B.init.doneQ, false, [], []);
+    expect(c.initA).toBeNull();
+    expect(c.netDebt - nd0, "Abschluss: die volle Akquisitionsschuld").toBeCloseTo(chk.price, 9);
+    expect(c.revenue).toBeGreaterThan(rev0);
+  });
+
+  /* Der eigentliche Grund für die Umstellung: Die Karte genehmigt den Zukauf
+     auf der Pro-forma-Verschuldung (Schuld + Kaufpreis) / (EBITDA + Ziel-
+     EBITDA). Stand die Schuld ab dem Start allein gegen das alte EBITDA, war
+     der tatsächliche Leverage im ganzen Integrationsfenster deutlich höher als
+     die Zahl, auf der entschieden wurde — und der Covenant testet den
+     tatsächlichen. */
+  it("hält den Leverage bis zum Abschluss auf dem Stand vor dem Zukauf", () => {
+    const c = holding();
+    const chk = addonCheck(c, market);
+    const lev0 = c.netDebt / ebitdaOf(c);
+    const B = buildInit(createRng(11), c, "acc", "ma", market, 3) as Any;
+    c.netDebt += B.debt;
+    c[B.slot] = B.init;
+    expect(c.netDebt / ebitdaOf(c), "Leverage unmittelbar nach dem Start").toBeCloseTo(lev0, 9);
+
+    const rng = createRng(11);
+    for (let q = 3; q <= B.init.doneQ; q++) maturePeople(rng, c, market, q, false, [], []);
+    /* Nach dem Abschluss ist der Leverage die Pro-forma-Zahl der Karte —
+       bei erfolgreicher Integration auf die Nachkommastelle. */
+    if (B.init.ok) {
+      expect(c.netDebt / ebitdaOf(c), "Leverage nach dem Abschluss").toBeCloseTo(chk.lev, 1);
+      expect(c.netDebt / ebitdaOf(c)).toBeLessThanOrEqual(chk.limit + 0.05);
+    }
   });
 
   it("lässt ihn im Altverhalten weiterhin ungebucht", () => {

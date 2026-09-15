@@ -1144,20 +1144,19 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             🚀 Growth
           </button>
         </div>
-        {/* Was läuft, wann es liefert — und beim Zukauf: was davon schon gebucht ist.
+        {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
-            Ein Add-on ist die einzige Maßnahme, deren Kaufpreis, Akquisitionsschuld
-            und Zinslast bereits beim Start in der Bilanz stehen (runQuarter, Schritt 5:
-            `c.netDebt += B.debt`), während das zugekaufte EBITDA erst bei der
-            Integration ankommt (maturePeople). In der Berichtsansicht sah der Zukauf
-            deshalb vollzogen aus, während hier noch "läuft" stand — zwei richtige
-            Angaben, die sich widersprachen, weil keine von beiden sagte, worauf sie
-            sich bezieht. */}
+            Ein Add-on läuft zwischen Signing und Closing. Gezogen wird die
+            Akquisitionsschuld erst beim Abschluss, zusammen mit dem gekauften
+            EBITDA (maturePeople) — bis dahin bleibt der Leverage der von vorher.
+            Nur der Eigenkapitalanteil fließt sofort an den Verkäufer; er erhöht
+            die Kostenbasis des Deals, nicht die Verschuldung der Plattform. */}
         <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
             ? initsOf(c).map((I) => `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`
-                + (I.ma ? " Kaufpreis, Akquisitionsschuld und Zinslast stehen bereits in der Bilanz —"
-                  + " das zugekaufte EBITDA kommt erst mit der Integration." : "")
+                + (I.ma ? ` Akquisitionsschuld und zugekauftes EBITDA kommen zusammen beim Abschluss —`
+                  + ` bis dahin bleibt der Leverage unberührt.`
+                  + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind bereits abgerufen.` : "") : "")
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
             : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
@@ -2649,7 +2648,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       </span>
                     </td></tr>}
                   <tr><td className="lab">Leverage heute</td><td>{x(c.netDebt / Math.max(0.5, eb))}</td></tr>
-                  <tr><td className="lab">Pro forma nach Add-on</td>
+                  <tr><td className="lab">Leverage nach Abschluss</td>
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
@@ -2664,16 +2663,16 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                   <tr><td className="lab">Bei gescheiterter Integration</td>
                     <td style={{ color: "var(--ox)" }}>nur 35 % des Umsatzes, Schuld steht voll</td></tr>
                   <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.benchMargin ?? 12) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
-                  {/* Die Zeile, die vorher ganz fehlte. Ein Zukauf ist die einzige
-                      Maßnahme, deren Kaufpreis sofort in der Bilanz steht, während das
-                      EBITDA erst mit der Integration kommt — ohne diesen Hinweis sieht
-                      es in der Berichtsansicht so aus, als wäre der Zukauf schon
-                      vollzogen, während die Maßnahme noch läuft. */}
-                  <tr><td className="lab">Ergebnis in</td>
+                  {/* Die Zeile, die vorher ganz fehlte: die Zeitachse des Zukaufs.
+                      Signing jetzt, Closing beim Abschluss — Schuld und EBITDA
+                      kommen zusammen, der Leverage springt also erst dann auf die
+                      Pro-forma-Zahl oben. */}
+                  <tr><td className="lab">Abschluss in</td>
                     <td>{hj(dur + 1)}
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-                        {" "}— Kaufpreis, Akquisitionsschuld und Zinslast stehen ab sofort in der Bilanz,
-                        das EBITDA kommt erst mit der Integration
+                        {" "}— bis dahin bleibt der Leverage bei {x(c.netDebt / Math.max(0.5, eb))};
+                        Akquisitionsschuld und EBITDA kommen zusammen beim Abschluss
+                        {chk.equity > 0.05 ? `, nur die ${eur(chk.equity)} Fondskapital fließen sofort` : ""}
                       </span></td></tr>
                 </>) : (<>
                   <tr><td className="lab">Eignung für diesen Fall</td>

@@ -33,7 +33,7 @@ import {
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
-  liquidateHoldings, eur,
+  liquidateHoldings, eur, hj,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -263,7 +263,11 @@ function applyImmediateDecisions(
     busyInitSlots++;
     pushFeed(news, quarter, B.spec.ma ? "🏢" : "🛠️", "neu",
       `${c.name}: ${B.spec.n} gestartet.`
-      + (eqIn > 0.05 ? ` ${eqIn.toFixed(1)} Mio. € davon aus Fondskapital.` : ""), f.slot);
+      + (eqIn > 0.05 ? ` ${eqIn.toFixed(1)} Mio. € davon aus Fondskapital.` : "")
+      /* Beim Zukauf gehört dazu, was noch nicht passiert ist: Die
+         Akquisitionsschuld wird beim Abschluss gezogen, nicht jetzt. */
+      + (B.spec.ma && B.init.addDebt
+        ? ` Signing — ${eur(B.init.addDebt)} Akquisitionsschuld werden beim Abschluss in ${hj(B.dur)} gezogen.` : ""), f.slot);
   });
 
   // 6 — Exits anstoßen (Prozess eröffnen oder sofort veräußern)
