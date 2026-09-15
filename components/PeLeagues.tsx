@@ -10,7 +10,7 @@ import Link from "next/link";
    createRng() liefert je Partie eine eigene Zufallsinstanz — kein geteilter
    Modul-Zustand mehr, der parallele Partien gegenseitig stören könnte.       */
 import { createRng } from "@/lib/engine";
-import type { Rng } from "@/lib/engine";
+import type { AddonOpts, Rng } from "@/lib/engine";
 import {
   ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, CAPITAL, COV_DEFAULT, COV_FLOOR,
   COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P,
@@ -18,7 +18,7 @@ import {
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
   exitNetOf, mepCut, fundEquityIn, liquidateHoldings,
   RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
-  chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
+  addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
@@ -594,12 +594,18 @@ export default function PeLeagues() {
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }
 
-  function startInit(c, dim, id, equity = 0) {
+  function startInit(c, dim, id, mandate: AddonOpts = {}) {
     haptic(8);
-    /* Eigenkapitalanteil an einem Zukauf: gedeckelt am investierbaren Kapital
-       — der Fonds kann nur geben, was er hat. */
-    const eqWant = id === "ma" ? Math.min(Math.max(0, equity), investableOf(me, quarter)) : 0;
-    const B = buildInit(rng, c, dim, id, market, decQ, {}, eqWant);
+    /* Zukaufsmandat wie in der Mehrspielerpartie: Zielgröße gegen die
+       Obergrenze, Eigenkapital gegen das investierbare Kapital — der Fonds
+       kann nur geben, was er hat. */
+    const fallback = id === "ma" ? addonMandate(c, market) : null;
+    const ma = id === "ma" ? {
+      addEb: clamp(Number(mandate.addEb) || fallback.addEb, 0, addonMaxEb(c)),
+      mult: Number(mandate.mult) || fallback.mult,
+      equity: Math.min(Math.max(0, Number(mandate.equity) || 0), investableOf(me, quarter)),
+    } : {};
+    const B = buildInit(rng, c, dim, id, market, decQ, {}, ma);
     if (!B) return;
     if (B.blocked) {
       setFeed((p2) => [{
@@ -1205,7 +1211,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
       {initPick && me.holdings.find((h) => h.uid === initPick.uid) && (
         <InitPicker c={me.holdings.find((h) => h.uid === initPick.uid)} dim={initPick.dim} market={market}
           investable={investableOf(me, quarter)}
-          start={(id, eq) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, eq); setInitPick(null); }}
+          start={(id, mandate) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, mandate); setInitPick(null); }}
           close={() => setInitPick(null)} />
       )}
       {injectPick && me.holdings.find((h) => h.uid === injectPick) && (

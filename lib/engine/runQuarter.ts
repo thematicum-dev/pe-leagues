@@ -33,6 +33,7 @@ import {
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
+  addonMandate, addonMaxEb,
   liquidateHoldings, eur, hj,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
@@ -243,13 +244,20 @@ function applyImmediateDecisions(
     if (intent.dim === "plat" && c.initP) return;
     if (intent.dim === "acc" && c.initA) return;
     if (busyInitSlots >= maxInitSlots) return;
-    /* Eigenkapitalanteil an einem Zukauf: Was der Spieler angibt, wird gegen
-       das investierbare Kapital gekappt — mehr als das kann der Fonds nicht
-       geben, und ein Zukauf darf nie einen Abruf über das Commitment hinaus
-       auslösen. */
-    const wantEq = intent.dim === "acc" && intent.id === "ma"
-      ? Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)) : 0;
-    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, wantEq);
+    /* Das Zukaufsmandat kommt aus der Abgabe und wird hier gekappt, nicht in
+       der Ansicht: Zielgröße gegen ADDON_MAX_SHARE des Plattform-EBITDA,
+       Eigenkapital gegen das investierbare Kapital — mehr als das kann der
+       Fonds nicht geben, und ein Zukauf darf nie einen Abruf über das
+       Commitment hinaus auslösen. Das Höchstgebot deckelt addonCheck() selbst
+       gegen die Preisvorstellung des Verkäufers. */
+    const isAddon = intent.dim === "acc" && intent.id === "ma";
+    const fallback = isAddon ? addonMandate(c, market) : null;
+    const mandate = isAddon ? {
+      addEb: clamp(Number(intent.addEb) || fallback.addEb, 0, addonMaxEb(c)),
+      mult: Number(intent.maxMult) || fallback.mult,
+      equity: Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)),
+    } : {};
+    const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, mandate);
     if (!B || B.blocked) return;
     const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
     // Das Eigenkapital fließt unmittelbar an den Verkäufer weiter (toDebt:
@@ -562,9 +570,14 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
            Weg offen, den die Kohorte nicht kennt. Gedeckelt auf ein Viertel
            des investierbaren Kapitals: Ein Zukauf ist eine Ergänzung, kein
            Anlass, den Fonds leerzuräumen. */
-        const needEq = id === "ma" ? addonEquityNeeded(c, mk) : 0;
+        /* Die KI erteilt das Referenzmandat: Zielgröße ADDON_REF_SHARE, voller
+           Preis. Damit steht die Kohorte genau auf dem Punkt, auf den das
+           Scheiterungsrisiko kalibriert ist, und der Spieler misst sich gegen
+           eine Vorgabe statt gegen eine Zufallsziehung. */
+        const aiMandate = id === "ma" ? addonMandate(c, mk) : {};
+        const needEq = id === "ma" ? addonEquityNeeded(c, mk, aiMandate) : 0;
         const aiEq = needEq > 0 ? Math.min(needEq, investableOf(f, q) * 0.25) : 0;
-        const B = buildInit(rng, c, dim, id, mk, q, compat, aiEq);
+        const B = buildInit(rng, c, dim, id, mk, q, compat, { ...aiMandate, equity: aiEq });
         if (!B || B.blocked) return;
         const head = (c.covLimit ?? COV_DEFAULT) - c.netDebt / Math.max(0.5, ebitdaOf(c));
         /* Der Zukaufspreis steckt seit dem 30.08.2026 in B.debt. Die

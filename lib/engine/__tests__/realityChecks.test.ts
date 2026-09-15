@@ -194,7 +194,7 @@ describe("Add-on", () => {
     expect(ohne.ok).toBe(false);
     const need = addonEquityNeeded(c, market);
     expect(need).toBeGreaterThan(0);
-    const mit = addonCheck(c, market, need);
+    const mit = addonCheck(c, market, { equity: need });
     expect(mit.ok).toBe(true);
     // Der Kaufpreis bleibt derselbe, nur seine Finanzierung verschiebt sich
     expect(mit.price).toBeCloseTo(ohne.price, 9);

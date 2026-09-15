@@ -29,6 +29,7 @@ import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
   ExitStartIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
+import type { AddonOpts } from "@/lib/engine";
 import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
@@ -38,7 +39,7 @@ import {
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
   SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
   eur, exitNetOf, fairOf,
-  gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
+  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
   markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -686,9 +687,13 @@ export default function MultiplayerGame({
       const dur = initDurationOf(c, dim, intent.id);
       if (dur == null) return;
       const spec = initById(dim, intent.id) as Any;
+      const chk = spec?.ma
+        ? addonCheck(c, state.market, { addEb: intent.addEb, mult: intent.maxMult, equity: intent.equity })
+        : null;
       p[slot] = {
         dim, id: intent.id, name: spec?.n ?? null, ma: !!spec?.ma, drag: spec?.drag || 0,
         doneQ: quarter + 1 + dur,
+        ...(chk ? { addEb: chk.addEb, mult: chk.mult, price: chk.price, equity: chk.equity, fail: chk.fail } : {}),
       };
     };
     stageInit("initP", "plat", stagedInitByKey[initKey(c.uid, "plat")]);
@@ -876,11 +881,20 @@ export default function MultiplayerGame({
     setShortlistCursor((i) => i + 1);
   }
 
-  function startInitStage(id: string, equity = 0) {
+  /* Beim Zukauf geht das ganze Mandat in die Abgabe: Zielgröße, Höchstgebot
+     und Eigenkapitalanteil. Der Server kappt alle drei noch einmal gegen den
+     tatsächlichen Spielstand (siehe applyImmediateDecisions) — die Ansicht
+     rechnet nur vor, sie entscheidet nichts. */
+  function startInitStage(id: string, mandate: AddonOpts = {}) {
     if (!initPick) return;
     const { uid, dim } = initPick;
+    const ma = id === "ma" ? {
+      addEb: mandate.addEb,
+      maxMult: mandate.mult,
+      ...((mandate.equity || 0) > 0.05 ? { equity: mandate.equity } : {}),
+    } : {};
     setInitiatives((arr) => [...arr.filter((i) => !(i.holdingUid === uid && i.dim === dim)),
-      { holdingUid: uid, dim, id, ...(id === "ma" && equity > 0.05 ? { equity } : {}) }]);
+      { holdingUid: uid, dim, id, ...ma }]);
     setInitPick(null);
   }
 

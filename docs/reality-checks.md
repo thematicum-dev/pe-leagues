@@ -434,6 +434,60 @@ Spitze 6,5×, vier Halbjahre über Covenant — und die übrig gebliebenen haben
 andere Ursachen als den Zukauf. Der Leverage nach dem Abschluss ist jetzt die
 Pro-forma-Zahl, auf der entschieden wurde.
 
+### 20 — Der Zukauf als Entscheidung, nicht als Angebot
+
+**Frage.** Was entscheidet der Spieler bei einem Add-on, und woraus entsteht
+sein Risiko?
+
+**Befund.** Bis zum 15.09.2026: nichts und fast nichts. Die Zielgröße lag als
+`addonSize` beim Kauf der Plattform fest (20–35 %), der Preis stand über
+`addonMultiple()`, und die einzige Entscheidung war ja oder nein. Das Risiko kam
+aus `addonRisk()` — Prozessreife, Leverage, Zielgröße —, also aus Zahlen, die
+der Spieler nicht gesetzt hatte. Gemessen über 60 Partien scheiterte dabei
+**47 %** der Integrationen.
+
+Ein Ausfall des Deals selbst gab es nie: kein Ereignis brach einen laufenden
+Zukauf ab, kein Wettbewerber nahm das Ziel weg (`addonComp` verteuerte nur),
+und selbst im Fehlschlag kamen 35 % des Umsatzes an. Die einzige Schranke davor
+war die Finanzierung, und die ist binär.
+
+**Konsequenz.** Geändert. Der Spieler erteilt jetzt ein Mandat, wie in der
+Praxis: **Zielgröße** (bis `ADDON_MAX_SHARE` des Konzern-EBITDA) und
+**Höchstgebot** (ein Multiple; über die Preisvorstellung des Verkäufers hinaus
+zahlt niemand). Beides bewegt dasselbe Risiko, aus dem gleichen Grund, aus dem
+Buy-&-Build in der Praxis scheitert:
+
+- Ein größerer Bissen ist schwerer zu verdauen — und er ist relativ teurer, weil
+  der Größenabschlag jetzt am EBITDA des **Ziels** hängt, nicht mehr an dem der
+  Plattform. Wer groß zukauft, zahlt fast das eigene Multiple und verdient an
+  der Arbitrage nichts mehr.
+- Wer unter der Preisvorstellung bleibt, bekommt nicht denselben Zukauf
+  billiger, sondern einen anderen. Zu dem Preis ist nur zu haben, was sonst
+  niemand will. Adverse Selektion, und sie zeigt sich in der Integration.
+
+Kalibriert ist die Skala auf den Referenzfall: Zielgröße `ADDON_REF_SHARE`,
+voller Preis, Plattform in der gemessenen Mitte (Prozessreife 2,0, effektives
+Rating der Fachrolle 2,0, Leverage bei `LEV_FREE`). Dort liegt das Risiko bei
+`ADDON_FAIL_BASE` = 10 %. Gemessen über 60 Partien:
+
+| Mandat | Risiko laut Karte | tatsächlich gescheitert |
+|---|---|---|
+| 20 % der Plattform, voller Preis | 7 % | 7 % |
+| 25 % (Referenz), voller Preis | 11 % | 7 % |
+| 30 %, voller Preis | 16 % | 15 % |
+| 50 %, voller Preis | 36 % | 30 % |
+| 25 %, ein Turn unter Ask | 29 % | 28 % |
+| 25 %, zwei Turns unter Ask | 47 % | 44 % |
+
+Das Grundrauschen ist damit deutlich niedriger als vorher, die Spanne aber
+größer — der Preis für ein hohes Risiko kommt jetzt aus der Entscheidung des
+Spielers statt aus der Ziehung beim Kauf der Plattform. Die KI-Fonds erteilen
+das Referenzmandat; die Kohorte steht damit genau auf dem kalibrierten Punkt.
+
+Nicht geändert: Es gibt weiterhin keinen Ausfall des Deals selbst. Scheitert ein
+Zukauf, ist er vollzogen und schlecht integriert — 35 % des Umsatzes, volle
+Akquisitionsschuld, Marge und Qualität beschädigt.
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -459,9 +513,14 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
 9. **Akquisitionsschuld beim Abschluss** (19). Ein Zukauf belastet den Leverage
    nicht mehr über das ganze Integrationsfenster, sondern ab dem Abschluss — und
    dann genau um die Pro-forma-Zahl, auf der er genehmigt wurde.
+10. **Zukauf als Mandat** (20). Zielgröße und Höchstgebot sind jetzt
+   Entscheidungen des Spielers und bestimmen das Scheiterungsrisiko. Im Band der
+   alten Logik fällt es von 47 % auf rund 10 %, oberhalb davon steigt es
+   deutlich stärker als vorher.
 
 Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
 bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`
-(`legacyNoIntBarrier`, `legacyAddonBenchMargin`, `addonDebtAtStart`) und stehen
+(`legacyNoIntBarrier`, `legacyAddonBenchMargin`, `addonDebtAtStart`,
+`legacyAddonMandate`) und stehen
 in `LEGACY_COMPAT`, damit sich alte Halbjahre weiterhin exakt nachrechnen lassen
 (`lib/engine/replay.ts`).

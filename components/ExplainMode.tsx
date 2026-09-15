@@ -22,7 +22,7 @@ import {
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   CV_FEE, IPO_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
-  TVPI_BENCH, addonCheck, anyInit, bookOff, ceilingFactor, chargeOff, clamp, ddCapOf, ddCostOf,
+  TVPI_BENCH, addonCheck, addonMandate, anyInit, bookOff, ceilingFactor, chargeOff, clamp, ddCapOf, ddCostOf,
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, effSkill, eqvOf, eur, growthPrem,
   hj, initById, initDur, initGain, initRuns, initSuccess, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
@@ -149,8 +149,14 @@ function Briefing({ dark, setDark, onStart }) {
             freisetzen, Preise durchsetzen. Sie gelingen in 55–97 % der Fälle, und selbst wenn sie das Ziel
             verfehlen, kommt ein Teil an. <b>Transformationen</b> wie ERP oder KI sind aufwendig und gehen
             binär aus: 50–92 % je nach Team, ein Fehlschlag bringt nichts außer Kosten. <b>Marktabhängige</b>
-            Programme — neuer Markt, Zukauf — hängen an Dritten und gelingen nur in 20–82 % der Fälle.
-            Alle drei Spannen hängen fast vollständig am Rating der zuständigen Position.
+            Programme wie der Eintritt in einen neuen Markt hängen an Dritten und gelingen nur in 20–82 %
+            der Fälle. Diese drei Spannen hängen fast vollständig am Rating der zuständigen Position.
+            <br /><br />
+            Der <b>Zukauf</b> rechnet anders: Sein Risiko kommt aus dem Mandat, das du erteilst. Zielgröße
+            und Höchstgebot bestimmen es, die Plattform verschiebt es. Auf der Referenz — ein Viertel des
+            Konzern-EBITDA, voller Preis — scheitert die Integration in rund einem Zehntel der Fälle; ein
+            halber Konzern auf einmal oder zwei Turns unter der Preisvorstellung machen daraus ein Drittel
+            bis die Hälfte.
           </Def>
           <Def t="Assetqualität">
             Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
@@ -493,30 +499,39 @@ function GuidedRun({ dark, setDark, back }) {
     const seat = dim === "plat" ? "cfo" : "r3";
     const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
     const dur = Math.max(1, initDur(E) + (spec.dm || 0));
-    const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0), 0.1, 0.97);
+    /* Die Einführung zeigt den Zukauf mit dem Referenzmandat: Zielgröße
+       ADDON_REF_SHARE des Konzern-EBITDA, voller Preis. Die Regler dafür stehen
+       in der Partie, nicht im geführten Durchlauf — hier geht es darum, den
+       Mechanismus einmal laufen zu sehen. Risiko und Preis kommen aber aus
+       derselben Funktion wie im Spiel, damit die Zahl hier nicht eine andere
+       ist als dort. */
+    const chk = spec.ma ? addonCheck(c, market, addonMandate(c, market)) : null;
+    const p = spec.ma ? clamp(1 - chk.fail, 0.05, 0.98)
+      : clamp(initSuccess(E, spec.cls) + (spec.sm || 0), 0.1, 0.97);
     const ok = rng.rnd() < p;
     const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
       : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
     let pt = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
-    let debt = ebitdaOf(c) * (spec.oneOff || 0), msg = "";
-    // Der Zukaufspreis wird getrennt geführt: in der Berichtsansicht ist er eine
-    // Akquisition, während die Programmkosten Einmalaufwand sind.
-    let addonPrice = 0;
+    const debt = ebitdaOf(c) * (spec.oneOff || 0);
+    let msg = "";
     if (spec.ma) {
-      const chk = addonCheck(c, market);
       if (!chk.ok) {
         setFeed((f2) => [{ q, e: "🏦", tone: "neg", t: `<b>${c.name}</b>: Der Zukauf scheitert an der Finanzierung. Pro forma ${x(chk.lev)} Leverage gegen einen Covenant von ${x(chk.limit)} — die Banken steigen aus.` }, ...f2]);
         return;
       }
-      addonPrice = chk.price;
-      debt += chk.price;
-      pt = { ...pt, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price, gain: 1.0, ok };
-      msg = ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`;
+      /* addDebt statt sofortiger Buchung: Die Akquisitionsschuld wird beim
+         Abschluss gezogen, und maturePeople() bucht sie dort — genauso wie in
+         einer echten Partie. */
+      pt = { ...pt, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price,
+        addDebt: chk.debt, fail: chk.fail, ok };
+      msg = ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert.`
+        + ` Die Akquisitionsschuld wird beim Abschluss gezogen, Leverage dann ${x(chk.lev)}.`
+        + ` Scheiterungsrisiko ${Math.round(chk.fail * 100)} %.`;
     } else {
       pt = { ...pt, gain: initGain(E) * sp * (spec.gm || 1) * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
       msg = ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
     }
-    patch({ ...chargeOff(chargeOff(c, "restr", debt - addonPrice), "addon", addonPrice),
+    patch({ ...chargeOff(c, "restr", debt),
       [dim === "plat" ? "initP" : "initA"]: { dim, id, name: spec.n, doneQ: q + dur, ...pt } });
     setFeed((f2) => [{ q, e: spec.ma ? "🏢" : "🛠️", tone: "neu", t: `<b>${c.name}</b>: ${spec.n} gestartet.${msg}` }, ...f2]);
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, TAX_RATE, newDeal, ebitdaOf } from "../engine";
+import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, TAX_RATE, newDeal, ebitdaOf, taxOf } from "../engine";
 import { runQuarter } from "../runQuarter";
 import { dealStatements, holdingStatements, MIN_CASH_PCT, PPE_YEARS, ratiosOf } from "../financials";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -161,16 +161,32 @@ describe("Finanzberichte einer Beteiligung", () => {
   });
 
   it("hält Abschreibung und Capex deckungsgleich, wie die Steuerformel der Engine", () => {
+    let checked = 0;
     holdings.forEach((c) => {
       const st = holdingStatements(c)!;
       st.periods.forEach((p) => {
         // Capex enthält zusätzlich nachgeholte Investitionen aus Ereignissen;
         // abgeschrieben wird nur der laufende Investitionsaufwand.
         expect(p.da).toBeLessThanOrEqual(p.capex + 1e-9);
-        expect(Math.abs(p.tax - TAX_RATE * Math.max(0, p.adjEbitda - p.da - p.interest)),
+        expect(p.tax, `${c.name} ${p.label}: negative Steuer`).toBeGreaterThanOrEqual(-1e-9);
+        expect(p.tax, `${c.name} ${p.label}: Steuer über dem Satz`)
+          .toBeLessThanOrEqual(TAX_RATE * Math.max(0, p.adjEbitda) + 1e-9);
+      });
+      /* Die Formel der Engine gilt exakt auf der Halbjahresspalte — das ist die
+         Periode, für die stepCompany() sie rechnet. Eine Jahresspalte ist die
+         Summe zweier solcher Rechnungen, und taxOf() ist nicht linear: Sobald
+         ein Halbjahr in den Verlustbereich läuft (max(0, …)) oder die
+         Zinsschranke greift, ist die Summe zweier Halbjahre nicht mehr dieselbe
+         Zahl wie die Formel auf das Jahr. Vorher stand die Prüfung auf allen
+         Spalten und ging nur so lange auf, wie keine Beteiligung der Partie in
+         eine der beiden Randlagen kam. */
+      st.periods.filter((p) => p.key === "hp" || p.key === "hc").forEach((p) => {
+        expect(Math.abs(p.tax - taxOf(p.adjEbitda, p.interest, p.da)),
           `${c.name} ${p.label}: Steuer weicht von der Engine-Formel ab`).toBeLessThan(1e-6);
+        checked++;
       });
     });
+    expect(checked, "keine Halbjahresspalte geprüft").toBeGreaterThan(0);
   });
 
   /* Die Zeitreihe kennt nur volle Geschäftsjahre; ein übriges Halbjahr steht

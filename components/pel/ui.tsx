@@ -13,8 +13,8 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonEbitda, addonEquityNeeded,
-  addonMultiple, addonRisk, anyInit, applyProceeds,
+  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  addonMandate, addonMaxEb, ADDON_MAX_SHARE, ADDON_REF_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
@@ -230,6 +230,10 @@ export const CSS = `
 .pel .ledger.fix{table-layout:fixed;}
 .pel .ledger.fix td{overflow-wrap:break-word;hyphens:auto;}
 .pel .ledger.fix td.lab{white-space:normal;width:42%;}
+/* Der Hinweis unter einem Regler ist ein ganzer Satz und gehört nach links —
+   rechtsbündiger Flattersatz liest sich über vier Zeilen schlecht. */
+.pel .ledger.fix td .ctl{display:block;text-align:left;font-family:'Inter',system-ui,sans-serif;
+  font-size:11px;line-height:1.45;color:var(--ink2);margin-top:2px;}
 /* Gruppentrenner innerhalb einer Kennzahlentabelle: Geschäft / Ertrag /
    Bewertung stehen als Blöcke, ohne dass es Zwischenüberschriften braucht. */
 .pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
@@ -2591,14 +2595,28 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   const eb = ebitdaOf(c);
   const lvl = dim === "plat" ? c.plat : c.acc;
+  /* Das Zukaufsmandat. Voreingestellt ist der Referenzfall, auf den das
+     Scheiterungsrisiko kalibriert ist: Zielgröße ADDON_REF_SHARE des
+     Plattform-EBITDA, voller Preis. Jede Abweichung davon ist eine bewusste
+     Entscheidung des Spielers und bewegt das Risiko sichtbar mit.          */
+  const maxEb = addonMaxEb(c);
+  const ref = addonMandate(c, market);
+  const [addEb, setAddEb] = useState(() => ref.addEb);
+  // Gebotsspanne: von drei Turns unter der Preisvorstellung bis zu ihr selbst.
+  // Darüber zahlt niemand — mehr zu bieten kauft keinen sichereren Zukauf.
+  const ask = addonAsk(c, market, addEb);
+  const [bid, setBid] = useState<number | null>(null);
+  const mult = Math.min(bid ?? ask, ask);
   /* Eigenkapitalanteil an einem Zukauf. Voreingestellt ist genau der Betrag,
      den die Akquisitionsfinanzierung nicht mehr trägt — ein Zukauf, der nur an
      der Finanzierungsgrenze scheitert, ist damit ohne weiteres Zutun
      darstellbar, und der Spieler sieht sofort, was er dafür geben muss.
      Gedeckelt am investierbaren Kapital: Was der Fonds nicht hat, kann er
      nicht geben.                                                            */
-  const eqCap = Math.max(0, Math.min(investable, addonEbitda(c) * addonMultiple(c, market)));
-  const [addonEq, setAddonEq] = useState(() => Math.min(eqCap, addonEquityNeeded(c, market)));
+  const eqCap = Math.max(0, Math.min(investable, addEb * mult));
+  const [addonEqRaw, setAddonEq] = useState<number | null>(null);
+  const addonEq = Math.min(eqCap, addonEqRaw ?? addonEquityNeeded(c, market, { addEb, mult }));
+  const mandate = { addEb, mult, equity: addonEq };
   return (
     <div className="modal" onClick={close}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -2614,10 +2632,12 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           const locked = (k.req && !k.req(c)) || maxed;
           // Eine Zahl, ein Ort: dieselbe Zeile, die buildInit() beim Start rechnet
           const dur = initDurationOf(c, dim, k.id);
-          const p = clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm + (k.ma ? addonRisk(c) : 0), 0.1, 0.97);
+          const chk = k.ma ? addonCheck(c, market, { ...mandate, runs }) : null;
+          // Dieselbe Zeile, die buildInit() beim Start rechnet
+          const p = k.ma ? clamp(1 - chk.fail, 0.05, 0.98)
+            : clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm, 0.1, 0.97);
           const FI = fitLabel(k.id, c);
           const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
-          const chk = addonCheck(c, market, k.ma ? addonEq : 0);
           const noFin = k.ma && !chk.ok;
           return (
             <div className={"card" + (noFin ? " lm" : "")} key={k.id} style={{ marginTop: 10, opacity: locked ? 0.45 : 1 }}>
@@ -2632,8 +2652,36 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
               </div>
               <table className="ledger fix"><tbody>
                 {k.ma ? (<>
-                  <tr><td className="lab">EBITDA Add-on-Target</td><td>{eur(chk.addEb)} · {Math.round((c.addonSize ?? 0.275) * 100)} % der Plattform</td></tr>
-                  <tr><td className="lab">Einstandsmultiple Add-on</td><td>{x(chk.mult)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>= (Branche {x(market[c.sector])} + Einstieg {x(c.entryMult)}) / 2 − 2,0</span></td></tr>
+                  {/* Das Mandat: zwei Regler, aus denen alles andere folgt.
+                      Größe und Gebot bewegen Preis, Finanzierung und Risiko in
+                      derselben Tabelle mit — der Spieler sieht den Trade-off,
+                      statt ihn erklärt zu bekommen. */}
+                  <tr><td className="lab">Zielgröße (EBITDA)</td>
+                    <td>
+                      <b>{eur(addEb)}</b> · {Math.round(chk.share * 100)} % der Plattform
+                      <input type="range" min={Math.round(eb * 0.05 * 10)} max={Math.round(maxEb * 10)} step={1}
+                        value={Math.round(addEb * 10)}
+                        onChange={(e) => { setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
+                        style={{ width: "100%", accentColor: "var(--gold)" }} />
+                      <span className="ctl">
+                        Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % der Plattform). Je größer der
+                        Bissen, desto teurer relativ — und desto schwerer zu integrieren.
+                      </span>
+                    </td></tr>
+                  <tr><td className="lab">Höchstgebot</td>
+                    <td>
+                      <b>{x(mult)}</b> <span style={{ fontSize: 11, color: chk.gap > 0.05 ? "var(--ox)" : "var(--ink2)" }}>
+                        {chk.gap > 0.05 ? `${x(chk.gap)} unter der Preisvorstellung` : "voller Preis"}</span>
+                      <input type="range" min={Math.round((ask - 3) * 10)} max={Math.round(ask * 10)} step={1}
+                        value={Math.round(mult * 10)}
+                        onChange={(e) => { setBid(Number(e.target.value) / 10); setAddonEq(null); }}
+                        style={{ width: "100%", accentColor: "var(--gold)" }} />
+                      <span className="ctl">
+                        Der Verkäufer will {x(ask)} — Plattform {x(markMultiple(c, market))} abzüglich
+                        Größenabschlag{(c.addonComp || 0) > 0 ? ", zuzüglich Wettbewerber am Tisch" : ""}.
+                        Wer darunter bleibt, bekommt nicht denselben Zukauf billiger, sondern einen schlechteren.
+                      </span>
+                    </td></tr>
                   <tr><td className="lab">Kaufpreis</td><td>{eur(chk.price)}
                     <span style={{ fontSize: 11, color: "var(--ink2)" }}>
                       {" "}— {eur(chk.debt)} fremdfinanziert{chk.equity > 0.05 ? `, ${eur(chk.equity)} Fondskapital` : ""}</span></td></tr>
@@ -2642,7 +2690,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
                         onChange={(e) => setAddonEq(Number(e.target.value))}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
-                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                      <span className="ctl">
                         {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
                         erhöht die Kostenbasis des Deals um denselben Betrag.
                       </span>
@@ -2653,20 +2701,24 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
                         {" "}(Covenant {x(c.covLimit ?? COV_DEFAULT)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
-                  <tr><td className="lab">Integrations­wahrscheinlichkeit</td>
-                    <td style={{ color: p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %
-                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-                        {" "}— {c.plat < 2.5 ? "Prozesse noch unreif" : c.plat >= 3.5 ? "reife Prozesse tragen die Integration" : "Prozessreife im Mittelfeld"}
-                        {c.netDebt / Math.max(0.5, eb) > 3.5 ? ", hohe Verschuldung" : ""}
-                        {(c.addonSize ?? 0.275) > 0.28 ? ", großer Bissen" : ""}
+                  <tr><td className="lab">Scheiterungs­risiko</td>
+                    <td style={{ color: chk.fail <= 0.15 ? "var(--teal)" : chk.fail <= 0.30 ? "var(--ink)" : "var(--ox)", fontWeight: 600 }}>
+                      {Math.round(chk.fail * 100)} %
+                      <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
+                        {" "}— {[
+                          chk.share > ADDON_REF_SHARE + 0.03 ? "großer Bissen" : chk.share < ADDON_REF_SHARE - 0.05 ? "kleiner Bissen" : null,
+                          chk.gap > 0.05 ? "unter Preisvorstellung geboten" : null,
+                          c.plat < 2.5 ? "Prozesse noch unreif" : c.plat >= 3.5 ? "reife Prozesse" : null,
+                          c.netDebt / Math.max(0.5, eb) > 3.5 ? "hohe Verschuldung" : null,
+                          runs > 0 ? `${runs + 1}. Auflage` : null,
+                        ].filter(Boolean).join(", ") || "Referenzfall"}
                       </span></td></tr>
                   <tr><td className="lab">Bei gescheiterter Integration</td>
                     <td style={{ color: "var(--ox)" }}>nur 35 % des Umsatzes, Schuld steht voll</td></tr>
-                  <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.benchMargin ?? 12) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
-                  {/* Die Zeile, die vorher ganz fehlte: die Zeitachse des Zukaufs.
-                      Signing jetzt, Closing beim Abschluss — Schuld und EBITDA
-                      kommen zusammen, der Leverage springt also erst dann auf die
-                      Pro-forma-Zahl oben. */}
+                  <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.margin) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
+                  {/* Die Zeitachse des Zukaufs: Signing jetzt, Closing beim
+                      Abschluss — Schuld und EBITDA kommen zusammen, der Leverage
+                      springt also erst dann auf die Zahl oben. */}
                   <tr><td className="lab">Abschluss in</td>
                     <td>{hj(dur + 1)}
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>
@@ -2709,10 +2761,10 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
               </tbody></table>
               <div className="pad" style={{ paddingTop: 10 }}>
                 <button className={"solid" + (noFin ? " ox" : "")} style={{ width: "100%" }}
-                  disabled={locked || noFin} onClick={() => start(k.id, k.ma ? addonEq : 0)}>
+                  disabled={locked || noFin} onClick={() => start(k.id, k.ma ? mandate : {})}>
                   {maxed ? "Ausgereizt — hier ist nichts mehr zu holen" : locked ? k.reqT
-                    : noFin ? (eqCap < addonEquityNeeded(c, market)
-                      ? "Keine Finanzierung — auch das investierbare Kapital reicht nicht"
+                    : noFin ? (eqCap < addonEquityNeeded(c, market, { addEb, mult })
+                      ? "Keine Finanzierung — kleineres Ziel oder mehr Fondskapital"
                       : "Keine Finanzierung — mehr Eigenkapital nachschießen")
                     : runs > 0 ? `${runs + 1}. Auflage starten` : "Starten"}
                 </button>
