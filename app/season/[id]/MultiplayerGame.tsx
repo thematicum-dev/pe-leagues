@@ -23,7 +23,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek,
 } from "@/components/pel/ui";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
@@ -35,10 +35,10 @@ import {
 import {
   BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
   INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
-  PERIODS, PROC_FEE, PROC_Q,
+  PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
   SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
   eur, exitNetOf, fairOf,
-  gebote, grossMoicOf, hj, initDur, initSuccess, effSkill, initsOf, investableOf, irrOf,
+  gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
   markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -668,18 +668,31 @@ export default function MultiplayerGame({
     const p = { ...c };
     const staged = stagedSearchByHolding[c.uid];
     if (staged?.length) {
-      p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 1 }))];
+      // runQuarter setzt readyQ = halfYear + 1, und gespielt wird quarter + 1
+      p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 2 }))];
     }
-    const platInit = stagedInitByKey[initKey(c.uid, "plat")];
-    if (platInit && !p.initP) {
-      const E = effSkill(c, "cfo") * (c.onboard > 0 ? 0.7 : 1);
-      p.initP = { doneQ: quarter + Math.max(1, initDur(E)) };
-    }
-    const accInit = stagedInitByKey[initKey(c.uid, "acc")];
-    if (accInit && !p.initA) {
-      const E = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
-      p.initA = { doneQ: quarter + Math.max(1, initDur(E)) };
-    }
+    /* Eine vorgemerkte Maßnahme muss dieselbe Frist zeigen, die die Auswertung
+       ihr dann gibt: buildInit() setzt doneQ = halfYear + initDurationOf(),
+       und das Halbjahr, über das hier entschieden wird, ist quarter + 1.
+
+       Vorher stand hier `quarter + initDur(E)` — ein Halbjahr zu früh
+       verankert, ohne den Dauerzuschlag der Maßnahme (beim Add-on +1) und
+       ohne den Wiederholungsmalus. Die Karte meldete direkt nach dem Klick
+       "Ergebnis in 2 Halbjahre" und nach der Abgabe "in 3 Halbjahre", ohne
+       dass sich irgendetwas geändert hätte. Dazu fehlten Name und ma-Kennung,
+       sodass der Zukauf bis zur Abgabe als namenlose "Maßnahme" dastand. */
+    const stageInit = (slot: string, dim: string, intent: InitiativeIntent | undefined) => {
+      if (!intent || p[slot]) return;
+      const dur = initDurationOf(c, dim, intent.id);
+      if (dur == null) return;
+      const spec = initById(dim, intent.id) as Any;
+      p[slot] = {
+        dim, id: intent.id, name: spec?.n ?? null, ma: !!spec?.ma, drag: spec?.drag || 0,
+        doneQ: quarter + 1 + dur,
+      };
+    };
+    stageInit("initP", "plat", stagedInitByKey[initKey(c.uid, "plat")]);
+    stageInit("initA", "acc", stagedInitByKey[initKey(c.uid, "acc")]);
     /* Eine vorgemerkte Kapitalzuführung sofort zeigen: Leverage, Zins und
        Covenant-Abstand auf der Karte sind sonst die von vorhin, und der
        Spieler entscheidet über den Rest des Halbjahres auf veralteten Zahlen. */
@@ -692,7 +705,9 @@ export default function MultiplayerGame({
     if (studyStaged.includes(c.uid)) p.dd = true;
     const exit = stagedExitByHolding[c.uid];
     if (exit && !p.proc) {
-      p.proc = { resolveQ: quarter + (exit.action === "process" ? PROC_Q : 1) };
+      // Wie bei den Maßnahmen: runQuarter verankert auf halfYear = quarter + 1.
+      // Ein bilateraler Verkauf wird in derselben Auswertung abgewickelt.
+      p.proc = { resolveQ: quarter + 1 + (exit.action === "process" ? PROC_Q : 0) };
     }
     return p;
   }
@@ -1085,6 +1100,14 @@ export default function MultiplayerGame({
             <span>DPI {dpi.toFixed(2)}×
               <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
+          {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
+              was davon nach der Zwangsverwertung übrig bliebe. Ohne diese
+              Zeile springt die Wertung erst in der Endabrechnung. */}
+          {PERIODS - quarter <= END_PRESSURE_FROM + PROC_Q && (
+            <div className="cockkpi mono">
+              <TailEndPeek fund={me} market={state.market} quarter={quarter} />
+            </div>
+          )}
         </div>
         {/* Kapital: womit lässt sich arbeiten. */}
         <div className="cockgrp">

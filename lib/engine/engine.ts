@@ -870,6 +870,23 @@ export const accEff = (c) => Math.min(c.acc, peopleLvl(c) + 1, c.plat + 1);
 export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1, c.plat + 1));
 
 
+/* Wie lange eine Maßnahme läuft, ohne sie zu starten. buildInit() rechnet
+   genau diese Zeile; der Katalog (InitPicker) und die Vormerkung einer
+   Mehrspielerpartie (patchHolding) brauchen sie, bevor gewürfelt wird.
+
+   Bis zum 15.09.2026 rechnete die Vormerkung stattdessen `initDur(E)` allein
+   — ohne den Zuschlag der Maßnahme (`dm`; beim Add-on +1) und ohne den
+   Wiederholungsmalus. Die Karte zeigte direkt nach dem Klick eine kürzere
+   Restlaufzeit an als nach der Auswertung, das Add-on sprang von zwei auf
+   drei Halbjahre. Eine Zahl, ein Ort.                                       */
+export function initDurationOf(c, dim, id) {
+  const spec = initById(dim, id);
+  if (!spec) return null;
+  const seat = dim === "plat" ? "cfo" : "r3";
+  const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
+  return Math.max(1, initDur(E) + (spec.dm || 0) + repeatMalus(initRuns(c, id)).dm);
+}
+
 /* Gemeinsamer Baustein für den Start einer Maßnahme. Spieler und KI benutzen
    dieselbe Funktion — vorher war die KI mit einem pauschalen Reifegradgewinn
    von 0,85 unterwegs, während der Spieler über initGain das Drei- bis Vierfache
@@ -883,7 +900,7 @@ export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineC
   if (spec.req && !spec.req(c)) return null;
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
-  const dur = Math.max(1, initDur(E) + (spec.dm || 0) + rep.dm);
+  const dur = initDurationOf(c, dim, id);
   const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0), 0.1, 0.97);
   const ok = rng.rnd() < p;
   const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
@@ -1521,6 +1538,12 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
         c.revenue += addRev * 0.35; c.margin -= 1.8;
         c.marginDrift = (c.marginDrift || 0) - 1.0; c.quality -= 7;
       }
+      /* Zukaufshistorie mitschreiben. Ein Add-on ist die einzige Maßnahme, die
+         die Beteiligung dauerhaft umbaut, und die einzige, deren Kaufpreis
+         schon beim Start in der Bilanz steht. Ohne diese Zeile ließ sich nach
+         der Integration nirgends mehr ablesen, wann zugekauft wurde und wie
+         oft — `done` zählt nur die Kennung mit, nicht den Zeitpunkt.       */
+      c.addons = [...(c.addons || []), { q, eb: IN.addEb, mult: IN.mult, ok: !!IN.ok }];
     } else {
       // Verlässliche Maßnahmen scheitern nicht binär, sie unterliefern.
       // Adoptionsabhängige Programme liefern gar nichts und kosten den Sunk Cost.
@@ -1821,6 +1844,70 @@ export function fundBridgeStep(now, was) {
 
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
 export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
+
+/* ---------- Tail-End-Verwertung ----------
+   Was am Laufzeitende mit allem passiert, was noch im Portfolio steht. Der
+   Fonds hat keine Zeit mehr zu verhandeln: LIQ_DISC Turns unter dem
+   Marktmultiple, zu bilateralen Kosten, und der MEP schneidet mit.
+
+   Eine Stelle, drei Aufrufer — die Auswertung des letzten Halbjahres
+   (runQuarter), der Übungsmodus (components/PeLeagues.tsx) und die Vorschau
+   (tailEndOf). Bis zum 15.09.2026 stand die Rechnung zweimal ausgeschrieben,
+   und die Kopie im Übungsmodus schrieb keine Value Bridge mit: Die
+   Endabrechnung einer Übungspartie verlor damit jeden Tail-End-Deal in den
+   Restposten "Transaktionskosten", obwohl dort die halbe Partie steckte.   */
+export function liquidateHoldings(f, market, quarter) {
+  const out = [];
+  (f.holdings || []).forEach((c) => {
+    // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
+    const gross = Math.max(0, eqvOf(c, markMultiple(c, market) - LIQ_DISC));
+    const net = exitNetOf(c, gross, BIL_FEE);
+    applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter);
+    const moic = dealMoic(c, net);
+    f.realized = [...(f.realized || []), {
+      name: c.name + " (Tail-End)", moic, bridge: makeBridge(c, gross, net),
+    }];
+    out.push({ c, gross, net, moic });
+  });
+  f.holdings = [];
+  return out;
+}
+
+/* Dieselbe Verwertung als Vorschau, ohne den Fonds anzufassen: Was bliebe,
+   wenn die Laufzeit heute endete?
+
+   Der Grund, dass es sie gibt: NAV und TVPI laufen über markMultiple(), und
+   markMultiple() kennt weder den Endfälligkeitsdruck (endPressure, nur in
+   dealMultiple) noch den Zwangsabschlag der Tail-End-Verwertung. In den
+   letzten Halbjahren einer Partie steht auf dem Bildschirm deshalb ein Wert,
+   den niemand mehr bezahlt — in Testpartien 1,58× TVPI im Halbjahr 19 gegen
+   1,13× in der Endabrechnung. Die Zahl war nie falsch (sie ist die Bewertung
+   des Bestands), aber sie war die falsche Zahl für die Entscheidung, die in
+   diesen Halbjahren ansteht: verkaufen oder liegen lassen.
+
+   Die Vorschau rechnet nicht selbst, sondern lässt liquidateHoldings() auf
+   einer Kopie laufen. Damit kann sie gar nicht von dem abweichen, was am Ende
+   tatsächlich passiert — genau das sichert der Test in
+   __tests__/tailEnd.test.ts.                                               */
+export function tailEndOf(f, market, quarter) {
+  const g = {
+    ...f,
+    holdings: (f.holdings || []).map((c) => ({ ...c })),
+    realized: [...(f.realized || [])],
+    calls: [...(f.calls || [])],
+    dists: [...(f.dists || [])],
+  };
+  const deals = liquidateHoldings(g, market, quarter);
+  return {
+    fund: g, deals,
+    tvpi: tvpiOf(g, market, quarter),
+    irr: irrOf(g, market, quarter),
+    score: scoreOf(g, market, quarter),
+    value: totalValueOf(g, market) - carryOf(g, market, quarter),
+    // Was die Zwangsverwertung gegenüber der Bewertung des Bestands kostet
+    haircut: navOf(f, market) - deals.reduce((s, d) => s + d.net, 0),
+  };
+}
 
 /* ---------- Implied Money Multiple (Base Case) ----------
    Was das Zielunternehmen bei diesem Gebot und diesem Leverage über eine

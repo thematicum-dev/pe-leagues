@@ -27,12 +27,13 @@ import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
-  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, LIQ_DISC, DD_COST,
+  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
+  liquidateHoldings, eur,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -822,18 +823,13 @@ export function computeFinalRanking(state: RuntimeState, halfYear: number) {
 function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[]): RuntimeFund[] {
   return F.map((f) => {
     const g = cloneFund(f);
-    (g.holdings as Any[]).forEach((c) => {
-      const gross = Math.max(0, eqvOf(c, markMultiple(c, mk) - LIQ_DISC));
-      const net = exitNetOf(c, gross, BIL_FEE);
-      applyProceeds(g, net, c.costLeft ?? c.entryEquity, q);
-      g.realized = [...(g.realized as Any[]), { name: c.name + " (Tail-End)", moic: dealMoic(c, net), bridge: makeBridge(c, gross, net) }];
-      if (!g.isAi) {
-        const mo = dealMoic(c, net);
-        pushFeed(news, q, mo >= 1 ? "⏳" : "💀", mo >= 1 ? "neu" : "neg",
-          `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert — ${mo.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);
-      }
+    // Die Rechnung selbst steht in lib/engine/engine.ts, damit Übungsmodus und
+    // Vorschau (tailEndOf) nicht von ihr abweichen können.
+    liquidateHoldings(g, mk, q).forEach(({ c, net, moic }) => {
+      if (g.isAi) return;
+      pushFeed(news, q, moic >= 1 ? "⏳" : "💀", moic >= 1 ? "neu" : "neg",
+        `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);
     });
-    g.holdings = [];
     return g;
   });
 }
