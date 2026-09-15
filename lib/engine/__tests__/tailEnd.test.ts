@@ -4,7 +4,7 @@ import {
   SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
   FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, fundBridge, fundBridgeStep,
   tvpiOf, irrOf, scoreOf, navOf, liquidateHoldings, tailEndOf,
-  buildInit, initDurationOf, initById, initDur, effSkill, repeatMalus, initRuns, INITS,
+  buildInit, initDurationOf, initById, initDur, effSkill, repeatMalus, initRuns, INITS, maturePeople,
 } from "../engine";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -196,6 +196,43 @@ describe("Laufzeit einer Maßnahme", () => {
       }
     }
     expect(checked, "keine Maßnahme geprüft").toBeGreaterThan(20);
+  });
+
+  /* Die Zahl auf der Karte ist ein Versprechen: "Ergebnis in N Halbjahren"
+     heißt, dass das Ergebnis nach genau N Halbjahreswechseln auf dem Bildschirm
+     steht. Alle drei Oberflächen — Partie, Übungsmodus und Einführung —
+     verankern ihre Fristen deshalb auf dem Halbjahr, über das entschieden wird
+     (quarter + 1), und zeigen doneQ − quarter. */
+  it("zählt genau so viele Halbjahre herunter, wie bis zum Ergebnis vergehen", () => {
+    let checked = 0;
+    for (const seed of SEEDS) {
+      const snaps = play(seed, 10);
+      const state = snaps[snaps.length - 1];
+      for (const f of state.funds as Any[]) {
+        for (const c of f.holdings as Any[]) {
+          for (const [dim, slot] of [["plat", "initP"], ["acc", "initA"]] as [string, string][]) {
+            const co = { ...c, initP: null, initA: null };
+            const quarter = 10;                 // bereits ausgewertete Halbjahre
+            const B = buildInit(createRng(7), co, dim, dim === "plat" ? "opex" : "pen",
+              state.market, quarter + 1) as Any;
+            if (!B || B.blocked) continue;
+            co[slot] = B.init;
+            // Das, was die Karte auf dem Entscheidungsbildschirm anzeigt
+            const angezeigt = B.init.doneQ - quarter;
+            // Und das, was tatsächlich vergeht, bis das Ergebnis dasteht
+            let vergangen = 0;
+            for (let hy = quarter + 1; hy <= quarter + 12 && co[slot]; hy++) {
+              maturePeople(createRng(hy), co, state.market, hy, false, [], []);
+              vergangen++;
+            }
+            expect(co[slot], `${seed}/${dim}: Maßnahme abgeschlossen`).toBeNull();
+            expect(vergangen, `${seed}/${dim}: angezeigt ${angezeigt}`).toBe(angezeigt);
+            checked++;
+          }
+        }
+      }
+    }
+    expect(checked, "keine Maßnahme geprüft").toBeGreaterThan(5);
   });
 
   it("der Dauerzuschlag einer Maßnahme steckt in initDurationOf", () => {

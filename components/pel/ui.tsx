@@ -2763,9 +2763,15 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                 <button className={"solid" + (noFin ? " ox" : "")} style={{ width: "100%" }}
                   disabled={locked || noFin} onClick={() => start(k.id, k.ma ? mandate : {})}>
                   {maxed ? "Ausgereizt — hier ist nichts mehr zu holen" : locked ? k.reqT
-                    : noFin ? (eqCap < addonEquityNeeded(c, market, { addEb, mult })
-                      ? "Keine Finanzierung — kleineres Ziel oder mehr Fondskapital"
-                      : "Keine Finanzierung — mehr Eigenkapital nachschießen")
+                    /* Der geführte Durchlauf kennt keinen Fonds (investable = 0);
+                       dort ist "mehr Fondskapital" kein Weg, sondern eine
+                       Sackgasse. Die Beschriftung nennt deshalb nur, was hier
+                       tatsächlich hilft. */
+                    : noFin ? (eqCap < 0.5
+                      ? "Keine Finanzierung — kleineres Ziel wählen"
+                      : eqCap < addonEquityNeeded(c, market, { addEb, mult })
+                        ? "Keine Finanzierung — kleineres Ziel oder mehr Fondskapital"
+                        : "Keine Finanzierung — mehr Eigenkapital nachschießen")
                     : runs > 0 ? `${runs + 1}. Auflage starten` : "Starten"}
                 </button>
               </div>
