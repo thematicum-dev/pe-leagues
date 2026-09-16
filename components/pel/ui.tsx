@@ -354,6 +354,16 @@ export const CSS = `
 .pel button.ox{border-color:var(--ox);color:var(--ox);}
 .pel button.ox:hover:not(:disabled){background:var(--ox);color:var(--card);}
 .pel button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+/* Schaltfläche im Fließtext. Eine Rücknahme ("verwerfen") gehört an den Satz,
+   den sie zurücknimmt — als Schaltflächenkasten mitten im Absatz steht sie
+   wie ein Fremdkörper in der Zeile, mit eigenem Rahmen, eigenem Hintergrund
+   und 11 px Innenabstand, die die Zeilenhöhe sprengen. Die Klasse gab es
+   bisher nur im Markup, nicht im Stylesheet: ".lnk" traf keine Regel, und die
+   Schaltfläche fiel auf das volle Aussehen von ".pel button" zurück. */
+.pel .lnk{background:none;border:0;border-radius:0;padding:0;margin:0;
+  font:inherit;color:var(--ink2);text-decoration:underline;text-underline-offset:2px;
+  letter-spacing:inherit;cursor:pointer;}
+.pel .lnk:hover:not(:disabled){background:none;color:var(--ink);border-color:transparent;}
 
 .pel input[type=range]{width:100%;accent-color:#16262A;margin:6px 0 2px;}
 .pel .slrow{display:flex;justify-content:space-between;font-size:12px;color:var(--ink2);}
@@ -427,6 +437,9 @@ export const CSS = `
   background .15s ease,color .15s ease,box-shadow .15s ease,border-color .15s ease,opacity .15s ease;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .pel button:active:not(:disabled){transform:scale(.94);}
+/* Eine Schaltfläche im Fließtext ist Text und soll sich wie Text verhalten —
+   der Stauchimpuls einer Schaltfläche würde die Zeile springen lassen. */
+.pel .lnk:active:not(:disabled){transform:none;}
 .pel .bseat, .pel .lb, .pel .dot{-webkit-tap-highlight-color:transparent;touch-action:manipulation;
   transition:transform .12s cubic-bezier(.34,1.56,.64,1),background .15s ease,border-color .15s ease;}
 .pel .bseat:active:not(:disabled){transform:scale(.95);}

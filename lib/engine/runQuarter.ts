@@ -34,7 +34,7 @@ import {
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
-  liquidateHoldings, eur, hj,
+  liquidateHoldings, eur, hj, x, SECLABEL,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -77,6 +77,44 @@ function candidateByChoice(item: ShortlistItem, choice: HireIntent["choice"]) {
 
 function pushFeed(news: Any[], q: number, emoji: string, tone: "neu" | "pos" | "neg", text: string, slot?: number) {
   news.push({ halfYear: q, emoji, tone, text, ...(slot != null ? { slot } : {}) });
+}
+
+/* Marktbericht: was am Markt passiert ist, für alle sichtbar — außer für den
+   Fonds, der es ausgelöst hat. Der bekommt zu derselben Transaktion seine
+   eigene Meldung mit MOIC und Nettoerlös; die Tickerzeile wäre dort doppelt.
+
+   Gemeldet wird, was ein Wettbewerber in der Praxis auch erfährt: wer was
+   gekauft oder verkauft hat, in welchem Sektor, zu welchem EBITDA und zu
+   welchem Multiple. Genau diese drei Zahlen sind die Referenz für das eigene
+   nächste Gebot — ohne sie bietet man gegen eine Preisvorstellung, die
+   nirgends steht.                                                          */
+function pushMarket(news: Any[], q: number, emoji: string, text: string, exceptSlot?: number) {
+  news.push({ halfYear: q, emoji, tone: "neu", text, ...(exceptSlot != null ? { exceptSlot } : {}) });
+}
+
+/* Ein Unternehmen, wie es im Marktbericht steht. */
+const marketLine = (name: string, sector: string, eb: number, mult: number) =>
+  `${name} (${SECLABEL[sector] ?? sector}) — ${eur(eb)} EBITDA zu ${x(mult)}`;
+
+/* Das Multiple, zu dem eine Beteiligung tatsächlich den Besitzer wechselt:
+   aus dem Bruttoerlös zurückgerechnet, dieselbe Zeile wie in makeBridge().
+   Bei einem Teilexit bezieht sich `gross` auf den verkauften Anteil, `stake`
+   ist deshalb dieser Anteil und nicht der gehaltene.                       */
+const exitMultOf = (c: Any, gross: number, stake?: number) => {
+  const eb = ebitdaOf(c), st = stake ?? (c.st ?? 1);
+  return eb > 0 ? (gross / Math.max(0.01, st) + c.netDebt) / eb : c.entryMult;
+};
+
+/* Verkaufsmeldung für den Marktbericht. Ein Teilexit sagt dazu, welcher
+   Anteil den Besitzer gewechselt hat — sonst liest sich eine 40-%-Platzierung
+   wie ein vollständiger Verkauf.                                           */
+function pushSale(news: Any[], q: number, f: RuntimeFund, c: Any, gross: number,
+  opts: { stake?: number; share?: number; label?: string } = {}) {
+  const note = [opts.share != null ? `${Math.round(opts.share * 100)} %` : null, opts.label]
+    .filter(Boolean).join(", ");
+  pushMarket(news, q, "🏷️",
+    `${f.name} verkauft${note ? ` (${note})` : ""} ${marketLine(c.name, c.sector, ebitdaOf(c), exitMultOf(c, gross, opts.stake))}.`,
+    f.slot);
 }
 
 /* ---------- Sofortige Spielerentscheidungen ----------
@@ -311,6 +349,7 @@ function applyImmediateDecisions(
       f.realized = [...(f.realized as Any[]), { name: c.name + " (Teilexit)", moic: net / costSold, bridge }];
       applyProceeds(f, net, costSold, quarter);
       pushFeed(news, quarter, "🔄", "neu", `${c.name}: Teilexit an ein Continuation Vehicle.`, f.slot);
+      pushSale(news, quarter, f, c, gross, { stake: stSold, share: CV_STAKE, label: "Continuation Vehicle" });
       return;
     }
     if (intent.action === "ipo") {
@@ -329,6 +368,7 @@ function applyImmediateDecisions(
       f.realized = [...(f.realized as Any[]), { name: c.name + " (IPO)", moic: net / costSold, bridge }];
       applyProceeds(f, net, costSold, quarter);
       pushFeed(news, quarter, "🔔", "pos", `Börsengang ${c.name}: ${Math.round(IPO_PLACE * 100)} % platziert.`, f.slot);
+      pushSale(news, quarter, f, c, gross, { stake: stSold, share: IPO_PLACE, label: "Börsengang" });
     }
   });
 
@@ -359,6 +399,7 @@ function finalizeExit(
   const mo = dealMoic(c, net);
   pushFeed(news, quarter, mo >= 2 ? "🚀" : mo >= 1 ? "💰" : "💀", mo >= 1 ? "pos" : "neg",
     `Exit ${c.name} an ${buyer}: ${net.toFixed(1)} Mio. € netto${extra}.`, f.slot);
+  pushSale(news, quarter, f, c, gross);
 }
 
 /* Gemeinsamer Dealflow-Treiber: der Durchschnitt der Origination-Werte aller
@@ -457,16 +498,27 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   /* 1 — Auktionen */
   deals.forEach((d: Any) => {
     const entries: { f: number; mult: number; lev: number; eq: number }[] = [];
+    /* Warum ein menschliches Gebot nicht durchkam, gehört in die Meldungen.
+       Vorher fiel jeder unterlegene Bieter stillschweigend heraus: kein
+       Zuschlag, keine Nachricht, keine Erklärung — der Spieler sah nur, dass
+       nichts passiert war, und konnte nicht unterscheiden, ob er überboten
+       wurde, unter dem Reservationspreis lag oder sein Gebot am Kapital
+       scheiterte. Drei verschiedene Lehren, eine leere Zeitung.            */
+    const humanBids: { f: RuntimeFund; mult: number; reason?: string }[] = [];
     F.forEach((f, i) => {
       if (f.holdings.length >= MAX_SLOTS) return;
       if (!f.isAi) {
         const decisions = decisionsBySlot[f.slot] || {};
         const bid = (decisions.bids || []).find((b) => b.dealId === d.id);
         if (!bid) return;
-        if (!(bid.multiple > 0) || !(bid.leverage >= 0) || bid.leverage > d.levCap + 1e-6) return;
+        if (!(bid.multiple > 0) || !(bid.leverage >= 0) || bid.leverage > d.levCap + 1e-6) {
+          humanBids.push({ f, mult: bid.multiple, reason: "ungültig" });
+          return;
+        }
         const ev = ebitdaOf(d) * bid.multiple;
         const eq = ev - ebitdaOf(d) * bid.leverage + ev * ENTRY_FEE;
-        if (eq <= investableOf(f, q)) entries.push({ f: i, mult: bid.multiple, lev: bid.leverage, eq });
+        if (eq <= investableOf(f, q)) { humanBids.push({ f, mult: bid.multiple }); entries.push({ f: i, mult: bid.multiple, lev: bid.leverage, eq }); }
+        else humanBids.push({ f, mult: bid.multiple, reason: "kapital" });
         return;
       }
       const a = botOf(f)!;
@@ -482,10 +534,33 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const eq = ev - ebitdaOf(d) * lev + ev * ENTRY_FEE;
       if (eq <= investableOf(f, q)) entries.push({ f: i, mult, lev, eq });
     });
-    if (!entries.length) return;
     const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
+    /* Jedem menschlichen Bieter sagen, woran es lag — auch wenn die Auktion
+       ganz ohne Zuschlag endet. `winner` bleibt dann null. */
+    const tellBidders = (winner: RuntimeFund | null, winMult: number) => {
+      humanBids.forEach((b) => {
+        if (winner && b.f.slot === winner.slot) return;
+        if (b.reason === "kapital") {
+          pushFeed(news, q, "🏦", "neg",
+            `Gebot für ${d.name} nicht abgegeben: Das Eigenkapital bei ${x(b.mult)} übersteigt dein investierbares Kapital `
+            + `von ${eur(investableOf(b.f, q))}. Weniger bieten oder mehr Fremdkapital einsetzen.`, b.f.slot);
+        } else if (b.reason === "ungültig") {
+          pushFeed(news, q, "🏦", "neg",
+            `Gebot für ${d.name} nicht abgegeben: Multiple oder Leverage lagen außerhalb des Zulässigen.`, b.f.slot);
+        } else if (b.mult < reserve) {
+          pushFeed(news, q, "🥈", "neg",
+            `${d.name}: Dein Gebot von ${x(b.mult)} lag unter dem Reservationspreis des Verkäufers — `
+            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal bei ${x(winMult)}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
+            b.f.slot);
+        } else if (winner) {
+          pushFeed(news, q, "🥈", "neg",
+            `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag bei ${x(winMult)}, dein Gebot lag bei ${x(b.mult)}.`,
+            b.f.slot);
+        }
+      });
+    };
     const valid = entries.filter((e) => e.mult >= reserve);
-    if (!valid.length) return;
+    if (!valid.length) { tellBidders(null, 0); return; }
     valid.sort((p, r) => r.mult - p.mult || F[r.f].attrs.negotiation - F[p.f].attrs.negotiation);
     const w = valid[0];
     const f = F[w.f];
@@ -531,9 +606,12 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     f.holdings = [...(f.holdings as Any[]), c];
     if (!f.isAi) {
       pushFeed(news, q, d.type === "landmark" ? "🏛️" : "🏆", "pos",
-        `${d.type === "landmark" ? "Trophy Asset gewonnen" : "Zuschlag"}: ${d.name} bei ${w.mult.toFixed(1)}× EBITDA.`, f.slot);
+        `${d.type === "landmark" ? "Trophy Asset gewonnen" : "Zuschlag"}: ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
       if (hit) pushFeed(news, q, "⚠️", "neg", `Nach Closing bei ${d.name}: Die Marge liegt unter den Angaben im Information Memorandum.`, f.slot);
     }
+    // Marktbericht: jeder Zuschlag, von wem auch immer
+    pushMarket(news, q, "🤝", `${f.name} kauft ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
+    tellBidders(f, w.mult);
   });
 
   /* 2 — KI-Fonds entwickeln ihre Beteiligungen */
@@ -748,6 +826,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         pushFeed(news, q, val >= (c.costLeft ?? c.entryEquity) ? "🔔" : "📉",
           val >= (c.costLeft ?? c.entryEquity) ? "pos" : "neg",
           `Lock-up bei ${c.name} ausgelaufen — Restbeteiligung platziert.`, f.slot);
+        pushSale(news, q, f, c, grossVal, { label: "Restbeteiligung nach Lock-up" });
         return false;
       }
       return true;
@@ -842,10 +921,12 @@ function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, n
     const g = cloneFund(f);
     // Die Rechnung selbst steht in lib/engine/engine.ts, damit Übungsmodus und
     // Vorschau (tailEndOf) nicht von ihr abweichen können.
-    liquidateHoldings(g, mk, q).forEach(({ c, net, moic }) => {
-      if (g.isAi) return;
-      pushFeed(news, q, moic >= 1 ? "⏳" : "💀", moic >= 1 ? "neu" : "neg",
-        `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);
+    liquidateHoldings(g, mk, q).forEach(({ c, gross, net, moic }) => {
+      if (!g.isAi) {
+        pushFeed(news, q, moic >= 1 ? "⏳" : "💀", moic >= 1 ? "neu" : "neg",
+          `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);
+      }
+      pushSale(news, q, g, c, gross, { label: "Tail-End-Verwertung" });
     });
     return g;
   });

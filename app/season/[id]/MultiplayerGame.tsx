@@ -973,13 +973,28 @@ export default function MultiplayerGame({
   const tone = (dir: string) => (dir ? " " + dir : "");
   const landmark = state.landmark as Any;
 
+  /* Was dieser Fondsplatz vom gemeinsamen Feed sieht.
+
+     Der Feed liegt für alle in einem Spielstand, und jeder Eintrag sagt selbst,
+     wer ihn sehen darf: `slot` gesetzt heißt privat, nicht gesetzt heißt
+     öffentlich, `exceptSlot` ist eine öffentliche Meldung ohne den Fonds, der
+     sie ausgelöst hat (der hat seine eigene, ausführlichere).
+
+     Bis zum 16.09.2026 wurde hier gar nicht gefiltert: Jeder Spieler las die
+     Betriebsmeldungen aller anderen mit — welche Maßnahme ein Wettbewerber
+     gestartet hat, wo er eine Position sucht, wann sein Covenant reißt. Das
+     war nie so gemeint; `slot` wird seit jeher mitgeschrieben und war nur nie
+     ausgewertet.                                                            */
+  /* Bewusst ohne useMemo: Der Feed einer Partie hat ein paar hundert Einträge,
+     und die Hooks dieser Komponente stehen hinter einem frühen Return — ein
+     weiterer wäre ein weiterer bedingter Hook. */
+  const visibleFeed = state.feed.filter(
+    (f) => (f.slot == null || f.slot === humanSlot) && f.exceptSlot !== humanSlot,
+  );
   // News (aus components/pel/ui.tsx) erwartet dieselben Kurzfeldnamen wie im
   // Übungsmodus ({q,e,tone,t}); der Server schreibt sprechende Feldnamen
   // ({halfYear,emoji,tone,text}) — hier nur umbenannt, keine Datenänderung.
-  const feedForNews = useMemo(
-    () => state.feed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text })),
-    [state.feed],
-  );
+  const feedForNews = visibleFeed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text }));
 
   async function handleSubmit() {
     setError(null);
@@ -1230,10 +1245,10 @@ export default function MultiplayerGame({
             ))}
             <div className="card">
               <h3 className="disp">Archiv</h3>
-              {state.feed.filter((f) => f.halfYear < quarter).length === 0 && (
+              {visibleFeed.filter((f) => f.halfYear < quarter).length === 0 && (
                 <div className="quiet">Noch keine älteren Meldungen.</div>
               )}
-              {state.feed.filter((f) => f.halfYear < quarter).slice(0, 15).map((f, i) => (
+              {visibleFeed.filter((f) => f.halfYear < quarter).slice(0, 15).map((f, i) => (
                 <div className={"item " + (f.tone || "neu")} key={i}>
                   <span className="em">{f.emoji || "·"}</span>
                   <span dangerouslySetInnerHTML={{ __html: `<span class="mono" style="opacity:.5">HJ ${f.halfYear}</span> ${f.text}` }} />
