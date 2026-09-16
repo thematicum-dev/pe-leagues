@@ -1984,22 +1984,116 @@ export function bridgeStep(prev, now) {
    fehlte dort ein Posten, wäre die Summe still falsch. Die Beschriftungen
    bleiben in der Ansicht, die Zugehörigkeit steht hier.                    */
 export const FUND_BRIDGE_GROUPS = [
-  { key: "r", parts: ["rEbitda", "rMult", "rDelev", "recaps"] },
+  { key: "r", parts: ["rEbitda", "rMult", "rDelev", "rExit", "recaps"] },
   { key: "u", parts: ["uEbitda", "uMult", "uDelev"] },
   { key: "k", parts: ["fees", "txCost", "carry"] },
 ];
 export const FUND_BRIDGE_PARTS = FUND_BRIDGE_GROUPS.flatMap((g) => g.parts);
 
+/* Der unrealisierte Beitrag, den eine Realisierung aus dem Block nimmt.
+
+   Ohne diese Zahl liest sich jeder Abgang in der Halbjahresspalte falsch. Die
+   Spalte ist die Differenz zweier kumulierter Stände: Solange eine
+   Beteiligung im Portfolio steht, trägt sie ihre Zerlegung im unrealisierten
+   Block; verlässt sie es, verschwindet der Beitrag dort und taucht — als
+   Spanne gerechnet — im realisierten Block wieder auf. Die Differenz weist
+   dann eine Umgliederung als Wertentwicklung aus.
+
+   Bei einer Beteiligung, die im Covenant Breach an die Kreditgeber ging, stand
+   in der Spalte "Unrealisiert +78, davon Entschuldung +127" — im selben
+   Halbjahr, in dem die Kreditgeber das Unternehmen übernahmen. Die Summe war
+   richtig (der Verlust stand daneben unter "Realisiert"), die Zerlegung
+   behauptete das Gegenteil dessen, was passiert war.
+
+   Deshalb schreibt jede Realisierung ihre stehende Kette mit, und der
+   realisierte Block übernimmt sie unverändert: Was im unrealisierten Block
+   verschwindet, taucht im realisierten in derselben Zerlegung wieder auf, und
+   die Differenz der beiden Stände ist null. Übrig bleibt `exit` — der Erlös
+   gegen die letzte Bewertung, und das ist das Einzige, was in diesem Halbjahr
+   tatsächlich neu ist.
+
+   Vorher rechnete der realisierte Block als SPANNE (alles Wachstum zum
+   Einstiegsmultiple), der unrealisierte als KETTE (jedes Halbjahr zu seinem
+   eigenen Multiple). Beide beschrieben dieselbe Beteiligung mit
+   unterschiedlichen Zahlen; die Differenz landete still im Restposten
+   "Transaktionskosten". Bei der im Covenant Breach verlorenen Beteiligung
+   waren das 56,6 von 90 Mio. € Verlust — eine Zahl, die nirgends hingehörte
+   und in keiner Zeile stand.
+
+   `soldShare` ist der Anteil der Beteiligung, den diese Realisierung betrifft:
+   1 beim vollständigen Verkauf, der platzierte Anteil bei einem Teilexit. Ein
+   Teilexit ist der Grund, warum die Zahl mitgeschrieben und nicht später
+   gerechnet wird — die Beteiligung steht danach weiter im Portfolio, und ihre
+   Kette trägt die vergangenen Perioden unverändert mit dem damaligen Anteil.
+   Ohne die Mitschrift stünde der verkaufte Teil zweimal da: im realisierten
+   Block und weiter im unrealisierten.                                      */
+export function unrealizedOut(c, market, net = 0, soldShare = 1) {
+  const ch = bridgeChain(c.hist || [], liveHist(c, market));
+  /* Was frühere Teilexits derselben Beteiligung schon entnommen haben, steht
+     an ihr als `uSold`. Die Kette rechnet jede vergangene Periode weiter mit
+     dem Anteil, der damals galt — ein Teilexit macht die Vergangenheit nicht
+     kleiner. Ohne diesen Abzug stünde der bereits platzierte Teil zweimal da,
+     und beim späteren Vollverkauf ein drittes Mal.                         */
+  const sold = c.uSold || {};
+  const rest = {
+    ebitda: ch.ebitda - (sold.ebitda || 0),
+    mult: ch.mult - (sold.mult || 0),
+    delev: ch.delev - (sold.delev || 0),
+  };
+  // Der Anteil des heutigen NAV, der mit dieser Realisierung den Besitzer wechselt
+  const navShare = Math.max(0, navValueOf(c, market)) * soldShare;
+  return {
+    ebitda: rest.ebitda * soldShare, mult: rest.mult * soldShare, delev: rest.delev * soldShare,
+    exit: net - navShare,
+  };
+}
+
+/* Dasselbe, aber die Beteiligung merkt sich, was entnommen wurde. Jede
+   Realisierung geht hierüber — so kann kein Aufrufer den Zähler vergessen und
+   die Aufstellung eine Zahl doppelt führen. */
+export function takeUnrealized(c, market, net = 0, soldShare = 1) {
+  const u = unrealizedOut(c, market, net, soldShare);
+  const sold = c.uSold || { ebitda: 0, mult: 0, delev: 0 };
+  c.uSold = {
+    ebitda: (sold.ebitda || 0) + u.ebitda,
+    mult: (sold.mult || 0) + u.mult,
+    delev: (sold.delev || 0) + u.delev,
+  };
+  return u;
+}
+
 export function fundBridge(f, market, quarter) {
   /* Realisiert: die Zerlegungen der verkauften Beteiligungen, aufaddiert.
      Rekapitalisierungen stehen daneben — sie sind zurückgeflossenes Geld,
      aber keine Wertsteigerung eines der drei Treiber.                     */
-  let rEbitda = 0, rMult = 0, rDelev = 0, recaps = 0;
-  (f.realized || []).filter((r) => r && r.bridge).forEach((r) => {
+  /* Der realisierte Block übernimmt die Kette, die beim Abgang im
+     unrealisierten Block stand (uOut), zuzüglich des Erlöses gegen die letzte
+     Bewertung. Damit beschreiben beide Blöcke dieselbe Beteiligung mit
+     denselben Zahlen, und ein Abgang verschiebt nur, er erzeugt nichts.
+
+     `p` trägt die Teilexits: Deren Beitrag steht noch in der Kette der weiter
+     gehaltenen Beteiligung und wäre sonst doppelt gezählt.
+
+     Partien, die vor dem 16.09.2026 gespielt wurden, haben kein `uOut` an
+     ihren Realisierungen. Für sie bleibt es bei der Spanne aus makeBridge() —
+     die Aufstellung rechnet dort weiter wie bisher.                        */
+  let rEbitda = 0, rMult = 0, rDelev = 0, rExit = 0, recaps = 0;
+  // Die übernommene Kette für sich, für die Halbjahresspalte (fundBridgeStep)
+  let xEbitda = 0, xMult = 0, xDelev = 0;
+  (f.realized || []).forEach((r) => {
+    if (!r) return;
+    recaps += (r.bridge && r.bridge.dist) || 0;
+    const u = r.uOut;
+    if (u) {
+      rEbitda += u.ebitda || 0; rMult += u.mult || 0; rDelev += u.delev || 0;
+      xEbitda += u.ebitda || 0; xMult += u.mult || 0; xDelev += u.delev || 0;
+      rExit += u.exit || 0;
+      return;
+    }
+    if (!r.bridge) return;
     rEbitda += r.bridge.ebitda || 0;
     rMult += r.bridge.mult || 0;
     rDelev += r.bridge.delev || 0;
-    recaps += r.bridge.dist || 0;
   });
 
   /* Unrealisiert: derselbe Schnitt für die Beteiligungen, die noch stehen.
@@ -2014,7 +2108,12 @@ export function fundBridge(f, market, quarter) {
     const h = c.hist || [];
     if (!h.length) return;
     const st = bridgeChain(h, liveHist(c, market));
-    uEbitda += st.ebitda; uMult += st.mult; uDelev += st.delev;
+    /* Der bereits platzierte Teil einer noch gehaltenen Beteiligung steht im
+       realisierten Block und darf hier nicht ein zweites Mal stehen. */
+    const sold = c.uSold || {};
+    uEbitda += st.ebitda - (sold.ebitda || 0);
+    uMult += st.mult - (sold.mult || 0);
+    uDelev += st.delev - (sold.delev || 0);
   });
 
   /* Für den Gewinn zählt das tatsächlich abgerufene Kapital, nicht die
@@ -2026,9 +2125,10 @@ export function fundBridge(f, market, quarter) {
   const carry = -carryOf(f, market, quarter);
   const value = totalValueOf(f, market) + carry;     // Gesamtwert nach Carry
   const gain = value - drawn;
-  const named = rEbitda + rMult + rDelev + recaps + uEbitda + uMult + uDelev + fees + carry;
+  const named = rEbitda + rMult + rDelev + rExit + recaps + uEbitda + uMult + uDelev + fees + carry;
   return {
-    rEbitda, rMult, rDelev, recaps, uEbitda, uMult, uDelev, fees, carry,
+    rEbitda, rMult, rDelev, rExit, recaps, uEbitda, uMult, uDelev, fees, carry,
+    xEbitda, xMult, xDelev,
     gain, drawn, value, tvpi: value / drawnOf(f),
     txCost: gain - named,
     realizedCount: (f.realized || []).length, openCount: holdings.length,
@@ -2045,6 +2145,23 @@ export function fundBridgeStep(now, was) {
   if (!now || !was) return null;
   const out: Record<string, number> = { tvpi: now.tvpi - was.tvpi };
   [...FUND_BRIDGE_PARTS, "gain", "drawn", "value"].forEach((k) => { out[k] = now[k] - was[k]; });
+  /* Ein Abgang wandert von einem Block in den anderen. Beide tragen seit dem
+     16.09.2026 dieselbe Zerlegung (der realisierte Block übernimmt die Kette,
+     die im unrealisierten stand), aber sie stehen in verschiedenen Spalten —
+     die Differenz zweier Stände weist die Umgliederung deshalb als
+     Wertentwicklung aus: einmal negativ unter "Unrealisiert", einmal positiv
+     unter "Realisiert". Beides ist in diesem Halbjahr nicht passiert.
+
+     Sie wird deshalb zurückgeschoben. Was im realisierten Block stehen bleibt,
+     ist `rExit`: der Erlös gegen die letzte Bewertung — das Einzige, was der
+     Abgang an neuer Information bringt. Verschoben wird zwischen zwei Posten
+     derselben Aufstellung, die Summe bleibt unberührt: Die Spalte geht weiter
+     exakt auf `gain` auf.                                                   */
+  (["Ebitda", "Mult", "Delev"] as const).forEach((k) => {
+    const d = (now["x" + k] || 0) - (was["x" + k] || 0);
+    out["u" + k] += d;
+    out["r" + k] -= d;
+  });
   return out;
 }
 
@@ -2072,6 +2189,7 @@ export function liquidateHoldings(f, market, quarter) {
     const moic = dealMoic(c, net);
     f.realized = [...(f.realized || []), {
       name: c.name + " (Tail-End)", moic, bridge: makeBridge(c, gross, net),
+      uOut: takeUnrealized(c, market, net),
     }];
     out.push({ c, gross, net, moic });
   });

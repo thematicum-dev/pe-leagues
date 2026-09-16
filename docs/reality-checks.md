@@ -562,6 +562,71 @@ Die Grenze steht als `accCap()` an einer Stelle und trägt `accEff()`,
 `overstretch()` und die Karte — vorher stand derselbe Ausdruck dreimal da.
 Eine Warnung, die man erst nach der Entscheidung bekommt, ist keine.
 
+### 23 — Ein Abgang ist eine Umgliederung, keine Wertentwicklung
+
+**Frage.** Eine Beteiligung geht im Covenant Breach an die Kreditgeber. Warum
+steht in der Halbjahresspalte der Value Bridge "Unrealisiert +78, davon
+Entschuldung +127"?
+
+**Befund.** Weil die Spalte die Differenz zweier kumulierter Stände ist. Solange
+die Beteiligung im Portfolio stand, trug sie ihre Zerlegung im unrealisierten
+Block — bei dieser über die Halteperiode 127 Mio. € **Aufschuldung**, also
+−127 unter "Entschuldung". Beim Enforcement verlässt sie den Block, der Posten
+verschwindet, und die Differenz weist das Verschwinden eines Minus als Plus
+aus. Der Verlust selbst stand daneben unter "Realisiert"; die Summe war
+richtig, die Zerlegung behauptete das Gegenteil dessen, was passiert war.
+
+Dieselbe Mechanik traf jeden Abgang. Nachgemessen an einem Testfonds mit einer
+Beteiligung, Halbjahresspalte:
+
+| Abgang | vorher | nachher |
+|---|---|---|
+| Verkauf | realisiert +81,2 · unrealisiert **−69,3** · Kosten −4,9 | realisiert +8,8 · unrealisiert 0,0 · Kosten −1,8 |
+| Covenant Breach | realisiert −43,0 · unrealisiert **+99,6** · Kosten −56,6 | realisiert 0,0 · unrealisiert 0,0 · Kosten 0,0 |
+| Continuation Vehicle | realisiert +44,0 · unrealisiert 0,0 · Kosten **−43,1** | realisiert +1,1 · unrealisiert 0,0 · Kosten −0,2 |
+| Börsengang | realisiert +21,9 · unrealisiert 0,0 · Kosten **−28,2** | realisiert −7,8 · unrealisiert 0,0 · Kosten +1,6 |
+
+Bei den Teilexits zeigte sich dasselbe in anderer Verkleidung: Der platzierte
+Anteil wurde als Spanne in den realisierten Block gebucht, blieb aber
+gleichzeitig in der Kette der weiter gehaltenen Beteiligung stehen. Die
+Doppelzählung landete still unter "Transaktionskosten".
+
+Dahinter lag ein zweiter Bruch: Der realisierte Block rechnete als **Spanne**
+(alles Wachstum zum Einstiegsmultiple), der unrealisierte als **Kette** (jedes
+Halbjahr zu seinem eigenen Multiple). Beide beschrieben dieselbe Beteiligung
+mit unterschiedlichen Zahlen. Bei der verlorenen Beteiligung waren das 56,6 von
+90 Mio. € Verlust, die in keiner Zeile standen.
+
+**Konsequenz.** Geändert, in drei Schritten:
+
+1. Jede Realisierung schreibt mit `takeUnrealized()` die Kette mit, die im
+   unrealisierten Block stand, und der realisierte Block übernimmt sie
+   unverändert. Beide Blöcke beschreiben dieselbe Beteiligung mit denselben
+   Zahlen; die Spanne aus `makeBridge()` bleibt nur noch für Partien, die vor
+   dem 16.09.2026 gespielt wurden.
+2. Neu im realisierten Block steht **Exit gegen letzte Bewertung** — der
+   Unterschied zwischen Erlös und letztem Buchwert. Das ist das Einzige, was
+   ein Abgang an neuer Information bringt, und es stand vorher nirgends.
+3. `fundBridgeStep()` schiebt die Umgliederung zurück: Was die Beteiligung über
+   ihre Halteperiode erwirtschaftet hat, ist in diesem Halbjahr nicht passiert.
+   Verschoben wird zwischen zwei Posten derselben Aufstellung — die Spalte geht
+   weiter exakt auf den Gewinn auf, und ein Test über vier Partien prüft das an
+   jedem Abgang.
+
+Ein Teilexit merkt sich an der Beteiligung als `uSold`, was er entnommen hat.
+Die Kette rechnet jede vergangene Periode mit dem Anteil weiter, der damals
+galt — ein Teilexit macht die Vergangenheit nicht kleiner —, und ohne diesen
+Zähler stünde der platzierte Teil beim späteren Vollverkauf ein zweites Mal da.
+
+Was die Beteiligung im Halbjahr ihres Abgangs noch erwirtschaftet, bleibt unter
+"Unrealisiert" stehen: Es ist Bewegung dieser Periode, keine Umgliederung.
+
+**Nicht geändert.** "Transaktionskosten" ist weiter der sichtbare Restposten
+der Aufstellung und trägt neben den echten Kosten den Rest der Kettenzerlegung
+(`rest`, `inj`). Über eine ganze Partie gemessen ist er von −47,0 auf +9,6
+Mio. € geschrumpft, aber er ist kein reiner Kostenposten, und die Beschriftung
+sagt das nicht.
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -597,6 +662,10 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
 12. **Wirksamer Reifegrad im Katalog** (22). Growth-Programme sagen vor dem
    Start, wie viel ihres Gewinns die Beteiligung trägt und was ein Überhang
    kostet. Die Mechanik ist unverändert, sichtbar war sie bisher erst danach.
+13. **Abgänge in der Value Bridge** (23). Ein Exit verschiebt zwischen den
+   Blöcken, statt in der Halbjahresspalte als Wertentwicklung zu erscheinen.
+   Neu ist die Zeile "Exit gegen letzte Bewertung"; die Zahlen der Partie
+   ändern sich nicht, nur ihre Zuordnung.
 
 Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
 bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`

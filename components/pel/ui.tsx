@@ -1895,6 +1895,7 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
   const HEAD = { r: "Realisiert", u: "Unrealisiert", k: "Kosten" };
   const LABEL = {
     rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung",
+    rExit: "Exit gegen letzte Bewertung",
     recaps: "Kapital­rückführungen",
     uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung",
     fees: "Management Fee", txCost: "Transaktions­kosten", carry: "Carry",
@@ -1922,7 +1923,11 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
           <br /><br />
           <b>Realisiert</b> ist, was die verkauften Beteiligungen erwirtschaftet haben.
           <b>Unrealisiert</b> ist derselbe Schnitt für die, die du noch hältst — auf dem Papier, nicht auf
-          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Beide sind in
+          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Ein Abgang
+          verschiebt zwischen den beiden Gruppen, er erzeugt nichts: Was eine Beteiligung erwirtschaftet
+          hat, stand Periode für Periode unter Unrealisiert und steht danach unverändert unter Realisiert.
+          Neu ist dabei nur der <b>Exit gegen letzte Bewertung</b> — der Unterschied zwischen dem Erlös und
+          dem Wert, mit dem die Beteiligung zuletzt in den Büchern stand. Beide Gruppen sind in
           dieselben drei Treiber zerlegt, damit sie vergleichbar sind: <b>EBITDA</b> ist das, was die
           Unternehmen operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
           Bewertungsveränderung am Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst

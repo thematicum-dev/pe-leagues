@@ -183,7 +183,14 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
      (siehe fundBridge). Für die Probe gegen die Wertänderung gehört sie
      dazu. */
   const chainInj = chains.reduce((s: number, x: Any) => s + x.inj, 0);
-  expect(b.uEbitda + b.uMult + b.uDelev + chainRest + chainInj, `${where}: unrealisierte Treiber`)
+  /* Was ein Teilexit bereits in den realisierten Block gebucht hat, steht an
+     der Beteiligung als `uSold` und fehlt deshalb im unrealisierten Block.
+     Die Kette kennt diesen Abzug nicht — sie rechnet jede vergangene Periode
+     mit dem Anteil, der damals galt. Für die Probe gehört er dazu, sonst
+     prüfte sie nur noch, dass beide Seiten dieselbe Lücke haben. */
+  const sold = open.reduce((s: number, c: Any) => s
+    + ((c.uSold?.ebitda || 0) + (c.uSold?.mult || 0) + (c.uSold?.delev || 0)), 0);
+  expect(b.uEbitda + b.uMult + b.uDelev + sold + chainRest + chainInj, `${where}: unrealisierte Treiber`)
     .toBeCloseTo(chainNav, 6);
   /* …und die Kette erklärt dieselbe Wertänderung wie eine einzelne Spanne vom
      Einstieg bis heute: Sie verteilt sie nur anders auf die Treiber. */

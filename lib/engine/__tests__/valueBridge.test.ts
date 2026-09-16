@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
+import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, COV_DEFAULT,
   fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
+  bridgeChain, liveHist, makeBridge, dealMoic, takeUnrealized, navValueOf,
+  stepCompany, ebitdaOf, periodFin, resetPeriod,
   tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -273,5 +275,157 @@ describe("Value Bridge des Fonds", () => {
     for (const f of state.funds) {
       expect(fundBridge(f as Any, state.market, PERIODS).openCount).toBe(0);
     }
+  });
+
+  /* Ein Abgang ist eine Umgliederung, keine Wertentwicklung. Bis zum
+     16.09.2026 wies die Halbjahresspalte ihn als beides aus: Die Beteiligung
+     verließ den unrealisierten Block (dort erschien ihr bisheriger Beitrag mit
+     umgekehrtem Vorzeichen) und tauchte im realisierten wieder auf. Bei einer
+     im Covenant Breach verlorenen Beteiligung stand dann "Unrealisiert +78,
+     davon Entschuldung +127" — in dem Halbjahr, in dem die Kreditgeber das
+     Unternehmen übernahmen.                                                 */
+  it("weist einen Abgang nicht als unrealisierte Wertentwicklung aus", () => {
+    let geprueft = 0;
+    for (const seed of SEEDS) {
+      // Partie Halbjahr für Halbjahr mitschreiben, um Stände vergleichen zu können
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      const snaps: Any[] = [state];
+      for (let hy = 1; hy <= PERIODS; hy++) {
+        const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
+        snaps.push(state);
+      }
+      for (let i = 1; i < snaps.length; i++) {
+        const was = snaps[i - 1], now = snaps[i];
+        for (let slot = 0; slot < now.funds.length; slot++) {
+          const fNow = now.funds[slot] as Any, fWas = was.funds[slot] as Any;
+          if (!(fNow.drawn > 0) || !(fWas.drawn > 0)) continue;
+          if ((fNow.realized || []).length === (fWas.realized || []).length) continue;
+          const bNow = fundBridge(fNow, now.market, i), bWas = fundBridge(fWas, was.market, i - 1);
+          const step = fundBridgeStep(bNow, bWas)!;
+          /* Die Verschiebung zwischen den beiden Blöcken darf die Spalte nicht
+             aus der Balance bringen: Sie geht weiter exakt auf den Gewinn des
+             Halbjahres auf. Genau das ginge verloren, wenn die Umgliederung
+             nur aus einem der beiden Blöcke herausgerechnet würde. */
+          expect(FUND_BRIDGE_PARTS.reduce((a: number, k: string) => a + (step[k] || 0), 0),
+            `Seed ${seed}/HJ${i}/Fonds ${slot}: Summe der Posten`).toBeCloseTo(step.gain, 6);
+          /* Und jeder Abgang bringt eine übernommene Kette mit — ohne sie
+             fiele die Aufstellung auf die alte Spanne zurück und die
+             Umgliederung stünde wieder in der Spalte. */
+          for (const r of (fNow.realized as Any[]).slice((fWas.realized as Any[]).length)) {
+            expect(r.uOut, `Seed ${seed}/HJ${i}/Fonds ${slot}: ${r.name} ohne übernommene Kette`)
+              .toBeTruthy();
+          }
+          geprueft++;
+        }
+      }
+    }
+    expect(geprueft, "kein Abgang geprüft").toBeGreaterThan(10);
+  });
+
+  /* Der gemeldete Fall, ausbuchstabiert: eine Beteiligung, deren Wert über die
+     Halteperiode aufgezehrt wurde, geht im Covenant Breach an die Kreditgeber.
+     In diesem Halbjahr passiert wirtschaftlich nichts mehr — der Verlust ist
+     längst eingetreten und stand Periode für Periode im unrealisierten Block.
+     Vorher wies die Spalte ihn trotzdem aus: einmal positiv als "Unrealisiert"
+     (die Beteiligung verlässt den Block), einmal negativ als "Realisiert". */
+  it("zeigt beim Enforcement einer längst abgeschriebenen Beteiligung keine Bewegung", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 92, rate: 8.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 2 }, cfo: { skill: 0 }, r3: { skill: 0 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 6, nwcPct: 15, benchMargin: 17, benchCapex: 4, benchNwc: 15,
+      drift: -4, marginDrift: -2.5, addonSize: 0.25, addonComp: 0,
+      entryMult: 11, entryEbitda: 15, entryDebt: 92, entryEV: 165,
+      entryEquity: 78, costTotal: 78, costLeft: 78, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 92, mg: 15, ql: 60, eq: 73, mult: 11, st: 1, out: 0, ei: 0 }],
+    };
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 78, fees: 10, holdings: [c], realized: [],
+      undrawn: 0, drawn: 90, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+      calls: [{ q: 1, amt: 90 }], dists: [],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 6; k++) {
+      stepCompany(rng, c, market, 2);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const kette = bridgeChain(c.hist, liveHist(c, market));
+    // Testaufbau: Der Wert muss aufgezehrt und die Kette deutlich negativ sein
+    expect(navValueOf(c, market), "Testaufbau: NAV aufgezehrt").toBeLessThan(1);
+    expect(kette.ebitda + kette.mult + kette.delev, "Testaufbau: Kette").toBeLessThan(-50);
+
+    const was = fundBridge(f, market, 8);
+    // Enforcement wie in runQuarter Abschnitt 3z
+    f.realized = [{ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0),
+      bridge: makeBridge(c, 0, 0), uOut: takeUnrealized(c, market, 0) }];
+    f.holdings = [];
+    const step = fundBridgeStep(fundBridge(f, market, 8), was)!;
+
+    expect(Math.abs(step.uEbitda + step.uMult + step.uDelev), "unrealisiert").toBeLessThan(0.5);
+    expect(Math.abs(step.rEbitda + step.rMult + step.rDelev), "realisiert").toBeLessThan(0.5);
+    expect(Math.abs(step.gain), "Gewinn des Halbjahres").toBeLessThan(0.5);
+  });
+
+  /* Realisierter und unrealisierter Block beschreiben dieselbe Beteiligung mit
+     derselben Zerlegung. Vorher rechnete der eine als Spanne (alles Wachstum
+     zum Einstiegsmultiple), der andere als Kette — die Differenz verschwand
+     still im Restposten "Transaktionskosten". */
+  it("übernimmt beim Abgang genau die Kette, die im Portfolio stand", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 60, rate: 6.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 4 }, cfo: { skill: 4 }, r3: { skill: 4 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 4, nwcPct: 15, benchMargin: 14, benchCapex: 4, benchNwc: 15,
+      drift: 1.5, marginDrift: 0, addonSize: 0.25, addonComp: 0,
+      entryMult: 9, entryEbitda: 15, entryDebt: 60, entryEV: 135,
+      entryEquity: 78, costTotal: 78, costLeft: 78, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 60, mg: 15, ql: 60, eq: 75, mult: 9, st: 1, out: 0, ei: 0 }],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 6; k++) {
+      stepCompany(rng, c, market, 3);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const kette = bridgeChain(c.hist, liveHist(c, market));
+    const nav = navValueOf(c, market);
+    const net = nav * 0.9;                       // Abschlag gegenüber der Bewertung
+    const u = takeUnrealized(c, market, net);
+    expect(u.ebitda, "EBITDA").toBeCloseTo(kette.ebitda, 9);
+    expect(u.mult, "Multiple").toBeCloseTo(kette.mult, 9);
+    expect(u.delev, "Entschuldung").toBeCloseTo(kette.delev, 9);
+    // Neu am Abgang ist nur der Erlös gegen die letzte Bewertung
+    expect(u.exit, "Exit gegen letzte Bewertung").toBeCloseTo(net - nav, 9);
+
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 78, fees: 0, holdings: [],
+      realized: [{ name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, nav, net), uOut: u }],
+      undrawn: 0, drawn: 90, recyc: 0, recycled: 0, distTotal: net, accrued: 0,
+      calls: [{ q: 1, amt: 90 }], dists: [{ q: 8, amt: net }],
+    };
+    const b = fundBridge(f, market, 8);
+    expect(b.rEbitda, "realisiert EBITDA").toBeCloseTo(kette.ebitda, 9);
+    expect(b.uEbitda + b.uMult + b.uDelev, "nichts mehr unrealisiert").toBe(0);
   });
 });
