@@ -522,6 +522,46 @@ der Wiederholungsmalus greift. Halbjahre über Covenant: 6 von 308 vorher, 4 von
 Bereits ausgewertete Halbjahre behalten die alte Laufzeit
 (`EngineCompat.legacyAddonMandate`, siehe `buildInit`).
 
+### 22 — Wie viel des Reifegradgewinns trägt die Beteiligung überhaupt?
+
+**Frage.** Der Maßnahmenkatalog nennt für jedes Programm einen
+Reifegradgewinn. Bekommt der Spieler ihn auch?
+
+**Befund.** Bei Performance ja, bei Growth nicht. `c.plat` geht direkt in
+Zielmarge, Investitions- und Kapitalbindungsquote. `c.acc` wirkt nur bis
+`accCap()` = `min(People + 1, Performance + 1)`; alles darüber ist
+Überdehnung und kostet je Punkt **1,4 pp Zielmarge** (`targetMargin`) und
+**1,8 Qualitätspunkte je Halbjahr** (`stepCompany`). Auf der Karte stand bis
+zum 16.09.2026 nur der volle Gewinn.
+
+Das ist keine Randlage, sondern der Normalfall: Eine frisch erworbene
+Plattform steht auf Performance 2,0, die Wirkgrenze liegt damit bei 3,0, und
+ein gelungenes Wachstumsprogramm liefert 2,0 bis 2,5 Reifegrad. Wirksam ist
+davon 1,0, der Rest zieht die Beteiligung jede Periode nach unten. Gemessen
+über zehn Halbjahre, dieselbe Beteiligung, derselbe Zufallsstrom:
+
+| | Assetqualität | NAV |
+|---|---|---|
+| nur Growth | 60 → **43,4** | 131,4 Mio. € |
+| Growth und Performance parallel | 60 → **75,5** | 267,8 Mio. € |
+
+In einer live durchgespielten Partie derselbe Verlauf: Eine Beteiligung lief
+den halben Haltezeitraum überdehnt und endete bei Qualität 44 (−11 seit
+Einstieg), eine zweite fiel auf 61 und erholte sich auf 73, sobald der
+Performance-Ausbau nachzog.
+
+**Konsequenz.** Die Mechanik bleibt — sie bildet ab, was Skalieren ohne
+operativen Unterbau in der Praxis kostet, und belohnt balancierte
+Portfolioarbeit. Geändert hat sich die Entscheidungsgrundlage: Der Katalog
+zeigt bei jedem Growth-Programm eine Zeile **„Davon wirksam"** mit dem
+wirksamen Zuwachs, der Wirkgrenze, der bindenden Seite (People oder
+Performance) und dem, was ein Überhang je Halbjahr kostet. Beim Zukauf steht
+derselbe Hinweis an der Zeile „Bei Erfolg", und nur dann, wenn er greift.
+
+Die Grenze steht als `accCap()` an einer Stelle und trägt `accEff()`,
+`overstretch()` und die Karte — vorher stand derselbe Ausdruck dreimal da.
+Eine Warnung, die man erst nach der Entscheidung bekommt, ist keine.
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -554,6 +594,9 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
 11. **Zukauf im selben Halbjahr** (21). Signing und Closing fallen zusammen,
    statt den Growth-Maßnahmenplatz gut zwei Jahre zu binden. Buy-&-Build kommt
    damit von 1,9 auf 3,5 Zukäufe je Partie.
+12. **Wirksamer Reifegrad im Katalog** (22). Growth-Programme sagen vor dem
+   Start, wie viel ihres Gewinns die Beteiligung trägt und was ein Überhang
+   kostet. Die Mechanik ist unverändert, sichtbar war sie bisher erst danach.
 
 Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
 bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`

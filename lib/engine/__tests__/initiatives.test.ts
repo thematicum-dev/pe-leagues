@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
   BASE_RATE, LEGACY_COMPAT, SECNAMES, SECTORS,
-  addonCheck, buildInit, ebitdaOf, maturePeople, nwcPctOf, stepCompany,
+  accCap, accEff, addonCheck, buildInit, ebitdaOf, maturePeople, nwcPctOf, overstretch,
+  peopleLvl, stepCompany, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,5 +170,58 @@ describe("NWC-Programm: die Kapitalbindung sinkt tatsächlich", () => {
     const rev0 = c.revenue;
     stepCompany(rng, c, market, 3, LEGACY_COMPAT);
     expect(c.per.nwc).toBeCloseTo((c.per.nwcPct / 100) * (c.revenue - rev0), 9);
+  });
+});
+
+/* Was die Karte vor dem Start über den Reifegradgewinn sagt, muss das sein,
+   was die Beteiligung danach tatsächlich trägt. Growth wirkt nur bis
+   accCap() — der Rest ist Überdehnung, und die kostet mehr, als das Programm
+   einbringt. Bis zum 16.09.2026 stand auf der Karte nur der volle Gewinn.  */
+describe("Wirkgrenze des Growth-Reifegrads", () => {
+  it("ist eine Zahl an einem Ort: accCap trägt accEff und overstretch", () => {
+    for (const [people, plat, acc] of [[2, 2, 2], [4, 2, 5], [1, 5, 3], [5, 5, 5], [3, 1, 4.5]]) {
+      const c = holding({ acc, plat, ceo: { skill: people }, cfo: { skill: people }, r3: { skill: people } });
+      expect(peopleLvl(c), "Testaufbau").toBeCloseTo(people, 9);
+      expect(accCap(c)).toBe(Math.min(people + 1, plat + 1));
+      expect(accEff(c)).toBe(Math.min(acc, accCap(c)));
+      expect(overstretch(c)).toBeCloseTo(Math.max(0, acc - accCap(c)), 9);
+    }
+  });
+
+  it("liefert genau den wirksamen Teil, den die Karte vorher ausweist", () => {
+    // Plattform auf Benchmark: Der Katalog verspricht mehr, als sie tragen kann
+    const c = holding({ acc: 2, plat: 2, ceo: { skill: 4 }, cfo: { skill: 4 }, r3: { skill: 4 } });
+    const B = buildInit(createRng(11), c, "acc", "exp", market, 1) as Any;
+    expect(B, "Testaufbau: Programm muss startbar sein").toBeTruthy();
+    // Die beiden Zeilen der Karte
+    const grenze = accCap(c);
+    const wirksamLautKarte = Math.max(0, Math.min(Math.min(5, c.acc + B.init.gain), grenze) - accEff(c));
+    const ueberhangLautKarte = Math.max(0, Math.min(5, c.acc + B.init.gain) - grenze);
+    expect(ueberhangLautKarte, "Testaufbau: es muss etwas überstehen").toBeGreaterThan(0.05);
+
+    const wirkEff0 = accEff(c), ziel0 = targetMargin(c);
+    // Nur die Reifung prüfen, nicht die Laufzeit: doneQ auf das laufende
+    // Halbjahr setzen und den Ausgang erzwingen.
+    c.initA = { ...B.init, ok: true, doneQ: 1 };
+    maturePeople(createRng(11), c, market, 1, false, [], []);
+
+    expect(accEff(c) - wirkEff0, "wirksamer Zuwachs").toBeCloseTo(wirksamLautKarte, 9);
+    expect(overstretch(c), "Überhang").toBeCloseTo(ueberhangLautKarte, 9);
+    // Und was der Überhang kostet: 1,4 pp Zielmarge je Punkt (targetMargin)
+    expect(ziel0 - targetMargin(c), "Margenbelastung aus der Überdehnung")
+      .toBeCloseTo(ueberhangLautKarte * 1.4, 6);
+  });
+
+  it("trägt den vollen Zuwachs, wenn Performance mitzieht", () => {
+    const c = holding({ acc: 2, plat: 5, ceo: { skill: 5 }, cfo: { skill: 5 }, r3: { skill: 5 } });
+    const B = buildInit(createRng(11), c, "acc", "exp", market, 1) as Any;
+    const grenze = accCap(c);
+    expect(Math.min(5, c.acc + B.init.gain), "Testaufbau: darf nicht überstehen")
+      .toBeLessThanOrEqual(grenze + 1e-9);
+    const wirkEff0 = accEff(c);
+    c.initA = { ...B.init, ok: true, doneQ: 1 };
+    maturePeople(createRng(11), c, market, 1, false, [], []);
+    expect(accEff(c) - wirkEff0).toBeCloseTo(B.init.gain, 9);
+    expect(overstretch(c)).toBe(0);
   });
 });

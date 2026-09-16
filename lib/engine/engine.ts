@@ -1007,9 +1007,15 @@ export function addonEquityNeeded(c, market, opts = {} as AddonOpts) {
   return clamp(k.price - room, 0, k.price);
 }
 
+/* Wie viel Growth-Reifegrad die Beteiligung tragen kann: People und Platform
+   setzen die Grenze, alles darüber ist Überdehnung. Steht als eigene Zeile,
+   weil außer accEff und overstretch auch der Maßnahmenkatalog sie braucht —
+   er sagt vor dem Start, wie viel des Reifegradgewinns überhaupt wirkt. Eine
+   Zahl, ein Ort: Vorher stand derselbe Ausdruck dreimal da.                 */
+export const accCap = (c) => Math.min(peopleLvl(c) + 1, c.plat + 1);
 // Acceleration wirkt nur, soweit People und Platform sie tragen
-export const accEff = (c) => Math.min(c.acc, peopleLvl(c) + 1, c.plat + 1);
-export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1, c.plat + 1));
+export const accEff = (c) => Math.min(c.acc, accCap(c));
+export const overstretch = (c) => Math.max(0, c.acc - accCap(c));
 
 /* Wie lange eine Maßnahme läuft, ohne sie zu starten. buildInit() rechnet
    genau diese Zeile; der Katalog (InitPicker) und die Vormerkung einer

@@ -13,7 +13,7 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
@@ -2689,6 +2689,29 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           const FI = fitLabel(k.id, c);
           const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
           const noFin = k.ma && !chk.ok;
+          /* Wie viel des Reifegradgewinns die Beteiligung überhaupt tragen kann.
+             Growth wirkt nur bis min(People + 1, Performance + 1) — accEff();
+             was darüber liegt, ist Überdehnung und kostet je Punkt 1,4 pp
+             Zielmarge und 1,8 Qualitätspunkte je Halbjahr.
+
+             Bis zum 16.09.2026 stand auf der Karte nur der volle Gewinn. Ein
+             gelungenes Expansionsprogramm auf einer Plattform mit Performance
+             auf Benchmark lieferte +2,5 Reifegrad, wirksam war davon 1,0, und
+             der Rest zog die Beteiligung zehn Halbjahre lang nach unten: in
+             der Messung Assetqualität 60 -> 43 statt 60 -> 76 bei parallelem
+             Performance-Ausbau. Die Warnung stand erst hinterher auf der
+             Beteiligungskarte — eine Entscheidungsgrundlage, die man erst nach
+             der Entscheidung bekommt, ist keine.
+
+             Performance kennt diese Grenze nicht: c.plat geht direkt in
+             Zielmarge, Investitions- und Kapitalbindungsquote.              */
+          const grenze = accCap(c);
+          const roh = k.ma ? 1.0 : g;                 // Zukauf: fester Reifegradgewinn
+          const nachher = Math.min(Math.min(5, c.acc + roh), grenze);
+          const wirksam = Math.max(0, nachher - accEff(c));
+          const ueberhang = Math.max(0, Math.min(5, c.acc + roh) - grenze);
+          const bindet = peopleLvl(c) + 1 <= c.plat + 1
+            ? `People ${peopleLvl(c).toFixed(1)}` : `Performance ${c.plat.toFixed(1)}`;
           return (
             <div className={"card" + (noFin ? " lm" : "")} key={k.id} style={{ marginTop: 10, opacity: locked ? 0.45 : 1 }}>
               <div className="pad" style={{ paddingTop: 12, paddingBottom: 4 }}>
@@ -2786,7 +2809,20 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       </span></td></tr>
                   <tr><td className="lab">Bei Scheitern</td>
                     <td style={{ color: "var(--ox)" }}>Umsatzbeitrag 35 %, Akquisitionsschuld in voller Höhe</td></tr>
-                  <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.margin) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
+                  {/* Der Zukauf hebt den Growth-Reifegrad um feste 1,0 und
+                      unterliegt damit derselben Wirkgrenze wie jedes andere
+                      Wachstumsprogramm. Der Hinweis steht nur da, wenn er
+                      tatsächlich greift — sonst wäre es eine Zeile ohne
+                      Entscheidung dahinter. */}
+                  <tr><td className="lab">Bei Erfolg</td>
+                    <td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.margin) * 100 / c.revenue * 100)} % · Reifegrad +1,0
+                      {ueberhang > 0.05 && (
+                        <span className="ctl" style={{ color: "var(--ox)" }}>
+                          Davon wirksam +{wirksam.toFixed(2)} — Wirkgrenze {grenze.toFixed(1)} = {bindet} + 1.
+                          Der Überhang kostet {(ueberhang * 1.4).toFixed(1).replace(".", ",")} pp Marge
+                          und {(ueberhang * 1.8).toFixed(1).replace(".", ",")} Qualitätspunkte je Halbjahr.
+                        </span>
+                      )}</td></tr>
                   {/* Seit dem 16.09.2026 fallen Signing und Closing in dasselbe
                       Halbjahr (initDurationOf gibt beim Zukauf 0). Die Karte
                       sagt es, weil jede andere Maßnahme eine Laufzeit hat. */}
@@ -2808,6 +2844,19 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       Karte sprang beim ersten Halbjahreswechsel eine Zahl nach oben. */}
                   <tr><td className="lab">Ergebnis in</td><td>{hj(dur + 1)}</td></tr>
                   <tr><td className="lab">Reifegradgewinn</td><td>+{g.toFixed(2)}{k.spread ? ` (streut ${k.spread[0]}–${k.spread[1]}×)` : ""}</td></tr>
+                  {dim === "acc" && <tr><td className="lab">Davon wirksam</td>
+                    <td style={{ color: ueberhang > 0.05 ? "var(--ox)" : "var(--teal)", fontWeight: 600 }}>
+                      +{wirksam.toFixed(2)}
+                      <span className="ctl">
+                        Wirkgrenze {grenze.toFixed(1)} = {bindet} + 1.
+                        {ueberhang > 0.05
+                          ? ` Der Überhang von ${ueberhang.toFixed(2)} bleibt ohne Wirkung und belastet`
+                            + ` Zielmarge und Assetqualität, solange er besteht:`
+                            + ` ${(ueberhang * 1.4).toFixed(1).replace(".", ",")} pp Marge und`
+                            + ` ${(ueberhang * 1.8).toFixed(1).replace(".", ",")} Qualitätspunkte je Halbjahr.`
+                            + ` Ein Performance-Programm hebt die Grenze mit.`
+                          : " Trägt den vollen Zuwachs."}
+                      </span></td></tr>}
                   <tr><td className="lab">Bei Zielverfehlung</td>
                     <td style={{ color: k.cls === "rel" ? "var(--ink)" : "var(--ox)" }}>
                       {k.cls === "rel"
