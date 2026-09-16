@@ -14,7 +14,7 @@ import {
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonAsk, addonCheck, addonEquityNeeded,
-  addonMandate, addonMaxEb, ADDON_MAX_SHARE, ADDON_REF_SHARE, anyInit, applyProceeds,
+  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
@@ -233,7 +233,7 @@ export const CSS = `
 /* Der Hinweis unter einem Regler ist ein ganzer Satz und gehört nach links —
    rechtsbündiger Flattersatz liest sich über vier Zeilen schlecht. */
 .pel .ledger.fix td .ctl{display:block;text-align:left;font-family:'Inter',system-ui,sans-serif;
-  font-size:11px;line-height:1.45;color:var(--ink2);margin-top:2px;}
+  font-size:11px;line-height:1.45;color:var(--ink2);font-weight:400;margin-top:2px;}
 /* Gruppentrenner innerhalb einer Kennzahlentabelle: Geschäft / Ertrag /
    Bewertung stehen als Blöcke, ohne dass es Zwischenüberschriften braucht. */
 .pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
@@ -2603,6 +2603,34 @@ export function EquityInjection({ c, investable, confirm, close }) {
   );
 }
 
+/* Die Begründung des Scheiterungsrisikos in ganzen Prozentpunkten — so
+   gerundet, dass Referenzfall plus Posten genau die angezeigte Zahl ergeben.
+
+   Ohne diese Korrektur rundet jeder Posten für sich, und die Zeile rechnet
+   gegen sich selbst: "Referenzfall 10 % · hebt +1 · senkt −7" neben einer
+   angezeigten 5 %. Wer nachrechnet, kommt auf 4 und traut der Karte nicht
+   mehr. Die Differenz landet auf dem Posten mit dem größten Rundungsrest —
+   dem, bei dem sie am wenigsten verfälscht.
+
+   Läuft das Risiko in seine Grenze (clamp in addonFailRisk), geht die Rechnung
+   ehrlicherweise nicht auf. Dann sagt die Zeile das, statt einen Posten
+   zurechtzubiegen.                                                          */
+export function failBreakdown(chk) {
+  const roh = (chk.failParts || []).filter((t) => Math.abs(t.v) >= 0.005);
+  const ziel = Math.round(chk.fail * 100) - Math.round(ADDON_FAIL_BASE * 100);
+  const teile = roh
+    .map((t) => ({ t: t.t, pp: Math.round(t.v * 100), rest: Math.abs(t.v * 100 - Math.round(t.v * 100)) }))
+    .sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
+  const summe = teile.reduce((s, t) => s + t.pp, 0);
+  const roh_summe = ADDON_FAIL_BASE + (chk.failParts || []).reduce((s, t) => s + t.v, 0);
+  const geklemmt = Math.abs(roh_summe - chk.fail) > 0.005 ? (roh_summe < chk.fail ? "unten" : "oben") : null;
+  if (!geklemmt && summe !== ziel && teile.length) {
+    const k = teile.reduce((a, b) => (b.rest > a.rest ? b : a));
+    k.pp += ziel - summe;
+  }
+  return { teile: teile.filter((t) => t.pp !== 0), geklemmt };
+}
+
 export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
@@ -2628,7 +2656,14 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
      nicht geben.                                                            */
   const eqCap = Math.max(0, Math.min(investable, addEb * mult));
   const [addonEqRaw, setAddonEq] = useState<number | null>(null);
-  const addonEq = Math.min(eqCap, addonEqRaw ?? addonEquityNeeded(c, market, { addEb, mult }));
+  /* Was der Zukauf an Eigenkapital braucht, damit er die Finanzierungsgrenze
+     hält — und was davon der Fonds überhaupt aufbringen kann. Die beiden gehen
+     auseinander, und genau das muss die Karte sagen: Bis zum 16.09.2026 stand
+     der Regler in diesem Fall stumm am Anschlag, der Zukauf blieb gesperrt,
+     und nichts erklärte, warum das volle investierbare Kapital nicht reicht. */
+  const eqNeeded = addonEquityNeeded(c, market, { addEb, mult });
+  const eqShort = Math.max(0, eqNeeded - eqCap);
+  const addonEq = Math.min(eqCap, addonEqRaw ?? eqNeeded);
   const mandate = { addEb, mult, equity: addonEq };
   return (
     <div className="modal" onClick={close}>
@@ -2646,6 +2681,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           // Eine Zahl, ein Ort: dieselbe Zeile, die buildInit() beim Start rechnet
           const dur = initDurationOf(c, dim, k.id);
           const chk = k.ma ? addonCheck(c, market, { ...mandate, runs }) : null;
+          const risk = k.ma ? failBreakdown(chk) : null;
           // Dieselbe Zeile, die buildInit() beim Start rechnet
           const p = k.ma ? clamp(1 - chk.fail, 0.05, 0.98)
             : clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm, 0.1, 0.97);
@@ -2698,7 +2734,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                   <tr><td className="lab">Kaufpreis</td><td>{eur(chk.price)}
                     <span style={{ fontSize: 11, color: "var(--ink2)" }}>
                       {" "}— {eur(chk.debt)} fremdfinanziert{chk.equity > 0.05 ? `, ${eur(chk.equity)} Fondskapital` : ""}</span></td></tr>
-                  {eqCap > 0.5 && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
+                  {(eqCap > 0.5 || eqShort > 0.05) && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
                     <td>
                       <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
                         onChange={(e) => setAddonEq(Number(e.target.value))}
@@ -2706,6 +2742,13 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       <span className="ctl">
                         {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
                         erhöht die Kostenbasis des Deals um denselben Betrag.
+                        {eqShort > 0.05 && (
+                          <span style={{ color: "var(--ox)" }}>
+                            {" "}Für dieses Mandat wären {eur(eqNeeded)} nötig; es fehlen {eur(eqShort)}.
+                            Auch das volle investierbare Kapital trägt ihn also nicht — kleineres Ziel
+                            oder niedrigeres Gebot.
+                          </span>
+                        )}
                       </span>
                     </td></tr>}
                   <tr><td className="lab">Leverage heute</td><td>{x(c.netDebt / Math.max(0.5, eb))}</td></tr>
@@ -2714,17 +2757,32 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
                         {" "}(Covenant {x(c.covLimit ?? COV_DEFAULT)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
+                  {/* Die Begründung kommt aus derselben Liste, die das Risiko
+                      aufaddiert (addonFailParts) — und trennt, was die Zahl hebt,
+                      von dem, was sie senkt. Vorher stand beides in einer
+                      kommaseparierten Aufzählung: "kleiner Bissen, Prozesse noch
+                      unreif" las sich, als zöge beides in dieselbe Richtung. */}
                   <tr><td className="lab">Scheiterungs­risiko</td>
                     <td style={{ color: chk.fail <= 0.15 ? "var(--teal)" : chk.fail <= 0.30 ? "var(--ink)" : "var(--ox)", fontWeight: 600 }}>
                       {Math.round(chk.fail * 100)} %
-                      <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
-                        {" "}— {[
-                          chk.share > ADDON_REF_SHARE + 0.03 ? "großer Bissen" : chk.share < ADDON_REF_SHARE - 0.05 ? "kleiner Bissen" : null,
-                          chk.gap > 0.05 ? "unter Preisvorstellung geboten" : null,
-                          c.plat < 2.5 ? "Prozesse noch unreif" : c.plat >= 3.5 ? "reife Prozesse" : null,
-                          c.netDebt / Math.max(0.5, eb) > 3.5 ? "hohe Verschuldung" : null,
-                          runs > 0 ? `${runs + 1}. Auflage` : null,
-                        ].filter(Boolean).join(", ") || "Referenzfall"}
+                      <span className="ctl">
+                        {risk.geklemmt
+                          ? `${risk.geklemmt === "unten" ? "Untergrenze" : "Obergrenze"} ${Math.round(chk.fail * 100)} %`
+                            + ` — rechnerisch wäre es ${risk.geklemmt === "unten" ? "weniger" : "mehr"}`
+                          : `Referenzfall ${Math.round(ADDON_FAIL_BASE * 100)} %`}
+                        {[{ w: "hebt", hit: (v) => v > 0, col: "var(--ox)" },
+                          { w: "senkt", hit: (v) => v < 0, col: "var(--teal)" }].map((g) => {
+                          const teile = risk.teile.filter((t) => g.hit(t.pp));
+                          if (!teile.length) return null;
+                          return (
+                            <span key={g.w}>
+                              {" · "}{g.w}:{" "}
+                              <span style={{ color: g.col }}>
+                                {teile.map((t) => `${t.t} ${t.pp > 0 ? "+" : "−"}${Math.abs(t.pp)} pp`).join(", ")}
+                              </span>
+                            </span>
+                          );
+                        })}
                       </span></td></tr>
                   <tr><td className="lab">Bei gescheiterter Integration</td>
                     <td style={{ color: "var(--ox)" }}>nur 35 % des Umsatzes, Schuld steht voll</td></tr>
@@ -2780,11 +2838,9 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                        dort ist "mehr Fondskapital" kein Weg, sondern eine
                        Sackgasse. Die Beschriftung nennt deshalb nur, was hier
                        tatsächlich hilft. */
-                    : noFin ? (eqCap < 0.5
-                      ? "Keine Finanzierung — kleineres Ziel wählen"
-                      : eqCap < addonEquityNeeded(c, market, { addEb, mult })
-                        ? "Keine Finanzierung — kleineres Ziel oder mehr Fondskapital"
-                        : "Keine Finanzierung — mehr Eigenkapital nachschießen")
+                    : noFin ? (eqShort > 0.05
+                      ? `Keine Finanzierung — auch mit allem Fondskapital fehlen ${eur(eqShort)}`
+                      : "Keine Finanzierung — mehr Eigenkapital nachschießen")
                     : runs > 0 ? `${runs + 1}. Auflage starten` : "Starten"}
                 </button>
               </div>

@@ -905,22 +905,40 @@ export const addonMaxEb = (c) => ebitdaOf(c) * ADDON_MAX_SHARE;
 
 /* Scheiterungsrisiko der Integration. Die beiden Terme, die der Spieler
    steuert, stehen oben; darunter das, was die Plattform mitbringt.        */
-export function addonFailRisk(c, opts = {} as AddonOpts) {
+export const ADDON_LEV_SLOPE = 0.06;    // je Turn Leverage über der Referenz
+export const ADDON_PLAT_SLOPE = 0.05;   // je Stufe Prozessreife über der Referenz
+export const ADDON_TEAM_SLOPE = 0.045;  // je Ratingpunkt der Fachrolle darüber
+export const ADDON_REPEAT_SLOPE = 0.05; // je weiterer Auflage
+
+/* Die Summanden des Scheiterungsrisikos, einzeln benannt und mit Vorzeichen.
+
+   Die Ansicht zeigt sie als Begründung neben der Prozentzahl. Sie stand dort
+   bis zum 16.09.2026 als kommaseparierte Liste aus eigenen Schwellwerten —
+   "kleiner Bissen, Prozesse noch unreif" nebeneinander, ohne zu sagen, dass
+   das erste die Zahl senkt und das zweite sie hebt. Zwei richtige Angaben,
+   die zusammen in die Irre führten.
+
+   Jetzt kommt die Begründung aus derselben Liste, die addonFailRisk()
+   aufaddiert: Sie kann gar nicht mehr von der Zahl abweichen, und jeder
+   Posten trägt sein eigenes Vorzeichen.                                     */
+export function addonFailParts(c, opts = {} as AddonOpts) {
   const eb = ebitdaOf(c);
-  const addEb = opts.addEb ?? ebitdaOf(c) * ADDON_REF_SHARE;
+  const addEb = opts.addEb ?? eb * ADDON_REF_SHARE;
   const ask = opts.ask ?? 0;
   // Geboten wird höchstens die Preisvorstellung — mehr zu zahlen kauft nichts.
   const mult = Math.min(opts.mult ?? ask, ask);
   const skill = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
-  return clamp(
-    ADDON_FAIL_BASE
-    + ADDON_SIZE_SLOPE * (addEb / Math.max(0.5, eb) - ADDON_REF_SHARE)
-    + ADDON_PRICE_SLOPE * Math.max(0, ask - mult)
-    + 0.06 * Math.max(0, c.netDebt / Math.max(0.5, eb) - ADDON_REF_LEV)
-    - 0.05 * (c.plat - ADDON_REF_PLAT)
-    - 0.045 * (skill - ADDON_REF_SKILL)
-    + 0.05 * (opts.runs || 0),
-    0.02, 0.95);
+  return [
+    { k: "size", t: "Zielgröße", v: ADDON_SIZE_SLOPE * (addEb / Math.max(0.5, eb) - ADDON_REF_SHARE) },
+    { k: "price", t: "Gebot unter Preisvorstellung", v: ADDON_PRICE_SLOPE * Math.max(0, ask - mult) },
+    { k: "lev", t: "Verschuldung", v: ADDON_LEV_SLOPE * Math.max(0, c.netDebt / Math.max(0.5, eb) - ADDON_REF_LEV) },
+    { k: "plat", t: "Prozessreife", v: -ADDON_PLAT_SLOPE * (c.plat - ADDON_REF_PLAT) },
+    { k: "team", t: "Team", v: -ADDON_TEAM_SLOPE * (skill - ADDON_REF_SKILL) },
+    { k: "runs", t: "weitere Auflage", v: ADDON_REPEAT_SLOPE * (opts.runs || 0) },
+  ];
+}
+export function addonFailRisk(c, opts = {} as AddonOpts) {
+  return clamp(ADDON_FAIL_BASE + addonFailParts(c, opts).reduce((s, p) => s + p.v, 0), 0.02, 0.95);
 }
 
 /* Das alte Integrationsrisiko. Steht nur noch für die Wiederholung bereits
@@ -965,9 +983,11 @@ export function addonCheck(c, market, opts = {} as AddonOpts) {
   const debt = price - eqIn;
   const lev = (c.netDebt + debt) / Math.max(0.5, eb + addEb);
   const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
-  const fail = legacy ? null : addonFailRisk(c, { addEb, mult, ask, runs: opts.runs || 0 });
+  const failOpts = { addEb, mult, ask, runs: opts.runs || 0 };
+  const fail = legacy ? null : addonFailRisk(c, failOpts);
   return {
     addEb, ask, mult, price, equity: eqIn, debt, lev, limit, fail,
+    failParts: legacy ? [] : addonFailParts(c, failOpts),
     share: addEb / Math.max(0.5, eb), gap: Math.max(0, ask - mult),
     ok: lev <= limit && addEb > 0.05,
   };
