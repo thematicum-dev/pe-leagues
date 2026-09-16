@@ -1163,17 +1163,18 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         </div>
         {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
-            Ein Add-on läuft zwischen Signing und Closing. Gezogen wird die
-            Akquisitionsschuld erst beim Abschluss, zusammen mit dem gekauften
-            EBITDA (maturePeople) — bis dahin bleibt der Leverage der von vorher.
-            Nur der Eigenkapitalanteil fließt sofort an den Verkäufer; er erhöht
-            die Kostenbasis des Deals, nicht die Verschuldung der Plattform. */}
+            Ein Add-on wird im Halbjahr des Signings vollzogen. Die
+            Akquisitionsschuld wird beim Closing gezogen, zusammen mit dem
+            erworbenen EBITDA (maturePeople). Der Eigenkapitalanteil fließt beim
+            Signing an den Verkäufer; er erhöht die Kostenbasis des Deals, nicht
+            die Verschuldung der Plattform. */}
         <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
-            ? initsOf(c).map((I) => `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`
-                + (I.ma ? ` Akquisitionsschuld und zugekauftes EBITDA kommen zusammen beim Abschluss —`
-                  + ` bis dahin bleibt der Leverage unberührt.`
-                  + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind bereits abgerufen.` : "") : "")
+            ? initsOf(c).map((I) => (I.ma
+                ? `${I.name || "Zukauf"}: Closing zum Ende dieses Halbjahres.`
+                  + ` Akquisitionsschuld und erworbenes EBITDA werden gemeinsam gebucht.`
+                  + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind abgerufen.` : "")
+                : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
             : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
@@ -2713,8 +2714,8 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         onChange={(e) => { setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
-                        Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % der Plattform). Je größer der
-                        Bissen, desto teurer relativ — und desto schwerer zu integrieren.
+                        Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % des Plattform-EBITDA).
+                        Höhere Zielgröße bedeutet höheres Einstiegsmultiple und höheres Scheiterungsrisiko.
                       </span>
                     </td></tr>
                   <tr><td className="lab">Höchstgebot</td>
@@ -2726,9 +2727,9 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         onChange={(e) => { setBid(Number(e.target.value) / 10); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
-                        Der Verkäufer will {x(ask)} — Plattform {x(markMultiple(c, market))} abzüglich
-                        Größenabschlag{(c.addonComp || 0) > 0 ? ", zuzüglich Wettbewerber am Tisch" : ""}.
-                        Wer darunter bleibt, bekommt nicht denselben Zukauf billiger, sondern einen schlechteren.
+                        Preisvorstellung {x(ask)} — Plattformmultiple {x(markMultiple(c, market))} abzüglich
+                        Größenabschlag{(c.addonComp || 0) > 0 ? ", zuzüglich Aufschlag für den Wettbewerb im Bieterverfahren" : ""}.
+                        Ein Gebot darunter senkt den Kaufpreis und erhöht das Scheiterungsrisiko.
                       </span>
                     </td></tr>
                   <tr><td className="lab">Kaufpreis</td><td>{eur(chk.price)}
@@ -2744,15 +2745,14 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         erhöht die Kostenbasis des Deals um denselben Betrag.
                         {eqShort > 0.05 && (
                           <span style={{ color: "var(--ox)" }}>
-                            {" "}Für dieses Mandat wären {eur(eqNeeded)} nötig; es fehlen {eur(eqShort)}.
-                            Auch das volle investierbare Kapital trägt ihn also nicht — kleineres Ziel
-                            oder niedrigeres Gebot.
+                            {" "}Das Mandat erfordert {eur(eqNeeded)}; es fehlen {eur(eqShort)}.
+                            Zielgröße oder Gebot reduzieren.
                           </span>
                         )}
                       </span>
                     </td></tr>}
                   <tr><td className="lab">Leverage heute</td><td>{x(c.netDebt / Math.max(0.5, eb))}</td></tr>
-                  <tr><td className="lab">Leverage nach Abschluss</td>
+                  <tr><td className="lab">Leverage nach Closing</td>
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
@@ -2784,18 +2784,17 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                           );
                         })}
                       </span></td></tr>
-                  <tr><td className="lab">Bei gescheiterter Integration</td>
-                    <td style={{ color: "var(--ox)" }}>nur 35 % des Umsatzes, Schuld steht voll</td></tr>
+                  <tr><td className="lab">Bei Scheitern</td>
+                    <td style={{ color: "var(--ox)" }}>Umsatzbeitrag 35 %, Akquisitionsschuld in voller Höhe</td></tr>
                   <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.margin) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
-                  {/* Die Zeitachse des Zukaufs: Signing jetzt, Closing beim
-                      Abschluss — Schuld und EBITDA kommen zusammen, der Leverage
-                      springt also erst dann auf die Zahl oben. */}
-                  <tr><td className="lab">Abschluss in</td>
-                    <td>{hj(dur + 1)}
+                  {/* Seit dem 16.09.2026 fallen Signing und Closing in dasselbe
+                      Halbjahr (initDurationOf gibt beim Zukauf 0). Die Karte
+                      sagt es, weil jede andere Maßnahme eine Laufzeit hat. */}
+                  <tr><td className="lab">Closing</td>
+                    <td>zum Ende dieses Halbjahres
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-                        {" "}— bis dahin bleibt der Leverage bei {x(c.netDebt / Math.max(0.5, eb))};
-                        Akquisitionsschuld und EBITDA kommen zusammen beim Abschluss
-                        {chk.equity > 0.05 ? `, nur die ${eur(chk.equity)} Fondskapital fließen sofort` : ""}
+                        {" "}— Akquisitionsschuld und erworbenes EBITDA werden gemeinsam gebucht
+                        {chk.equity > 0.05 ? `; ${eur(chk.equity)} Fondskapital fließen beim Signing` : ""}
                       </span></td></tr>
                 </>) : (<>
                   <tr><td className="lab">Eignung für diesen Fall</td>

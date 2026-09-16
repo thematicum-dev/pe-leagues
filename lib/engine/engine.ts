@@ -326,7 +326,11 @@ export interface EngineCompat {
      `addonSize` der Plattform, Preis aus addonMultiple(), Risiko aus
      addonRisk(). Seitdem erteilt der Spieler ein Mandat (Zielgröße und
      Höchstgebot), und beides bestimmt das Scheiterungsrisiko — siehe
-     addonCheck/addonFailRisk.                                               */
+     addonCheck/addonFailRisk.
+
+     Dieselbe Marke hält auch die Laufzeit: Bis dahin lief ein Zukauf
+     initDur(E) + 1 Halbjahre zwischen Signing und Closing, seit dem
+     16.09.2026 fallen beide in dasselbe Halbjahr (buildInit).               */
   legacyAddonMandate?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
@@ -751,8 +755,8 @@ export const INITS = {
     { id: "exp", n: "Markt- und Segmentexpansion", cls: "hard", d: "Neue Regionen oder Segmente. Breite Streuung, teurer Fehlschlag.",
       sm: 0.16, dm: 1, gm: 1.3, drag: 1.0, cx: 0, nwcRun: 2, spread: [0.3, 1.4],
       failCost: 0.25, failMargin: -0.8 },
-    { id: "ma", n: "Add-on M&A", cls: "tr", d: "Zukauf eines Wettbewerbers, fremdfinanziert. Multiple-Arbitrage — und Covenant-Risiko.",
-      sm: -0.05, dm: 1, gm: 0, drag: 0.4, cx: 0, ma: true },
+    { id: "ma", n: "Add-on M&A", cls: "tr", d: "Erwerb eines Wettbewerbers, überwiegend fremdfinanziert. Signing und Closing im selben Halbjahr.",
+      sm: -0.05, dm: 0, gm: 0, drag: 0.4, cx: 0, ma: true },
   ],
 };
 export const initById = (dim, id) => INITS[dim].find((i) => i.id === id);
@@ -1012,13 +1016,21 @@ export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1,
    Mehrspielerpartie (patchHolding) brauchen sie, bevor gewürfelt wird.
 
    Bis zum 15.09.2026 rechnete die Vormerkung stattdessen `initDur(E)` allein
-   — ohne den Zuschlag der Maßnahme (`dm`; beim Add-on +1) und ohne den
-   Wiederholungsmalus. Die Karte zeigte direkt nach dem Klick eine kürzere
-   Restlaufzeit an als nach der Auswertung, das Add-on sprang von zwei auf
-   drei Halbjahre. Eine Zahl, ein Ort.                                       */
+   — ohne den Zuschlag der Maßnahme (`dm`) und ohne den Wiederholungsmalus.
+   Die Karte zeigte direkt nach dem Klick eine kürzere Restlaufzeit an als
+   nach der Auswertung. Eine Zahl, ein Ort.
+
+   Der Zukauf läuft mit Dauer 0: Signing und Closing fallen in dasselbe
+   Halbjahr. maturePeople() wird im selben Durchlauf nach der Entscheidung
+   aufgerufen und prüft `q < doneQ` — bei doneQ = q schließt der Zukauf noch
+   in derselben Periode ab, Akquisitionsschuld und erworbenes EBITDA kommen
+   zusammen an. Die Margenbelastung (drag) trägt die Periode des Erwerbs.
+   Bereits ausgewertete Halbjahre behalten ihre alte Laufzeit von zwei bis
+   drei Halbjahren — siehe buildInit (EngineCompat.legacyAddonMandate).      */
 export function initDurationOf(c, dim, id) {
   const spec = initById(dim, id);
   if (!spec) return null;
+  if (spec.ma) return 0;
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   return Math.max(1, initDur(E) + (spec.dm || 0) + repeatMalus(initRuns(c, id)).dm);
@@ -1040,14 +1052,18 @@ export function buildInit(
   if (spec.req && !spec.req(c)) return null;
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
-  const dur = initDurationOf(c, dim, id);
-
   /* Der Zukauf rechnet sein Risiko aus dem Mandat des Spielers (Zielgröße und
      Höchstgebot), jede andere Maßnahme aus Rating und Risikoklasse. Beides
      ohne Ziehung — die Reihenfolge des Zufallsstroms bleibt damit dieselbe
      wie vor der Umstellung, und bereits ausgewertete Halbjahre lassen sich
      weiter nachrechnen.                                                     */
   const legacy = !!compat.legacyAddonMandate;
+  /* Seit dem 16.09.2026 schließt ein Zukauf im Halbjahr der Entscheidung ab
+     (initDurationOf gibt 0). Vor der Umstellung gestartete Zukäufe liefen
+     initDur(E) + 1 Halbjahre — diese Zeile hält sie nachrechenbar.          */
+  const dur = spec.ma && legacy
+    ? Math.max(1, initDur(E) + 1 + rep.dm)
+    : initDurationOf(c, dim, id);
   const chk = spec.ma ? addonCheck(c, market, { ...mandate, runs, legacy }) : null;
   const p = spec.ma && !legacy
     ? clamp(1 - chk.fail, 0.05, 0.98)
@@ -1086,7 +1102,13 @@ export function buildInit(
        Jetzt kommen Schuld und EBITDA zusammen an (maturePeople). Damit ist
        der Leverage nach dem Abschluss genau die Pro-forma-Zahl, auf der
        entschieden wurde — und das Integrationsrisiko trägt weiter, was es
-       tragen soll: Scheitert sie, steht die Schuld trotzdem voll.          */
+       tragen soll: Scheitert sie, steht die Schuld trotzdem voll.
+
+       Seit dem 16.09.2026 ist das Integrationsfenster ohnehin null: Signing
+       und Closing fallen in dasselbe Halbjahr (initDurationOf gibt beim
+       Zukauf 0). Die Buchung beim Abschluss bleibt trotzdem die richtige
+       Stelle — sie hält Schuld und EBITDA aneinander, auch für Zukäufe aus
+       Partien mit altem Regelstand.                                        */
     if (compat.addonDebtAtStart && !compat.addonWithoutDebt) debt += chk.debt;
     const addDebt = compat.addonDebtAtStart || compat.addonWithoutDebt ? 0 : chk.debt;
     /* `gain` stand hier bis zum 15.09.2026 auf 0,35 und wurde nie gelesen:

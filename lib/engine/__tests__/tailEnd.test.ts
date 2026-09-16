@@ -173,8 +173,8 @@ describe("Laufzeit einer Maßnahme", () => {
   /* Die Zahl, die im Katalog steht, in der Vormerkung der Mehrspielerpartie
      gerechnet wird und die Karte danach herunterzählt, muss dieselbe sein wie
      die, mit der buildInit() doneQ setzt. Vorher rechnete die Vormerkung
-     `initDur(E)` allein — ohne den Dauerzuschlag der Maßnahme (beim Add-on
-     +1) und ohne den Wiederholungsmalus. */
+     `initDur(E)` allein — ohne den Dauerzuschlag der Maßnahme und ohne den
+     Wiederholungsmalus. */
   it("initDurationOf ist die Dauer, die buildInit dann auch setzt", () => {
     let checked = 0;
     for (const seed of SEEDS) {
@@ -241,10 +241,37 @@ describe("Laufzeit einer Maßnahme", () => {
     const c = (state.funds as Any[]).flatMap((f) => f.holdings as Any[])[0];
     expect(c, "keine Beteiligung im Test").toBeTruthy();
     const E = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
-    // Add-on: dm = 1. Die alte Vormerkung rechnete genau diesen Zuschlag nicht mit.
-    expect((initById("acc", "ma") as Any).dm).toBe(1);
-    expect(initDurationOf(c, "acc", "ma"))
-      .toBe(Math.max(1, initDur(E) + 1 + repeatMalus(initRuns(c, "ma")).dm));
-    expect(initDurationOf(c, "acc", "ma")).toBeGreaterThan(initDur(E) - 1 + 1);
+    // Markt- und Segmentexpansion: dm = 1. Die alte Vormerkung rechnete genau
+    // diesen Zuschlag nicht mit und zeigte deshalb ein Halbjahr zu wenig an.
+    expect((initById("acc", "exp") as Any).dm).toBe(1);
+    expect(initDurationOf(c, "acc", "exp"))
+      .toBe(Math.max(1, initDur(E) + 1 + repeatMalus(initRuns(c, "exp")).dm));
+    expect(initDurationOf(c, "acc", "exp")).toBeGreaterThan(initDur(E) - 1 + 1);
+  });
+
+  /* Der Zukauf hat als einzige Maßnahme keine Laufzeit: Signing und Closing
+     fallen in dasselbe Halbjahr. maturePeople() läuft im selben Durchlauf
+     nach der Entscheidung, doneQ = quarter reicht also aus.                 */
+  it("der Zukauf schließt im Halbjahr der Entscheidung ab", () => {
+    const snaps = play(4242, 8);
+    const state = snaps[snaps.length - 1];
+    let checked = 0;
+    for (const f of state.funds as Any[]) {
+      for (const c0 of f.holdings as Any[]) {
+        expect(initDurationOf(c0, "acc", "ma"), "Zukauf ohne Laufzeit").toBe(0);
+        const c = { ...c0, initP: null, initA: null };
+        const B = buildInit(createRng(11), c, "acc", "ma", state.market, 9) as Any;
+        if (!B || B.blocked) continue;
+        expect(B.dur, "dur").toBe(0);
+        expect(B.init.doneQ, "doneQ").toBe(9);
+        c.initA = B.init;
+        // Derselbe Periodenschluss, über den auch entschieden wurde
+        maturePeople(createRng(9), c, state.market, 9, false, [], []);
+        expect(c.initA, "Maßnahmenplatz nach dem Periodenschluss").toBeNull();
+        expect((c.addons || []).some((a: Any) => a.q === 9), "Zukauf verbucht").toBe(true);
+        checked++;
+      }
+    }
+    expect(checked, "kein Zukauf geprüft").toBeGreaterThan(0);
   });
 });

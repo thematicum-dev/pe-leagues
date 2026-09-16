@@ -34,7 +34,7 @@ import {
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
-  liquidateHoldings, eur, hj, x, SECLABEL,
+  liquidateHoldings, eur, x, SECLABEL,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -311,9 +311,11 @@ function applyImmediateDecisions(
       `${c.name}: ${B.spec.n} gestartet.`
       + (eqIn > 0.05 ? ` ${eqIn.toFixed(1)} Mio. € davon aus Fondskapital.` : "")
       /* Beim Zukauf gehört dazu, was noch nicht passiert ist: Die
-         Akquisitionsschuld wird beim Abschluss gezogen, nicht jetzt. */
+         Akquisitionsschuld wird beim Closing gezogen, nicht beim Signing.
+         Seit dem 16.09.2026 fallen beide in dasselbe Halbjahr — die Meldung
+         zum Abschluss folgt noch in dieser Periode.                        */
       + (B.spec.ma && B.init.addDebt
-        ? ` Signing — ${eur(B.init.addDebt)} Akquisitionsschuld werden beim Abschluss in ${hj(B.dur)} gezogen.` : ""), f.slot);
+        ? ` Signing — ${eur(B.init.addDebt)} Akquisitionsschuld werden zum Closing gezogen.` : ""), f.slot);
   });
 
   // 6 — Exits anstoßen (Prozess eröffnen oder sofort veräußern)

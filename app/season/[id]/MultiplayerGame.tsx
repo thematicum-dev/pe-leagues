@@ -676,9 +676,13 @@ export default function MultiplayerGame({
        ihr dann gibt: buildInit() setzt doneQ = halfYear + initDurationOf(),
        und das Halbjahr, über das hier entschieden wird, ist quarter + 1.
 
+       Beim Zukauf ist initDurationOf() 0 — Signing und Closing liegen im
+       selben Halbjahr, die Karte zeigt entsprechend ein Halbjahr Restlaufzeit
+       und die Auswertung bucht Schuld und EBITDA noch in dieser Periode.
+
        Vorher stand hier `quarter + initDur(E)` — ein Halbjahr zu früh
-       verankert, ohne den Dauerzuschlag der Maßnahme (beim Add-on +1) und
-       ohne den Wiederholungsmalus. Die Karte meldete direkt nach dem Klick
+       verankert, ohne den Dauerzuschlag der Maßnahme und ohne den
+       Wiederholungsmalus. Die Karte meldete direkt nach dem Klick
        "Ergebnis in 2 Halbjahre" und nach der Abgabe "in 3 Halbjahre", ohne
        dass sich irgendetwas geändert hätte. Dazu fehlten Name und ma-Kennung,
        sodass der Zukauf bis zur Abgabe als namenlose "Maßnahme" dastand. */

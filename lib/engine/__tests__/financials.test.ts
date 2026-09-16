@@ -213,15 +213,23 @@ describe("Finanzberichte einer Beteiligung", () => {
       expect(labels, c.name).toContain("HJ " + halves);
       if (halves >= 3) expect(labels, c.name).toContain("HJ " + (halves - 2));
 
-      // Die LTM-Periode ist immer da: als eigene Spalte, wenn sie quer zu den
-      // Geschäftsjahren liegt, sonst als das jüngste Geschäftsjahr selbst.
+      /* Die LTM-Periode ist da, sobald zwölf Monate Historie vorliegen: als
+         eigene Spalte, wenn sie quer zu den Geschäftsjahren liegt, sonst als
+         das jüngste Geschäftsjahr selbst. Eine Beteiligung mit einem einzigen
+         Halbjahr hat keine zwölf Monate — dort ist die Einstiegsspalte die
+         letzte Zwölfmonatsperiode, und das ist keine Lücke, sondern der
+         Bilanzstichtag des Vollzugs.                                        */
       const ltm = cmp.find((p) => p.label === "LTM");
-      if (halves % 2 === 1) {
+      const chain = st.periods.filter((p) => !p.compare);
+      if (halves === 1) {
+        expect(ltm, c.name).toBeUndefined();
+        expect(chain.length, c.name).toBe(1);
+        expect(chain[0].label, c.name).toBe("Einstieg");
+      } else if (halves % 2 === 1) {
         expect(ltm, c.name).toBeTruthy();
         sawLtmColumn++;
       } else {
         expect(ltm, c.name).toBeUndefined();
-        const chain = st.periods.filter((p) => !p.compare);
         expect(chain[chain.length - 1].sub, c.name).toMatch(/LTM/);
         sawLtmYear++;
       }

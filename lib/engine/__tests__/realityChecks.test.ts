@@ -331,19 +331,28 @@ describe("Zukauf: Signing und Closing", () => {
       entryEbitda: 12, entryDebt: 24, ...over });
   }
 
-  it("lässt den Leverage zwischen Signing und Abschluss unberührt", () => {
+  /* 21 — Signing und Closing fallen in dasselbe Halbjahr. Der Vorgang steht
+     mit doneQ = quarter in der Beteiligung, und maturePeople() läuft im selben
+     Durchlauf danach: Der Leverage der Plattform ist beim Periodenschluss
+     bereits die Pro-forma-Zahl, der Maßnahmenplatz wieder frei.             */
+  it("vollzieht den Zukauf im Halbjahr der Entscheidung", () => {
     const c = platform();
     const lev0 = c.netDebt / ebitdaOf(c);
     const B = buildInit(createRng(3), c, "acc", "ma", market, 2) as Any;
     expect(B.blocked, "Testaufbau: der Zukauf muss finanzierbar sein").toBeUndefined();
+    expect(B.dur, "keine Laufzeit zwischen Signing und Closing").toBe(0);
+    expect(B.init.doneQ, "Closing im Halbjahr der Entscheidung").toBe(2);
     c.netDebt += B.debt;
     c[B.slot] = B.init;
+    // Bis hierhin ist nur der Eigenkapitalanteil geflossen, nicht die Schuld
+    expect(c.netDebt / ebitdaOf(c), "Leverage beim Signing").toBeCloseTo(lev0, 9);
 
-    const rng = createRng(3);
-    for (let q = 2; q < B.init.doneQ; q++) {
-      maturePeople(rng, c, market, q, false, [], []);
-      expect(c.netDebt / ebitdaOf(c), `HJ${q}: Leverage vor dem Abschluss`).toBeCloseTo(lev0, 9);
-    }
+    // Derselbe Periodenschluss, über den auch entschieden wurde
+    maturePeople(createRng(3), c, market, 2, false, [], []);
+    expect(c.initA, "Maßnahmenplatz wieder frei").toBeNull();
+    expect((c.addons as Any[]).length, "Zukauf in der Historie").toBe(1);
+    expect((c.addons as Any[])[0].q, "im Halbjahr der Entscheidung verbucht").toBe(2);
+    expect(c.netDebt / ebitdaOf(c), "Leverage nach dem Closing").toBeGreaterThan(lev0);
   });
 
   it("zieht sie beim Abschluss — auch wenn die Integration scheitert", () => {

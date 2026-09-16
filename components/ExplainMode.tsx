@@ -157,30 +157,28 @@ function Briefing({ dark, setDark, onStart }) {
             der Fälle. Diese drei Spannen hängen fast vollständig am Rating der zuständigen Position.
           </Def>
           <Def t="Der Zukauf ist ein Mandat, kein Angebot">
-            Beim <b>Add-on M&amp;A</b> entscheidest du zwei Zahlen, und beide bewegen dasselbe Risiko.
+            Beim <b>Add-on M&amp;A</b> erteilst du zwei Parameter; beide bestimmen das Scheiterungsrisiko.
             <br /><br />
-            Die <b>Zielgröße</b> in EBITDA, bis zu {pct(ADDON_MAX_SHARE * 100)} des Konzern-EBITDA. Kleine
-            Unternehmen werden strukturell niedriger bewertet als große — genau daraus entsteht die
-            Multiple-Arbitrage eines Buy-&amp;-Build. Wer groß zukauft, zahlt fast sein eigenes Multiple und
-            verdient an der Arbitrage nichts mehr; und er kauft sich eine Fusion, für die dasselbe
-            Managementteam zuständig ist wie vorher.
+            Die <b>Zielgröße</b> in EBITDA, bis zu {pct(ADDON_MAX_SHARE * 100)} des Konzern-EBITDA. Kleinere
+            Einheiten werden strukturell niedriger bewertet — das ist die Multiple-Arbitrage eines
+            Buy-&amp;-Build. Mit der Zielgröße steigen Einstiegsmultiple und Integrationsaufwand.
             <br /><br />
-            Das <b>Höchstgebot</b> als Multiple. Über die Preisvorstellung des Verkäufers hinaus zahlt
-            niemand, es ist also eine Obergrenze. Nach unten ist es ein Hebel mit Preis: Wer darunter bleibt,
-            bekommt nicht denselben Zukauf billiger, sondern einen anderen. Zu dem Preis ist nur zu haben,
-            was sonst niemand will — Nachfolge ohne Nachfolger, ein Kunde mit der Hälfte des Umsatzes, ein
-            Buch voller Altlasten. Das zeigt sich in der Integration.
+            Das <b>Höchstgebot</b> als Multiple, gedeckelt auf die Preisvorstellung des Verkäufers. Ein
+            Gebot darunter senkt den Kaufpreis und erhöht zugleich die Wahrscheinlichkeit, dass das Mandat
+            nur noch auf Ziele minderer Qualität trifft.
             <br /><br />
-            Auf der Referenz — ein Viertel des Konzern-EBITDA, voller Preis, Plattform auf Branchenniveau —
-            scheitert die Integration in rund {pct(ADDON_FAIL_BASE * 100)} der Fälle. Ein halber Konzern auf
-            einmal oder zwei Turns unter der Preisvorstellung machen daraus ein Drittel bis die Hälfte. Reife
-            Prozesse und ein starkes Team drücken die Zahl, hoher Leverage hebt sie.
+            Im Referenzfall — ein Viertel des Konzern-EBITDA, voller Preis, Plattform auf Branchenniveau —
+            liegt das Scheiterungsrisiko bei rund {pct(ADDON_FAIL_BASE * 100)}. Maximale Zielgröße oder ein
+            Gebot deutlich unter der Preisvorstellung heben es auf ein Drittel bis die Hälfte. Reife
+            Prozesse und ein starkes Team senken es, hoher Leverage hebt es.
             <br /><br />
             <b>Scheitern heißt nicht, dass der Deal platzt.</b> Das Unternehmen gehört dir, die
-            Akquisitionsschuld steht voll, und nur gut ein Drittel des gekauften Umsatzes kommt an — dazu
-            Marge und Assetqualität beschädigt. Gezogen wird die Schuld erst beim <b>Abschluss</b>, zusammen
-            mit dem gekauften EBITDA: Bis dahin bleibt dein Leverage, wo er ist, danach steht er genau auf
-            der Pro-forma-Zahl, gegen die die Banken den Zukauf genehmigt haben.
+            Akquisitionsschuld steht in voller Höhe, der Umsatzbeitrag liegt bei 35 %, Marge und
+            Assetqualität sind beschädigt.
+            <br /><br />
+            <b>Signing und Closing fallen in dasselbe Halbjahr.</b> Akquisitionsschuld und erworbenes
+            EBITDA werden gemeinsam gebucht; der Leverage steht danach auf der Pro-forma-Zahl, gegen die
+            die Finanzierung genehmigt wurde.
           </Def>
           <Def t="Assetqualität">
             Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
@@ -405,15 +403,16 @@ const COACH = [
   { id: "init", when: (o) => anyInit(o.c) && !(o.c.initA && o.c.initA.ma) && o.q >= 1,
     t: "Maßnahme läuft. Zwei Dinge bestimmen den Ausgang: das <b>effektive Rating</b> auf der zuständigen Position — es steuert Erfolgswahrscheinlichkeit, Dauer und Höhe des Gewinns — und die <b>Risikoklasse</b>. Mit einem schwachen Team liefern verlässliche Maßnahmen rund 70 %, Transformationsprogramme wie ERP oder KI 50–60 %, marktabhängige nur 20–37 %. Mit einem A-Team sind es 97 %, 78–88 % und bis 86 %. Die Besetzung entscheidet mehr als die Auswahl. Der <b>Zukauf</b> ist die Ausnahme: sein Risiko kommt aus dem Mandat, das du erteilst." },
   /* Der Zukauf rechnet als einzige Maßnahme nicht über Rating und Risikoklasse,
-     sondern über das Mandat — und er ist die einzige, die zwischen Signing und
-     Closing steht. Beides braucht seinen eigenen Hinweis, sonst liest der
-     Spieler die Karte mit den Erwartungen der anderen Maßnahmen.            */
-  { id: "addon", when: (o) => !!(o.c.initA && o.c.initA.ma),
-    t: "<b>Zukauf unterschrieben.</b> Zwei Zahlen aus deinem Mandat haben ihn geformt. Die <b>Zielgröße</b>: Kleine Unternehmen werden strukturell niedriger bewertet — daraus entsteht die Multiple-Arbitrage eines Buy-&-Build —, große sind fast so teuer wie du selbst und obendrein schwerer zu integrieren. Und dein <b>Höchstgebot</b>: Wer unter der Preisvorstellung bleibt, bekommt nicht denselben Zukauf billiger, sondern einen anderen — zu dem Preis ist nur zu haben, was sonst niemand will. Beides steckt im Scheiterungsrisiko auf der Karte.<br><br>Bis zum Abschluss passiert in der Bilanz <b>nichts</b>: Die Akquisitionsschuld wird beim Closing gezogen, zusammen mit dem gekauften EBITDA. Dein Leverage springt erst dann — genau auf die Zahl, die als <i>Leverage nach Abschluss</i> auf der Karte stand." },
+     sondern über das Mandat. Der Hinweis hängt seit dem 16.09.2026 an der
+     Zukaufshistorie, nicht mehr am belegten Maßnahmenplatz: Signing und
+     Closing fallen in dasselbe Halbjahr, der Platz ist beim Periodenschluss
+     also längst wieder frei.                                                */
+  { id: "addon", when: (o) => (o.c.addons || []).some((a) => a.q === o.q),
+    t: "<b>Zukauf vollzogen.</b> Das Ergebnis folgt aus deinem Mandat: Die <b>Zielgröße</b> bestimmt die Multiple-Arbitrage — kleinere Einheiten werden strukturell niedriger bewertet, große kosten nahezu das Plattformmultiple und binden mehr Integrationskapazität. Das <b>Höchstgebot</b> senkt den Kaufpreis und erhöht zugleich das Scheiterungsrisiko. Beides steht als Prozentsatz auf der Karte.<br><br>Signing und Closing liegen im selben Halbjahr: Akquisitionsschuld und erworbenes EBITDA sind gemeinsam gebucht, der Leverage steht auf der Pro-forma-Zahl." },
   { id: "addonok", when: (o) => o.news.some((n) => n.t.includes("Add-on abgeschlossen")),
-    t: "Der Zukauf ist integriert: Umsatz und EBITDA sind drin, die Schuld steht, der Reifegrad ist eine Stufe höher. Prüfe jetzt den <b>Leverage</b> — er ist auf die Pro-forma-Zahl gesprungen. Buy-&-Build funktioniert, weil du klein einkaufst und groß bewertet wirst; es kippt, wenn die Schuld schneller wächst als das integrierte Ergebnis." },
+    t: "Der Zukauf ist integriert: Umsatz und EBITDA sind gebucht, die Akquisitionsschuld steht, der Reifegrad ist eine Stufe höher. Prüfe den <b>Leverage</b> gegen den Covenant. Buy-&-Build trägt, solange das integrierte Ergebnis schneller wächst als die Akquisitionsschuld." },
   { id: "addonfail", when: (o) => o.news.some((n) => n.t.includes("Integration des Add-ons gescheitert")),
-    t: "Die Integration ist gescheitert — und das ist <b>kein geplatzter Deal</b>. Das Unternehmen gehört dir, die Akquisitionsschuld steht voll, aber nur gut ein Drittel des gekauften Umsatzes kommt an, dazu Marge und Assetqualität beschädigt. Genau so sieht Buy-&-Build in der Praxis aus, wenn es schiefgeht: nicht als Absage, sondern als Bilanz, die den Zukauf trägt, ohne ihn zu verdienen." },
+    t: "Die Integration ist gescheitert — <b>kein geplatzter Deal</b>. Das Unternehmen gehört dir, die Akquisitionsschuld steht in voller Höhe, der Umsatzbeitrag liegt bei 35 %, Marge und Assetqualität sind beschädigt. Der typische Weg in den Covenant Breach." },
   { id: "jcurve", when: (o) => o.q >= 2 && o.c.margin < (o.c.hist[0] ? o.c.hist[0].mg : 0) && o.c.plat > 1.4,
     t: "Die Marge liegt unter dem Einstiegsniveau, obwohl der Reifegrad steigt. Das ist die <b>J-Kurve</b>: Umsetzungskosten fallen sofort an, der Ertrag kommt mit Verzögerung. Der Anlauf kostet in der ersten zusammenhängenden Periode voll, danach nur noch halb — durchlaufen zu lassen ist billiger als stoppen und neu starten. Wer hier abbricht, hat nur bezahlt." },
   { id: "relfail", when: (o) => o.news.some((n) => n.e === "➖"),
@@ -557,7 +556,7 @@ function GuidedRun({ dark, setDark, back }) {
     const { spec, chk, p } = B;
     const msg = spec.ma
       ? ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert.`
-        + ` Die Akquisitionsschuld wird beim Abschluss gezogen, Leverage dann ${x(chk.lev)}.`
+        + ` Closing zum Halbjahresende, Leverage dann ${x(chk.lev)}.`
         + ` Scheiterungsrisiko ${Math.round(chk.fail * 100)} %.`
       : ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, Ergebnis in ${hj(B.dur + 1)}.`
         + (spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : "");

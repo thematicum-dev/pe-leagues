@@ -488,6 +488,40 @@ Nicht geändert: Es gibt weiterhin keinen Ausfall des Deals selbst. Scheitert ei
 Zukauf, ist er vollzogen und schlecht integriert — 35 % des Umsatzes, volle
 Akquisitionsschuld, Marge und Qualität beschädigt.
 
+### 21 — Wie lange dauert ein Zukauf?
+
+**Frage.** Ein Add-on lief wie jede andere Maßnahme über mehrere Halbjahre. Ist
+das die richtige Laufzeit für eine Transaktion?
+
+**Befund.** Nein. `initDurationOf()` gab dem Zukauf `initDur(E) + 1` Halbjahre —
+die Dauer eines Umsetzungsprogramms plus einen Zuschlag. Gemessen über 28
+Zukäufe in acht Partien waren das im Schnitt **4,6 Halbjahre**, also gut zwei
+Jahre zwischen Signing und Closing.
+
+Das ist aus zwei Gründen falsch. Erstens läuft eine Akquisitionsfinanzierung in
+der Praxis über Wochen bis wenige Monate, nicht über zwei Jahre; die
+Integration dauert danach, aber sie ist kein Vollzugsvorbehalt. Zweitens
+blockierte der Vorgang die ganze Zeit den Growth-Maßnahmenplatz der Beteiligung
+— die Operating-Kapazität, die im Spiel die knappe Ressource ist. Über eine
+volle Partie kamen in derselben Fixture nur **1,9 Zukäufe je Partie** zustande.
+Buy-&-Build war damit als Strategie nicht spielbar.
+
+**Konsequenz.** Geändert. `initDurationOf()` gibt beim Zukauf 0: `buildInit()`
+setzt `doneQ = quarter`, und `maturePeople()` läuft im selben Durchlauf nach der
+Entscheidung. Signing und Closing fallen in dasselbe Halbjahr, Akquisitionsschuld
+und erworbenes EBITDA werden gemeinsam gebucht (Punkt 19 bleibt damit erhalten,
+das Integrationsfenster ist nur noch null Halbjahre lang). Die Margenbelastung
+aus der Integration (`drag`) trägt die Periode des Erwerbs.
+
+Dieselbe Fixture danach, gleiche Startwerte: **3,5 Zukäufe je Partie** statt 1,9.
+Die Erfolgsquote sinkt leicht von 87 % auf 82 % — nicht weil ein einzelner
+Zukauf riskanter geworden wäre, sondern weil mehr Auflagen zustande kommen und
+der Wiederholungsmalus greift. Halbjahre über Covenant: 6 von 308 vorher, 4 von
+307 danach, also unverändert.
+
+Bereits ausgewertete Halbjahre behalten die alte Laufzeit
+(`EngineCompat.legacyAddonMandate`, siehe `buildInit`).
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -517,6 +551,9 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
    Entscheidungen des Spielers und bestimmen das Scheiterungsrisiko. Im Band der
    alten Logik fällt es von 47 % auf rund 10 %, oberhalb davon steigt es
    deutlich stärker als vorher.
+11. **Zukauf im selben Halbjahr** (21). Signing und Closing fallen zusammen,
+   statt den Growth-Maßnahmenplatz gut zwei Jahre zu binden. Buy-&-Build kommt
+   damit von 1,9 auf 3,5 Zukäufe je Partie.
 
 Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
 bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`

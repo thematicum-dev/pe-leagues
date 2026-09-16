@@ -617,7 +617,7 @@ export default function PeLeagues() {
     const { spec, dur, p, debt, chk } = B;
     const eqIn = spec.ma ? (chk?.equity || 0) : 0;
     const msg = spec.ma
-      ? ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)} — ${eur(chk.debt)} fremdfinanziert${eqIn > 0.05 ? `, ${eur(eqIn)} aus Fondskapital` : ""}. Die Akquisitionsschuld wird beim Abschluss in ${hj(dur)} gezogen, Leverage dann ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
+      ? ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)} — ${eur(chk.debt)} fremdfinanziert${eqIn > 0.05 ? `, ${eur(eqIn)} aus Fondskapital` : ""}. Closing zum Halbjahresende, Leverage dann ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
       : ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
 
     setFunds((F) => F.map((f, i) => {
