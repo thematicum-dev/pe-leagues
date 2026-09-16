@@ -29,7 +29,18 @@ bash .claude/skills/live/teardown.sh   # Harness entfernen, Server beenden
 
 ```
 http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test?hy=8
+http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test/practice
 ```
+
+Zwei Routen, zwei Zwecke:
+
+- **`/live-test`** rendert die Mehrspielerpartie auf einem fertigen Zustand.
+  Gut für Ansichten, Karten und Meldungen — aber ein Halbjahr lässt sich dort
+  nicht abschließen, das macht der Server.
+- **`/live-test/practice`** ist der Übungsmodus. Er rechnet seine Halbjahre im
+  Browser und lässt sich deshalb wirklich durchspielen: kaufen, Maßnahmen
+  starten, zwanzig Halbjahre abschließen, Berichte lesen. Das ist der Weg,
+  wenn eine Wirkung über mehrere Perioden zu prüfen ist.
 
 Parameter der Route:
 
@@ -71,6 +82,22 @@ niemand sie erneut sucht.
    bleibt stehen, und man hält es für einen Fehler in der Komponente. Echte
    Tastatureingabe nehmen (`focus()`, dann `Home` / `End` / `ArrowRight`);
    `drive.mjs` hat das als `press()`.
+
+6. **Ein offener Dialog hält die ganze Partie an, ohne dass etwas nach einem
+   Fehler aussieht.** Der Maßnahmenkatalog schließt über seinen
+   „Abbrechen"-Knopf oder einen Klick auf den Hintergrund — **nicht** über
+   `Escape`. Bleibt er stehen (etwa weil eine Maßnahme gesperrt war und das
+   Skript danach `Escape` drückt), verdeckt er „Halbjahr abschließen", jeder
+   weitere Klick geht ins Leere, und der Mitschnitt zeigt zwölf Halbjahre
+   lang exakt dieselben Zahlen. Das liest sich wie ein stehengebliebenes
+   Spiel und ist keins. Deshalb: vor jedem `Halbjahr abschließen` prüfen,
+   dass kein `.modal` offen ist, und das Halbjahr aus der Kopfzeile
+   (`HALBJAHR n/20`) mitschreiben — dann fällt ein Stillstand sofort auf.
+
+7. **„Mehr Details" ist ein Umschalter.** Wer in einer Schleife immer nur das
+   erste Vorkommen anklickt, klappt dieselbe Karte auf und wieder zu und
+   liest danach überall `null`. Je Karte einmal klicken und vorher prüfen,
+   ob sie schon offen ist.
 
 Harmlos und erwartbar: Google Fonts scheitert am Zertifikat des Proxys
 (es wird die Systemschrift genommen), und der Supabase-Realtime-Socket
