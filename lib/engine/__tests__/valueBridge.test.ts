@@ -214,7 +214,13 @@ describe("Value Bridge des Fonds", () => {
           if (h.length < 2) continue;
           for (const from of [h[h.length - 2], h[0]]) {
             const b = bridgeStep(from, h[h.length - 1])!;
-            expect(b.ebitda + b.mult + b.delev + b.dist + b.rest).toBeCloseTo(b.total, 6);
+            /* Alle sechs Posten, nicht fünf: `inj` gehört dazu, sobald der
+               Fonds Eigenkapital in die Beteiligung gegeben hat (Equity Cure
+               oder Eigenkapitalanteil eines Zukaufs). Die Ansicht führt die
+               Zeile "Kapitalzuführung" genau dafür; ohne sie ging die Summe
+               in jeder Partie auf, in der nie zugeführt wurde — und nur in
+               der. */
+            expect(b.ebitda + b.mult + b.delev + b.dist + b.inj + b.rest).toBeCloseTo(b.total, 6);
             // Der Gesamtwert ist NAV plus alles, was bereits entnommen wurde
             expect(b.total).toBeCloseTo(h[h.length - 1].eq - from.eq, 6);
             checked++;

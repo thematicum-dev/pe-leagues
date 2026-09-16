@@ -13,15 +13,15 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accEff, addonCheck, addonEbitda, addonEquityNeeded,
-  addonMultiple, addonRisk, anyInit, applyProceeds,
+  SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
-  impliedMoM, initById, initDur, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
+  impliedMoM, initById, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
-  fundBridge,
+  fundBridge, tailEndOf, initDurationOf,
   PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
@@ -215,6 +215,25 @@ export const CSS = `
 /* Lange Bezeichnungen (".. vs. Sektor Benchmark") dürfen umbrechen, statt die
    Wertspalte aus der Karte zu drücken. */
 .pel .ledger td.lab.wrap{white-space:normal;width:auto;min-width:0;}
+/* Kontenblätter, in denen rechts ganze Sätze stehen statt Zahlen — der
+   Maßnahmenkatalog, die Zukaufsprüfung, die Kandidatenliste, die Kapitalzuführung.
+
+   Mit der automatischen Spaltenbreite bestimmt dort das längste ununterbrochene
+   Wort die Tabellenbreite: "Integrationswahrscheinlichkeit" links,
+   "Finanzierungsgrenze" rechts. Die Tabelle wurde damit breiter als die Karte,
+   und die Karte (overflow:hidden) schnitt den Rest einfach ab — auf einem
+   390-px-Gerät fehlte rund ein Drittel jeder Zeile.
+
+   Feste Spaltenanteile plus Silbentrennung (das Dokument ist lang="de", die
+   Trennung greift also): Die Tabelle ist immer genau so breit wie die Karte,
+   der Text bricht um, statt zu verschwinden.                                */
+.pel .ledger.fix{table-layout:fixed;}
+.pel .ledger.fix td{overflow-wrap:break-word;hyphens:auto;}
+.pel .ledger.fix td.lab{white-space:normal;width:42%;}
+/* Der Hinweis unter einem Regler ist ein ganzer Satz und gehört nach links —
+   rechtsbündiger Flattersatz liest sich über vier Zeilen schlecht. */
+.pel .ledger.fix td .ctl{display:block;text-align:left;font-family:'Inter',system-ui,sans-serif;
+  font-size:11px;line-height:1.45;color:var(--ink2);font-weight:400;margin-top:2px;}
 /* Gruppentrenner innerhalb einer Kennzahlentabelle: Geschäft / Ertrag /
    Bewertung stehen als Blöcke, ohne dass es Zwischenüberschriften braucht. */
 .pel .ledger tr.sep td{border-top:1px solid var(--rule);padding-top:15px;}
@@ -335,6 +354,16 @@ export const CSS = `
 .pel button.ox{border-color:var(--ox);color:var(--ox);}
 .pel button.ox:hover:not(:disabled){background:var(--ox);color:var(--card);}
 .pel button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+/* Schaltfläche im Fließtext. Eine Rücknahme ("verwerfen") gehört an den Satz,
+   den sie zurücknimmt — als Schaltflächenkasten mitten im Absatz steht sie
+   wie ein Fremdkörper in der Zeile, mit eigenem Rahmen, eigenem Hintergrund
+   und 11 px Innenabstand, die die Zeilenhöhe sprengen. Die Klasse gab es
+   bisher nur im Markup, nicht im Stylesheet: ".lnk" traf keine Regel, und die
+   Schaltfläche fiel auf das volle Aussehen von ".pel button" zurück. */
+.pel .lnk{background:none;border:0;border-radius:0;padding:0;margin:0;
+  font:inherit;color:var(--ink2);text-decoration:underline;text-underline-offset:2px;
+  letter-spacing:inherit;cursor:pointer;}
+.pel .lnk:hover:not(:disabled){background:none;color:var(--ink);border-color:transparent;}
 
 .pel input[type=range]{width:100%;accent-color:#16262A;margin:6px 0 2px;}
 .pel .slrow{display:flex;justify-content:space-between;font-size:12px;color:var(--ink2);}
@@ -408,6 +437,9 @@ export const CSS = `
   background .15s ease,color .15s ease,box-shadow .15s ease,border-color .15s ease,opacity .15s ease;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .pel button:active:not(:disabled){transform:scale(.94);}
+/* Eine Schaltfläche im Fließtext ist Text und soll sich wie Text verhalten —
+   der Stauchimpuls einer Schaltfläche würde die Zeile springen lassen. */
+.pel .lnk:active:not(:disabled){transform:none;}
 .pel .bseat, .pel .lb, .pel .dot{-webkit-tap-highlight-color:transparent;touch-action:manipulation;
   transition:transform .12s cubic-bezier(.34,1.56,.64,1),background .15s ease,border-color .15s ease;}
 .pel .bseat:active:not(:disabled){transform:scale(.95);}
@@ -1062,7 +1094,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               : "von 100"} />
           {/* Weiches Trennzeichen: "MARKTMULTIPLE" ist in Versalien breiter als
               die Kachel und brach sonst mitten im Wort um. */}
-          <StatTile label={"Markt\u00ADmultiple"} value={x(markMultiple(c, market))}
+          <StatTile label={"Markt­multiple"} value={x(markMultiple(c, market))}
             sub={c.equityIn > 0.5 ? `inkl. ${eur(c.equityIn)} Nachschuss` : `Einstieg ${x(c.entryMult)}`} />
         </div>
         <div className="bprofile">
@@ -1116,7 +1148,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           })}
         </div>
         <p className="hint" style={{ padding: "9px 15px 0" }}>
-          Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · ein Halbjahr
+          Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · Shortlist in {hj(2)}
         </p>
       </Section>
 
@@ -1129,13 +1161,38 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             🚀 Growth
           </button>
         </div>
+        {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
+
+            Ein Add-on wird im Halbjahr des Signings vollzogen. Die
+            Akquisitionsschuld wird beim Closing gezogen, zusammen mit dem
+            erworbenen EBITDA (maturePeople). Der Eigenkapitalanteil fließt beim
+            Signing an den Verkäufer; er erhöht die Kostenbasis des Deals, nicht
+            die Verschuldung der Plattform. */}
         <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
-            ? initsOf(c).map((I) => `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.${I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : ""}`).join(" ")
+            ? initsOf(c).map((I) => (I.ma
+                ? `${I.name || "Zukauf"}: Closing zum Ende dieses Halbjahres.`
+                  + ` Akquisitionsschuld und erworbenes EBITDA werden gemeinsam gebucht.`
+                  + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind abgerufen.` : "")
+                : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
+                + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
             : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
             : `Performance und Growth laufen parallel. Maßnahmen lassen sich wiederholen — jede weitere Auflage bringt weniger und dauert länger, und ob überhaupt noch etwas zu holen ist, steht als Eignung im Katalog.${(c.done || []).length ? ` Bisher ${(c.done || []).length} Programme abgeschlossen.` : ""}`}
         </div>
+        {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
+            Karte bisher nicht zu beantworten: `done` zählt nur Kennungen mit,
+            und der Umsatzsprung einer Integration steht ohne Erklärung im
+            Verlauf. Gescheiterte Integrationen stehen mit dabei — sie sind der
+            Grund für die Schuld, die trotzdem in der Bilanz steht. */}
+        {!!(c.addons || []).length && (
+          <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>
+            🏢 {(c.addons || []).length === 1 ? "Ein Zukauf" : `${(c.addons || []).length} Zukäufe`}:{" "}
+            {(c.addons || []).map((a, i) =>
+              `Halbjahr ${a.q} · ${eur(a.eb)} EBITDA zu ${x(a.mult)}${a.ok ? "" : " (Integration gescheitert)"}`
+              + (i < (c.addons || []).length - 1 ? "; " : ".")).join("")}
+          </div>
+        )}
         {!c.ltip && (
           <button className={sp("ltip").trim()} style={{ width: "100%", marginTop: 10 }} onClick={act.ltip}>
             📜 MEP aufsetzen · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
@@ -1192,7 +1249,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               : endPressure(quarter) > 0.05
                 ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
               : PERIODS - quarter <= END_PRESSURE_FROM + 2
-                ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q)}.`
+                ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q + 1)}.`
               : ipoOpen ? "Börsenfenster offen: 40 % platzieren, Rest ein Jahr im Lock-up."
               : "Jede Option zeigt Bewertung und Rückfluss, bevor du freigibst."}
           </div>
@@ -1750,6 +1807,49 @@ export function Stages({ c, compact }) {
 
 
 
+/* ---------- Was der Bestand am Laufzeitende wirklich wert ist ----------
+   TVPI, IRR und Wertung in der Kopfleiste bewerten das Portfolio zu
+   markMultiple(). Dieses Multiple kennt weder den Endfälligkeitsdruck
+   (endPressure steckt nur in dealMultiple) noch den Zwangsabschlag der
+   Tail-End-Verwertung. Wer am Ende nicht verkauft hat, bekommt aber genau
+   den: LIQ_DISC Turns unter Markt, bilaterale Kosten, MEP.
+
+   In Testpartien lagen dazwischen 1,58× TVPI im Halbjahr 19 gegen 1,13× in
+   der Endabrechnung — ein Viertel der Rendite, das die Ansicht bis zum
+   letzten Bildschirm nicht zeigte. Die Zahl in der Leiste war nie falsch
+   (sie ist die Bewertung des Bestands), aber sie war die falsche Zahl für
+   die Entscheidung, die in diesen Halbjahren ansteht.
+
+   Die zweite Zahl steht deshalb daneben, sobald noch genug Zeit für einen
+   Verkaufsprozess bleibt (END_PRESSURE_FROM + PROC_Q Halbjahre vor Schluss).
+   Sie ist keine Prognose, sondern dieselbe Funktion, die am Ende tatsächlich
+   ausgeführt wird (tailEndOf → liquidateHoldings) auf dem heutigen Bestand. */
+export function TailEndPeek({ fund, market, quarter }) {
+  if (!fund || !market || !(fund.holdings || []).length) return null;
+  if (PERIODS - quarter > END_PRESSURE_FROM + PROC_Q) return null;
+  const t = tailEndOf(fund, market, quarter);
+  const live = tvpiOf(fund, market, quarter);
+  const gap = t.tvpi - live;
+  const txt = `Ohne Exit: TVPI ${t.tvpi.toFixed(2).replace(".", ",")}×`
+    + ` (${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2).replace(".", ",")}×)`
+    + ` · IRR ${(t.irr * 100).toFixed(1).replace(".", ",")} %`
+    + ` · Wertung ${t.score.toFixed(2).replace(".", ",")}`;
+  const info = (
+    <Info t="Tail-End-Verwertung">
+      TVPI, IRR und Wertung oben bewerten deinen Bestand zum Marktmultiple. Am Laufzeitende kauft dort
+      niemand mehr: Was im Halbjahr {PERIODS} noch im Portfolio steht, wird zwangsweise verwertet —
+      <b> {x(LIQ_DISC)} unter dem Marktmultiple</b>, dazu Transaktionskosten und Managementbeteiligung.
+      <br /><br />
+      Diese Zeile rechnet genau das auf dem heutigen Bestand: Was bliebe, wenn du ab jetzt nichts mehr
+      verkaufst. Die Differenz ist der Preis des Liegenlassens — und sie wächst, je näher das Ende
+      rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q)}.
+    </Info>
+  );
+  /* Als eine Zeile, nicht als Warnkasten: Sie steht direkt unter TVPI und IRR
+     und soll die beiden einordnen, nicht sie übertönen. */
+  return <span className="ox">⏳ {txt} {info}</span>;
+}
+
 /* Value Bridge des Fonds — dieselbe Tabellenform wie bei einer Beteiligung
    (PerformanceCompare): zwei Spalten, letztes Halbjahr und seit Auflage, und
    eine Überleitung, die auf der Kennzahl endet, nach der gewertet wird.
@@ -2197,7 +2297,7 @@ export const GLOSSARY = {
       {" "}<b>Halbjahr {PERIODS - END_PRESSURE_FROM + 1}</b> — preisen Käufer ein, dass der Fonds auf sein
       Laufzeitende zuläuft. Der erzielbare Multiple sinkt mit jedem weiteren Halbjahr, bis zu
       {" "}<b>{x(LIQ_DISC)}</b> am Schluss, unabhängig davon, wie gut das Unternehmen läuft. Ein
-      Verkaufsprozess braucht selbst {hj(PROC_Q)}; wer zu spät startet, verkauft in den Abschlag hinein.</>,
+      Verkaufsprozess braucht selbst {hj(PROC_Q + 1)}; wer zu spät startet, verkauft in den Abschlag hinein.</>,
   },
   impliedMoM: {
     t: `Implied MoM ${LBO_YEARS}Y`,
@@ -2329,18 +2429,38 @@ export function FundProfileEditor({ attrs, setAttrs, points = FUND_PROFILE_POINT
   );
 }
 
+/* Sektormultiples über die Laufzeit.
+
+   Zwei Dinge, die hier bis zum 15.09.2026 kollidierten und beide behoben sind:
+
+   - Die Bildunterschrift stand als <text> auf y=90, die Jahresbeschriftung der
+     x-Achse auf y=89. Auf jedem Gerät lagen "J1 J2 J3 …" und "EV/EBITDA je
+     Sektor über die Fondslaufzeit" übereinander. Die Unterschrift steht jetzt
+     als normaler Text unter der Grafik: kein Überlappen, und auf schmalen
+     Geräten bricht sie um, statt in 7,5-px-Schrift zu schrumpfen.
+   - Die Endwerte der fünf Linien standen auf x=289 bei einer Zeichenfläche
+     von 300 — vier Zeichen Monospace brauchen rund 19. "13,5×" wurde zu
+     "13." abgeschnitten. Die Linien enden deshalb jetzt früher (R), und der
+     Rand rechts trägt die Beschriftung vollständig.                         */
 export function MarketChart({ hist }) {
   if (!hist || hist.length < 2) {
     return <div className="quiet">Die Zeitreihe entsteht ab dem zweiten Halbjahr.</div>;
   }
-  const W = 300, T = 8, B = 78, L = 2, R = 286;
+  const W = 300, T = 8, B = 78, L = 2, R = 274, H = 93;
   const all = hist.flatMap((h) => SECNAMES.map((s) => h[s]));
   const hi = Math.max(...all) * 1.04, lo = Math.min(...all) * 0.96;
   const px = (i) => L + (i / (hist.length - 1)) * (R - L);
   const py = (v) => B - ((v - lo) / (hi - lo || 1)) * (B - T);
+  /* Endwerte können sich auf wenige Pixel nähern und lägen dann übereinander.
+     Von oben nach unten durchgehen und jede Beschriftung mindestens 7,5 px
+     unter die vorige setzen — dieselbe Reihenfolge wie die Linien selbst. */
+  const ends = SECNAMES.map((s) => ({ s, v: hist[hist.length - 1][s], y: py(hist[hist.length - 1][s]) }))
+    .sort((a, b) => a.y - b.y);
+  ends.forEach((e, i) => { if (i > 0) e.y = Math.max(e.y, ends[i - 1].y + 7.5); });
+  const labelY = Object.fromEntries(ends.map((e) => [e.s, e.y]));
   return (
     <div className="pad" style={{ paddingTop: 10, paddingBottom: 4 }}>
-      <svg viewBox={`0 0 ${W} 92`} style={{ width: "100%", display: "block" }} role="img"
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }} role="img"
         aria-label="Verlauf der Sektormultiples">
         {hist.map((h, i) => (i > 0 && i % 2 === 0 ?
           <g key={i}>
@@ -2353,14 +2473,14 @@ export function MarketChart({ hist }) {
             <path d={hist.map((h, i) => `${i ? "L" : "M"}${px(i).toFixed(1)},${py(h[s]).toFixed(1)}`).join(" ")}
               fill="none" stroke={SECCOLOR[s]} strokeWidth="1.6" strokeLinejoin="round" />
             <circle cx={px(hist.length - 1)} cy={py(hist[hist.length - 1][s])} r="2.4" fill={SECCOLOR[s]} />
-            <text x={R + 3} y={py(hist[hist.length - 1][s]) + 3} fontSize="7.5" fill={SECCOLOR[s]}
-              fontFamily="JetBrains Mono">{hist[hist.length - 1][s].toFixed(1)}</text>
+            <text x={R + 4} y={labelY[s] + 2.6} fontSize="7.5" fill={SECCOLOR[s]}
+              fontFamily="JetBrains Mono">{hist[hist.length - 1][s].toFixed(1).replace(".", ",")}</text>
           </g>
         ))}
-        <text x={L} y={90} fontSize="7.5" style={{ fill: "var(--ink2)" }} fontFamily="Inter">
-          EV/EBITDA je Sektor über die Fondslaufzeit
-        </text>
       </svg>
+      <p className="hint" style={{ padding: "6px 0 0", margin: 0 }}>
+        EV/EBITDA je Sektor über die Fondslaufzeit
+      </p>
     </div>
   );
 }
@@ -2457,7 +2577,7 @@ export function EquityInjection({ c, investable, confirm, close }) {
               onChange={(e) => setAmt(Number(e.target.value))}
               style={{ width: "100%", accentColor: "var(--gold)" }} />
           </div>
-          <table className="ledger"><tbody>
+          <table className="ledger fix"><tbody>
             <tr><td className="lab">Betrag</td><td>{eur(amt)}</td></tr>
             <tr><td className="lab">Investierbar</td><td>{eur(investable)}</td></tr>
             <tr><td className="lab">Leverage danach</td>
@@ -2484,19 +2604,68 @@ export function EquityInjection({ c, investable, confirm, close }) {
   );
 }
 
+/* Die Begründung des Scheiterungsrisikos in ganzen Prozentpunkten — so
+   gerundet, dass Referenzfall plus Posten genau die angezeigte Zahl ergeben.
+
+   Ohne diese Korrektur rundet jeder Posten für sich, und die Zeile rechnet
+   gegen sich selbst: "Referenzfall 10 % · hebt +1 · senkt −7" neben einer
+   angezeigten 5 %. Wer nachrechnet, kommt auf 4 und traut der Karte nicht
+   mehr. Die Differenz landet auf dem Posten mit dem größten Rundungsrest —
+   dem, bei dem sie am wenigsten verfälscht.
+
+   Läuft das Risiko in seine Grenze (clamp in addonFailRisk), geht die Rechnung
+   ehrlicherweise nicht auf. Dann sagt die Zeile das, statt einen Posten
+   zurechtzubiegen.                                                          */
+export function failBreakdown(chk) {
+  const roh = (chk.failParts || []).filter((t) => Math.abs(t.v) >= 0.005);
+  const ziel = Math.round(chk.fail * 100) - Math.round(ADDON_FAIL_BASE * 100);
+  const teile = roh
+    .map((t) => ({ t: t.t, pp: Math.round(t.v * 100), rest: Math.abs(t.v * 100 - Math.round(t.v * 100)) }))
+    .sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
+  const summe = teile.reduce((s, t) => s + t.pp, 0);
+  const roh_summe = ADDON_FAIL_BASE + (chk.failParts || []).reduce((s, t) => s + t.v, 0);
+  const geklemmt = Math.abs(roh_summe - chk.fail) > 0.005 ? (roh_summe < chk.fail ? "unten" : "oben") : null;
+  if (!geklemmt && summe !== ziel && teile.length) {
+    const k = teile.reduce((a, b) => (b.rest > a.rest ? b : a));
+    k.pp += ziel - summe;
+  }
+  return { teile: teile.filter((t) => t.pp !== 0), geklemmt };
+}
+
 export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   const eb = ebitdaOf(c);
   const lvl = dim === "plat" ? c.plat : c.acc;
+  /* Das Zukaufsmandat. Voreingestellt ist der Referenzfall, auf den das
+     Scheiterungsrisiko kalibriert ist: Zielgröße ADDON_REF_SHARE des
+     Plattform-EBITDA, voller Preis. Jede Abweichung davon ist eine bewusste
+     Entscheidung des Spielers und bewegt das Risiko sichtbar mit.          */
+  const maxEb = addonMaxEb(c);
+  const ref = addonMandate(c, market);
+  const [addEb, setAddEb] = useState(() => ref.addEb);
+  // Gebotsspanne: von drei Turns unter der Preisvorstellung bis zu ihr selbst.
+  // Darüber zahlt niemand — mehr zu bieten kauft keinen sichereren Zukauf.
+  const ask = addonAsk(c, market, addEb);
+  const [bid, setBid] = useState<number | null>(null);
+  const mult = Math.min(bid ?? ask, ask);
   /* Eigenkapitalanteil an einem Zukauf. Voreingestellt ist genau der Betrag,
      den die Akquisitionsfinanzierung nicht mehr trägt — ein Zukauf, der nur an
      der Finanzierungsgrenze scheitert, ist damit ohne weiteres Zutun
      darstellbar, und der Spieler sieht sofort, was er dafür geben muss.
      Gedeckelt am investierbaren Kapital: Was der Fonds nicht hat, kann er
      nicht geben.                                                            */
-  const eqCap = Math.max(0, Math.min(investable, addonEbitda(c) * addonMultiple(c, market)));
-  const [addonEq, setAddonEq] = useState(() => Math.min(eqCap, addonEquityNeeded(c, market)));
+  const eqCap = Math.max(0, Math.min(investable, addEb * mult));
+  const [addonEqRaw, setAddonEq] = useState<number | null>(null);
+  /* Was der Zukauf an Eigenkapital braucht, damit er die Finanzierungsgrenze
+     hält — und was davon der Fonds überhaupt aufbringen kann. Die beiden gehen
+     auseinander, und genau das muss die Karte sagen: Bis zum 16.09.2026 stand
+     der Regler in diesem Fall stumm am Anschlag, der Zukauf blieb gesperrt,
+     und nichts erklärte, warum das volle investierbare Kapital nicht reicht. */
+  const eqNeeded = addonEquityNeeded(c, market, { addEb, mult });
+  const eqShort = Math.max(0, eqNeeded - eqCap);
+  const addonEq = Math.min(eqCap, addonEqRaw ?? eqNeeded);
+  const mandate = { addEb, mult, equity: addonEq };
   return (
     <div className="modal" onClick={close}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -2510,12 +2679,39 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           const rep = repeatMalus(runs);
           const maxed = runs >= REPEAT_MAX;
           const locked = (k.req && !k.req(c)) || maxed;
-          const dur = Math.max(1, initDur(E) + (k.dm || 0) + rep.dm);
-          const p = clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm + (k.ma ? addonRisk(c) : 0), 0.1, 0.97);
+          // Eine Zahl, ein Ort: dieselbe Zeile, die buildInit() beim Start rechnet
+          const dur = initDurationOf(c, dim, k.id);
+          const chk = k.ma ? addonCheck(c, market, { ...mandate, runs }) : null;
+          const risk = k.ma ? failBreakdown(chk) : null;
+          // Dieselbe Zeile, die buildInit() beim Start rechnet
+          const p = k.ma ? clamp(1 - chk.fail, 0.05, 0.98)
+            : clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm, 0.1, 0.97);
           const FI = fitLabel(k.id, c);
           const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
-          const chk = addonCheck(c, market, k.ma ? addonEq : 0);
           const noFin = k.ma && !chk.ok;
+          /* Wie viel des Reifegradgewinns die Beteiligung überhaupt tragen kann.
+             Growth wirkt nur bis min(People + 1, Performance + 1) — accEff();
+             was darüber liegt, ist Überdehnung und kostet je Punkt 1,4 pp
+             Zielmarge und 1,8 Qualitätspunkte je Halbjahr.
+
+             Bis zum 16.09.2026 stand auf der Karte nur der volle Gewinn. Ein
+             gelungenes Expansionsprogramm auf einer Plattform mit Performance
+             auf Benchmark lieferte +2,5 Reifegrad, wirksam war davon 1,0, und
+             der Rest zog die Beteiligung zehn Halbjahre lang nach unten: in
+             der Messung Assetqualität 60 -> 43 statt 60 -> 76 bei parallelem
+             Performance-Ausbau. Die Warnung stand erst hinterher auf der
+             Beteiligungskarte — eine Entscheidungsgrundlage, die man erst nach
+             der Entscheidung bekommt, ist keine.
+
+             Performance kennt diese Grenze nicht: c.plat geht direkt in
+             Zielmarge, Investitions- und Kapitalbindungsquote.              */
+          const grenze = accCap(c);
+          const roh = k.ma ? 1.0 : g;                 // Zukauf: fester Reifegradgewinn
+          const nachher = Math.min(Math.min(5, c.acc + roh), grenze);
+          const wirksam = Math.max(0, nachher - accEff(c));
+          const ueberhang = Math.max(0, Math.min(5, c.acc + roh) - grenze);
+          const bindet = peopleLvl(c) + 1 <= c.plat + 1
+            ? `People ${peopleLvl(c).toFixed(1)}` : `Performance ${c.plat.toFixed(1)}`;
           return (
             <div className={"card" + (noFin ? " lm" : "")} key={k.id} style={{ marginTop: 10, opacity: locked ? 0.45 : 1 }}>
               <div className="pad" style={{ paddingTop: 12, paddingBottom: 4 }}>
@@ -2527,46 +2723,140 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                 </div>
                 <div style={{ fontSize: 12, color: "var(--ink2)", marginTop: 5, lineHeight: 1.45 }}>{k.d}</div>
               </div>
-              <table className="ledger"><tbody>
+              <table className="ledger fix"><tbody>
                 {k.ma ? (<>
-                  <tr><td className="lab">EBITDA Add-on-Target</td><td>{eur(chk.addEb)} · {Math.round((c.addonSize ?? 0.275) * 100)} % der Plattform</td></tr>
-                  <tr><td className="lab">Einstandsmultiple Add-on</td><td>{x(chk.mult)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>= (Branche {x(market[c.sector])} + Einstieg {x(c.entryMult)}) / 2 − 2,0</span></td></tr>
+                  {/* Das Mandat: zwei Regler, aus denen alles andere folgt.
+                      Größe und Gebot bewegen Preis, Finanzierung und Risiko in
+                      derselben Tabelle mit — der Spieler sieht den Trade-off,
+                      statt ihn erklärt zu bekommen. */}
+                  <tr><td className="lab">Zielgröße (EBITDA)</td>
+                    <td>
+                      <b>{eur(addEb)}</b> · {Math.round(chk.share * 100)} % der Plattform
+                      <input type="range" min={Math.round(eb * 0.05 * 10)} max={Math.round(maxEb * 10)} step={1}
+                        value={Math.round(addEb * 10)}
+                        onChange={(e) => { setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
+                        style={{ width: "100%", accentColor: "var(--gold)" }} />
+                      <span className="ctl">
+                        Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % des Plattform-EBITDA).
+                        Höhere Zielgröße bedeutet höheres Einstiegsmultiple und höheres Scheiterungsrisiko.
+                      </span>
+                    </td></tr>
+                  <tr><td className="lab">Höchstgebot</td>
+                    <td>
+                      <b>{x(mult)}</b> <span style={{ fontSize: 11, color: chk.gap > 0.05 ? "var(--ox)" : "var(--ink2)" }}>
+                        {chk.gap > 0.05 ? `${x(chk.gap)} unter der Preisvorstellung` : "voller Preis"}</span>
+                      <input type="range" min={Math.round((ask - 3) * 10)} max={Math.round(ask * 10)} step={1}
+                        value={Math.round(mult * 10)}
+                        onChange={(e) => { setBid(Number(e.target.value) / 10); setAddonEq(null); }}
+                        style={{ width: "100%", accentColor: "var(--gold)" }} />
+                      <span className="ctl">
+                        Preisvorstellung {x(ask)} — Plattformmultiple {x(markMultiple(c, market))} abzüglich
+                        Größenabschlag{(c.addonComp || 0) > 0 ? ", zuzüglich Aufschlag für den Wettbewerb im Bieterverfahren" : ""}.
+                        Ein Gebot darunter senkt den Kaufpreis und erhöht das Scheiterungsrisiko.
+                      </span>
+                    </td></tr>
                   <tr><td className="lab">Kaufpreis</td><td>{eur(chk.price)}
                     <span style={{ fontSize: 11, color: "var(--ink2)" }}>
                       {" "}— {eur(chk.debt)} fremdfinanziert{chk.equity > 0.05 ? `, ${eur(chk.equity)} Fondskapital` : ""}</span></td></tr>
-                  {eqCap > 0.5 && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
+                  {(eqCap > 0.5 || eqShort > 0.05) && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
                     <td>
                       <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
                         onChange={(e) => setAddonEq(Number(e.target.value))}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
-                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                      <span className="ctl">
                         {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
                         erhöht die Kostenbasis des Deals um denselben Betrag.
+                        {eqShort > 0.05 && (
+                          <span style={{ color: "var(--ox)" }}>
+                            {" "}Das Mandat erfordert {eur(eqNeeded)}; es fehlen {eur(eqShort)}.
+                            Zielgröße oder Gebot reduzieren.
+                          </span>
+                        )}
                       </span>
                     </td></tr>}
                   <tr><td className="lab">Leverage heute</td><td>{x(c.netDebt / Math.max(0.5, eb))}</td></tr>
-                  <tr><td className="lab">Pro forma nach Add-on</td>
+                  <tr><td className="lab">Leverage nach Closing</td>
                     <td style={{ color: chk.ok ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
                       {x(chk.lev)} gegen Finanzierungsgrenze {x(chk.limit)}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>
                         {" "}(Covenant {x(c.covLimit ?? COV_DEFAULT)} abzüglich {ADDON_HEADROOM.toFixed(1).replace(".", ",")} Puffer)</span></td></tr>
-                  <tr><td className="lab">Integrationswahrscheinlichkeit</td>
-                    <td style={{ color: p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %
-                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
-                        {" "}— {c.plat < 2.5 ? "Prozesse noch unreif" : c.plat >= 3.5 ? "reife Prozesse tragen die Integration" : "Prozessreife im Mittelfeld"}
-                        {c.netDebt / Math.max(0.5, eb) > 3.5 ? ", hohe Verschuldung" : ""}
-                        {(c.addonSize ?? 0.275) > 0.28 ? ", großer Bissen" : ""}
+                  {/* Die Begründung kommt aus derselben Liste, die das Risiko
+                      aufaddiert (addonFailParts) — und trennt, was die Zahl hebt,
+                      von dem, was sie senkt. Vorher stand beides in einer
+                      kommaseparierten Aufzählung: "kleiner Bissen, Prozesse noch
+                      unreif" las sich, als zöge beides in dieselbe Richtung. */}
+                  <tr><td className="lab">Scheiterungs­risiko</td>
+                    <td style={{ color: chk.fail <= 0.15 ? "var(--teal)" : chk.fail <= 0.30 ? "var(--ink)" : "var(--ox)", fontWeight: 600 }}>
+                      {Math.round(chk.fail * 100)} %
+                      <span className="ctl">
+                        {risk.geklemmt
+                          ? `${risk.geklemmt === "unten" ? "Untergrenze" : "Obergrenze"} ${Math.round(chk.fail * 100)} %`
+                            + ` — rechnerisch wäre es ${risk.geklemmt === "unten" ? "weniger" : "mehr"}`
+                          : `Referenzfall ${Math.round(ADDON_FAIL_BASE * 100)} %`}
+                        {[{ w: "hebt", hit: (v) => v > 0, col: "var(--ox)" },
+                          { w: "senkt", hit: (v) => v < 0, col: "var(--teal)" }].map((g) => {
+                          const teile = risk.teile.filter((t) => g.hit(t.pp));
+                          if (!teile.length) return null;
+                          return (
+                            <span key={g.w}>
+                              {" · "}{g.w}:{" "}
+                              <span style={{ color: g.col }}>
+                                {teile.map((t) => `${t.t} ${t.pp > 0 ? "+" : "−"}${Math.abs(t.pp)} pp`).join(", ")}
+                              </span>
+                            </span>
+                          );
+                        })}
                       </span></td></tr>
-                  <tr><td className="lab">Bei gescheiterter Integration</td>
-                    <td style={{ color: "var(--ox)" }}>nur 35 % des Umsatzes, Schuld steht voll</td></tr>
-                  <tr><td className="lab">Bei Erfolg</td><td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.benchMargin ?? 12) * 100 / c.revenue * 100)} % · Reifegrad +1,0</td></tr>
+                  <tr><td className="lab">Bei Scheitern</td>
+                    <td style={{ color: "var(--ox)" }}>Umsatzbeitrag 35 %, Akquisitionsschuld in voller Höhe</td></tr>
+                  {/* Der Zukauf hebt den Growth-Reifegrad um feste 1,0 und
+                      unterliegt damit derselben Wirkgrenze wie jedes andere
+                      Wachstumsprogramm. Der Hinweis steht nur da, wenn er
+                      tatsächlich greift — sonst wäre es eine Zeile ohne
+                      Entscheidung dahinter. */}
+                  <tr><td className="lab">Bei Erfolg</td>
+                    <td>Umsatz +{Math.round(chk.addEb / Math.max(4, c.margin) * 100 / c.revenue * 100)} % · Reifegrad +1,0
+                      {ueberhang > 0.05 && (
+                        <span className="ctl" style={{ color: "var(--ox)" }}>
+                          Davon wirksam +{wirksam.toFixed(2)} — Wirkgrenze {grenze.toFixed(1)} = {bindet} + 1.
+                          Der Überhang kostet {(ueberhang * 1.4).toFixed(1).replace(".", ",")} pp Marge
+                          und {(ueberhang * 1.8).toFixed(1).replace(".", ",")} Qualitätspunkte je Halbjahr.
+                        </span>
+                      )}</td></tr>
+                  {/* Seit dem 16.09.2026 fallen Signing und Closing in dasselbe
+                      Halbjahr (initDurationOf gibt beim Zukauf 0). Die Karte
+                      sagt es, weil jede andere Maßnahme eine Laufzeit hat. */}
+                  <tr><td className="lab">Closing</td>
+                    <td>zum Ende dieses Halbjahres
+                      <span style={{ fontSize: 11, color: "var(--ink2)" }}>
+                        {" "}— Akquisitionsschuld und erworbenes EBITDA werden gemeinsam gebucht
+                        {chk.equity > 0.05 ? `; ${eur(chk.equity)} Fondskapital fließen beim Signing` : ""}
+                      </span></td></tr>
                 </>) : (<>
                   <tr><td className="lab">Eignung für diesen Fall</td>
                     <td style={{ color: FI.color, fontWeight: 600 }}>{FI.t}
                       <span style={{ fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}> — {FI.why}</span></td></tr>
-                  <tr><td className="lab">Erfolgswahrscheinlichkeit</td><td style={{ color: p >= 0.7 ? "var(--teal)" : p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %</td></tr>
-                  <tr><td className="lab">Dauer</td><td>{hj(dur)}</td></tr>
+                  <tr><td className="lab">Erfolgs­wahrscheinlichkeit</td><td style={{ color: p >= 0.7 ? "var(--teal)" : p >= 0.5 ? "var(--ink)" : "var(--ox)" }}>{Math.round(p * 100)} %</td></tr>
+                  {/* dur ist die Laufzeit der Maßnahme ab dem Halbjahr, in dem sie
+                      startet; das Ergebnis liegt am Ende des Halbjahres dur danach vor.
+                      Der Spieler wartet also dur + 1 Halbjahre — und genau diese Zahl
+                      zählt die Karte danach herunter. Vorher stand hier dur, und die
+                      Karte sprang beim ersten Halbjahreswechsel eine Zahl nach oben. */}
+                  <tr><td className="lab">Ergebnis in</td><td>{hj(dur + 1)}</td></tr>
                   <tr><td className="lab">Reifegradgewinn</td><td>+{g.toFixed(2)}{k.spread ? ` (streut ${k.spread[0]}–${k.spread[1]}×)` : ""}</td></tr>
+                  {dim === "acc" && <tr><td className="lab">Davon wirksam</td>
+                    <td style={{ color: ueberhang > 0.05 ? "var(--ox)" : "var(--teal)", fontWeight: 600 }}>
+                      +{wirksam.toFixed(2)}
+                      <span className="ctl">
+                        Wirkgrenze {grenze.toFixed(1)} = {bindet} + 1.
+                        {ueberhang > 0.05
+                          ? ` Der Überhang von ${ueberhang.toFixed(2)} bleibt ohne Wirkung und belastet`
+                            + ` Zielmarge und Assetqualität, solange er besteht:`
+                            + ` ${(ueberhang * 1.4).toFixed(1).replace(".", ",")} pp Marge und`
+                            + ` ${(ueberhang * 1.8).toFixed(1).replace(".", ",")} Qualitätspunkte je Halbjahr.`
+                            + ` Ein Performance-Programm hebt die Grenze mit.`
+                          : " Trägt den vollen Zuwachs."}
+                      </span></td></tr>}
                   <tr><td className="lab">Bei Zielverfehlung</td>
                     <td style={{ color: k.cls === "rel" ? "var(--ink)" : "var(--ox)" }}>
                       {k.cls === "rel"
@@ -2576,7 +2866,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                     <td>{eur(eb * k.oneOff)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>cash, nicht im EBITDA</span></td></tr>}
                   {!!k.drag && <tr><td className="lab">Margenbelastung</td>
                     <td>−{k.drag.toFixed(1).replace(".", ",")} pp während der Laufzeit</td></tr>}
-                  {!!k.cx && <tr><td className="lab">Zusätzlicher Investitionsbedarf</td><td>+{k.cx.toFixed(1).replace(".", ",")} pp vom Umsatz</td></tr>}
+                  {!!k.cx && <tr><td className="lab">Zusätzlicher Investitions­bedarf</td><td>+{k.cx.toFixed(1).replace(".", ",")} pp vom Umsatz</td></tr>}
                   {!!k.nwcFix && <tr><td className="lab">Cash Release</td>
                     <td style={{ color: "var(--teal)" }}>{eur(Math.abs(k.nwcFix) / 100 * c.revenue)}
                       <span style={{ fontSize: 11, color: "var(--ink2)" }}>
@@ -2590,10 +2880,14 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
               </tbody></table>
               <div className="pad" style={{ paddingTop: 10 }}>
                 <button className={"solid" + (noFin ? " ox" : "")} style={{ width: "100%" }}
-                  disabled={locked || noFin} onClick={() => start(k.id, k.ma ? addonEq : 0)}>
+                  disabled={locked || noFin} onClick={() => start(k.id, k.ma ? mandate : {})}>
                   {maxed ? "Ausgereizt — hier ist nichts mehr zu holen" : locked ? k.reqT
-                    : noFin ? (eqCap < addonEquityNeeded(c, market)
-                      ? "Keine Finanzierung — auch das investierbare Kapital reicht nicht"
+                    /* Der geführte Durchlauf kennt keinen Fonds (investable = 0);
+                       dort ist "mehr Fondskapital" kein Weg, sondern eine
+                       Sackgasse. Die Beschriftung nennt deshalb nur, was hier
+                       tatsächlich hilft. */
+                    : noFin ? (eqShort > 0.05
+                      ? `Keine Finanzierung — auch mit allem Fondskapital fehlen ${eur(eqShort)}`
                       : "Keine Finanzierung — mehr Eigenkapital nachschießen")
                     : runs > 0 ? `${runs + 1}. Auflage starten` : "Starten"}
                 </button>
@@ -2634,7 +2928,7 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
                   <span className="mono" style={{ fontSize: 17 }}>Rating {lo.toFixed(1)}–{hi.toFixed(1)}</span>
                 </div>
               </div>
-              <table className="ledger"><tbody>
+              <table className="ledger fix"><tbody>
                 <tr><td className="lab">Signing Bonus</td><td>{eur(signBonusOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Gehalt p.a.</td><td>{eur(payOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Effektives Rating unter diesem CEO</td>
@@ -2698,7 +2992,7 @@ export function Offers({ item, holding, market, neg, decide }) {
                 </div>
                 <div style={{ fontSize: 12, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>{o.note}</div>
               </div>
-              <table className="ledger"><tbody>
+              <table className="ledger fix"><tbody>
                 <tr><td className="lab">Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
                 <tr><td className="lab">Gebotenes Multiple</td><td>{x(impMult)}
                   <span style={{ color: impMult >= mMult ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>

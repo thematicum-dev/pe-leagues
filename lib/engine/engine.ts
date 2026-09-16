@@ -317,12 +317,28 @@ export interface EngineCompat {
      Branchenmarge statt über die Ist-Marge der Plattform herein (siehe
      maturePeople).                                                          */
   legacyAddonBenchMargin?: boolean;
+  /* Bis 15.09.2026 wurde die Akquisitionsschuld eines Zukaufs beim START der
+     Maßnahme gebucht, das zugekaufte EBITDA aber erst beim Abschluss. Die
+     Plattform trug die volle Schuld über das ganze Integrationsfenster gegen
+     ihr altes Ergebnis — siehe buildInit/maturePeople.                      */
+  addonDebtAtStart?: boolean;
+  /* Bis 15.09.2026 war ein Zukauf ein fertiges Angebot: Zielgröße aus
+     `addonSize` der Plattform, Preis aus addonMultiple(), Risiko aus
+     addonRisk(). Seitdem erteilt der Spieler ein Mandat (Zielgröße und
+     Höchstgebot), und beides bestimmt das Scheiterungsrisiko — siehe
+     addonCheck/addonFailRisk.
+
+     Dieselbe Marke hält auch die Laufzeit: Bis dahin lief ein Zukauf
+     initDur(E) + 1 Halbjahre zwischen Signing und Closing, seit dem
+     16.09.2026 fallen beide in dasselbe Halbjahr (buildInit).               */
+  legacyAddonMandate?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
-  legacyNoIntBarrier: true, legacyAddonBenchMargin: true,
+  legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
+  legacyAddonMandate: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -739,8 +755,8 @@ export const INITS = {
     { id: "exp", n: "Markt- und Segmentexpansion", cls: "hard", d: "Neue Regionen oder Segmente. Breite Streuung, teurer Fehlschlag.",
       sm: 0.16, dm: 1, gm: 1.3, drag: 1.0, cx: 0, nwcRun: 2, spread: [0.3, 1.4],
       failCost: 0.25, failMargin: -0.8 },
-    { id: "ma", n: "Add-on M&A", cls: "tr", d: "Zukauf eines Wettbewerbers, fremdfinanziert. Multiple-Arbitrage — und Covenant-Risiko.",
-      sm: -0.05, dm: 1, gm: 0, drag: 0.4, cx: 0, ma: true },
+    { id: "ma", n: "Add-on M&A", cls: "tr", d: "Erwerb eines Wettbewerbers, überwiegend fremdfinanziert. Signing und Closing im selben Halbjahr.",
+      sm: -0.05, dm: 0, gm: 0, drag: 0.4, cx: 0, ma: true },
   ],
 };
 export const initById = (dim, id) => INITS[dim].find((i) => i.id === id);
@@ -815,47 +831,123 @@ export const addonArb = (c, market) => {
    2,4 Turns, der mit der Plattform schrumpft und in heißen Märkten verschwindet. */
 export const addonMultiple = (c, market) => Math.max(3, markMultiple(c, market) - addonArb(c, market));
 export const addonEbitda = (c) => ebitdaOf(c) * (c.addonSize ?? 0.275);
-export const ADDON_HEADROOM = 0.6;   // Mindestpuffer zum Covenant nach dem Zukauf
-/* Pro-forma-Verschuldung nach dem Zukauf:
-   (Nettoverschuldung PortCo + Kaufpreis) / (EBITDA PortCo + EBITDA Add-on)
-   Reißt sie den Covenant, kommt die Finanzierung nicht zustande.              */
-export function addonCheck(c, market, equity = 0) {
-  const addEb = addonEbitda(c);
-  const mult = addonMultiple(c, market);
-  const price = addEb * mult;
-  /* Ein Zukauf muss nicht vollständig fremdfinanziert sein. Der Fonds kann
-     Eigenkapital nachschießen — genau das tut ein Sponsor, wenn die Plattform
-     die Akquisitionsschuld nicht mehr trägt, der Zukauf aber strategisch
-     richtig ist. Der Eigenkapitalanteil mindert die Schuld und damit die
-     Pro-forma-Verschuldung; die Kostenbasis des Deals steigt entsprechend,
-     der Zukauf wird also nicht billiger, sondern nur finanzierbar.         */
-  const eqIn = clamp(equity, 0, price);
-  const debt = price - eqIn;
-  const lev = (c.netDebt + debt) / Math.max(0.5, ebitdaOf(c) + addEb);
-  /* Die Banken finanzieren einen Zukauf nicht bis auf den letzten Zentimeter an
-     den Covenant heran — sie verlangen Puffer für den Fall, dass die Integration
-     schiefgeht. ADDON_HEADROOM ist genau dieser Puffer. Vorher genügte formale
-     Einhaltung, und die Plattform stand nach dem Zukauf regelmäßig mit 0,4×
-     Restluft da: Ein einziger Nachfrageeinbruch reichte für den Breach.       */
-  const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
-  return { addEb, mult, price, equity: eqIn, debt, lev, limit, ok: lev <= limit };
+
+/* ---------- Zukauf als Mandat ----------
+   Bis zum 15.09.2026 war ein Add-on ein fertiges Angebot: Die Zielgröße lag
+   als `addonSize` beim Kauf der Plattform fest (20–35 %), der Preis stand, und
+   die einzige Entscheidung war ja oder nein. Der Zukauf hatte damit keinen
+   Preis, über den sich verhandeln ließ, und keine Größe, über die sich
+   nachdenken ließ — nur ein Risiko, das aus Zahlen kam, die der Spieler nicht
+   gesetzt hatte.
+
+   Jetzt erteilt der Spieler ein Mandat, wie in der Praxis: Bis zu welchem
+   EBITDA soll gesucht werden, und bis zu welchem Multiple darf gezahlt werden?
+   Beides bewegt dasselbe Risiko in dieselbe Richtung, aus dem gleichen Grund,
+   aus dem Buy-&-Build in der Praxis scheitert:
+
+   - Ein größerer Bissen ist schwerer zu verdauen. Ein Zukauf von 10 % des
+     Konzern-EBITDA läuft nebenher; einer von 50 % ist eine Fusion, für die
+     dieselbe Organisation und dasselbe Managementteam zuständig sind.
+   - Wer unter der Preisvorstellung des Verkäufers bleibt, bekommt nicht
+     denselben Zukauf billiger, sondern einen anderen. Zu dem Preis ist nur
+     zu haben, was sonst niemand will: Nachfolge ohne Nachfolger, Kunden-
+     konzentration, ein Buch voller Altlasten. Adverse Selektion, und sie
+     zeigt sich in der Integration.
+
+   Kalibriert ist die Skala auf den Referenzfall — Zielgröße ADDON_REF_SHARE
+   des Plattform-EBITDA, voller Preis, Plattform auf Branchenniveau: dort
+   scheitert die Integration in ADDON_FAIL_BASE der Fälle. Das ist bewusst
+   deutlich weniger als unter der alten Logik (dort knapp die Hälfte); der
+   Preis für ein hohes Risiko soll aus der Entscheidung des Spielers kommen,
+   nicht aus dem Grundrauschen.                                             */
+/* Das Mandat, wie es von der Ansicht in die Auswertung geht: Zielgröße in
+   Mio. € EBITDA, Höchstgebot als Multiple, Eigenkapitalanteil aus dem Fonds.
+   `legacy` schaltet auf das Verhalten vor dem 15.09.2026 zurück (siehe
+   EngineCompat.legacyAddonMandate), `ask`/`runs` sind interne Durchreichungen. */
+export interface AddonOpts {
+  addEb?: number; mult?: number; equity?: number;
+  ask?: number; runs?: number; legacy?: boolean;
 }
-/* Wie viel Eigenkapital ein Zukauf mindestens braucht, damit die Pro-forma-
-   Verschuldung die Finanzierungsgrenze hält. Null, wenn er ohnehin trägt;
-   der volle Kaufpreis, wenn auch das nicht reicht (dann steht die Plattform
-   schon über der Grenze und der Zukauf ist unabhängig vom Preis nicht
-   finanzierbar).                                                           */
-export function addonEquityNeeded(c, market) {
-  const addEb = addonEbitda(c);
-  const price = addEb * addonMultiple(c, market);
-  const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
-  const room = limit * Math.max(0.5, ebitdaOf(c) + addEb) - c.netDebt;
-  return clamp(price - room, 0, price);
+
+export const ADDON_MAX_SHARE = 0.50;   // Obergrenze des Mandats: Anteil am Plattform-EBITDA
+export const ADDON_REF_SHARE = 0.25;   // Referenzgröße, auf die kalibriert ist
+export const ADDON_FAIL_BASE = 0.10;   // Scheiterungsrisiko im Referenzfall
+export const ADDON_SIZE_SLOPE = 1.00;  // je Anteilspunkt über der Referenzgröße
+export const ADDON_PRICE_SLOPE = 0.18; // je Turn unter der Preisvorstellung
+/* Referenzplattform der Kalibrierung. Keine Wunschwerte, sondern die
+   gemessene Mitte: Über 60 Partien lag eine Beteiligung im Moment eines
+   Zukaufs bei Prozessreife 2,0 (Branchenniveau), effektivem Rating der
+   Fachrolle 1,9 und 2,5× Leverage. Genau dort liegt das Risiko bei
+   ADDON_FAIL_BASE — wer sein Team und seine Prozesse aufgebaut hat, kommt
+   darunter, wer beides vernachlässigt, darüber. Die Leverage-Referenz ist
+   LEV_FREE: Erst darüber kostet Fremdkapital Handlungsfähigkeit.          */
+export const ADDON_REF_PLAT = 2.0, ADDON_REF_SKILL = 2.0, ADDON_REF_LEV = LEV_FREE;
+
+/* Preisvorstellung des Verkäufers für ein Ziel dieser Größe.
+
+   Der Größenabschlag hängt jetzt am EBITDA des ZIELS, nicht mehr an dem der
+   Plattform: Ein 3-Mio.-Unternehmen wird strukturell niedriger bewertet als
+   ein 15-Mio.-Unternehmen, und genau daraus entsteht die Multiple-Arbitrage
+   eines Buy-&-Build. Wer groß zukauft, zahlt fast das eigene Multiple und
+   verdient an der Arbitrage nichts mehr — die zweite Hälfte des Trade-offs
+   neben dem Integrationsrisiko.                                            */
+export const addonSizeDisc = (addEb) => clamp(2.4 - Math.max(0, addEb - 3) * 0.16, 0.4, 2.4);
+export function addonAsk(c, market, addEb) {
+  const heat = market ? clamp((market[c.sector] / SECTORS[c.sector].m - 1) * 3.0, -0.6, 1.6) : 0;
+  const arb = clamp(addonSizeDisc(addEb) - heat - (c.addonComp || 0), -1.2, 2.4);
+  return Math.max(3, markMultiple(c, market) - arb);
 }
-/* Integrationsrisiko. Vorher hing der Erfolg allein am Rating der Fachrolle —
-   eine Plattform mit unreifen Prozessen und 4,5× Verschuldung integrierte einen
-   Zukauf genauso zuverlässig wie eine durchsanierte. Genau dort scheitert
-   Buy-&-Build in der Praxis: zu früh, zu groß, zu fremdfinanziert.           */
+
+/* Das Mandat, das die Ansicht voreinstellt und die KI-Fonds benutzen:
+   Referenzgröße, voller Preis. Damit steht der kalibrierte Fall als Vorgabe
+   da, und jede Abweichung ist eine bewusste Entscheidung.                  */
+export function addonMandate(c, market) {
+  const addEb = ebitdaOf(c) * ADDON_REF_SHARE;
+  return { addEb, mult: addonAsk(c, market, addEb) };
+}
+export const addonMaxEb = (c) => ebitdaOf(c) * ADDON_MAX_SHARE;
+
+/* Scheiterungsrisiko der Integration. Die beiden Terme, die der Spieler
+   steuert, stehen oben; darunter das, was die Plattform mitbringt.        */
+export const ADDON_LEV_SLOPE = 0.06;    // je Turn Leverage über der Referenz
+export const ADDON_PLAT_SLOPE = 0.05;   // je Stufe Prozessreife über der Referenz
+export const ADDON_TEAM_SLOPE = 0.045;  // je Ratingpunkt der Fachrolle darüber
+export const ADDON_REPEAT_SLOPE = 0.05; // je weiterer Auflage
+
+/* Die Summanden des Scheiterungsrisikos, einzeln benannt und mit Vorzeichen.
+
+   Die Ansicht zeigt sie als Begründung neben der Prozentzahl. Sie stand dort
+   bis zum 16.09.2026 als kommaseparierte Liste aus eigenen Schwellwerten —
+   "kleiner Bissen, Prozesse noch unreif" nebeneinander, ohne zu sagen, dass
+   das erste die Zahl senkt und das zweite sie hebt. Zwei richtige Angaben,
+   die zusammen in die Irre führten.
+
+   Jetzt kommt die Begründung aus derselben Liste, die addonFailRisk()
+   aufaddiert: Sie kann gar nicht mehr von der Zahl abweichen, und jeder
+   Posten trägt sein eigenes Vorzeichen.                                     */
+export function addonFailParts(c, opts = {} as AddonOpts) {
+  const eb = ebitdaOf(c);
+  const addEb = opts.addEb ?? eb * ADDON_REF_SHARE;
+  const ask = opts.ask ?? 0;
+  // Geboten wird höchstens die Preisvorstellung — mehr zu zahlen kauft nichts.
+  const mult = Math.min(opts.mult ?? ask, ask);
+  const skill = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
+  return [
+    { k: "size", t: "Zielgröße", v: ADDON_SIZE_SLOPE * (addEb / Math.max(0.5, eb) - ADDON_REF_SHARE) },
+    { k: "price", t: "Gebot unter Preisvorstellung", v: ADDON_PRICE_SLOPE * Math.max(0, ask - mult) },
+    { k: "lev", t: "Verschuldung", v: ADDON_LEV_SLOPE * Math.max(0, c.netDebt / Math.max(0.5, eb) - ADDON_REF_LEV) },
+    { k: "plat", t: "Prozessreife", v: -ADDON_PLAT_SLOPE * (c.plat - ADDON_REF_PLAT) },
+    { k: "team", t: "Team", v: -ADDON_TEAM_SLOPE * (skill - ADDON_REF_SKILL) },
+    { k: "runs", t: "weitere Auflage", v: ADDON_REPEAT_SLOPE * (opts.runs || 0) },
+  ];
+}
+export function addonFailRisk(c, opts = {} as AddonOpts) {
+  return clamp(ADDON_FAIL_BASE + addonFailParts(c, opts).reduce((s, p) => s + p.v, 0), 0.02, 0.95);
+}
+
+/* Das alte Integrationsrisiko. Steht nur noch für die Wiederholung bereits
+   ausgewerteter Halbjahre (EngineCompat.legacyAddonMandate) — dort gab es
+   weder Zielgröße noch Gebot als Entscheidung.                            */
 export function addonRisk(c) {
   const lev = c.netDebt / Math.max(0.5, ebitdaOf(c));
   return clamp(
@@ -865,16 +957,99 @@ export function addonRisk(c) {
     -0.32, 0.12);
 }
 
-// Acceleration wirkt nur, soweit People und Platform sie tragen
-export const accEff = (c) => Math.min(c.acc, peopleLvl(c) + 1, c.plat + 1);
-export const overstretch = (c) => Math.max(0, c.acc - Math.min(peopleLvl(c) + 1, c.plat + 1));
+export const ADDON_HEADROOM = 0.6;   // Mindestpuffer zum Covenant nach dem Zukauf
+/* Der Zukauf in Zahlen: Mandat hinein, Preis, Finanzierung und Risiko heraus.
+   Eine Stelle für alles, was die Karte zeigt und die Auswertung rechnet.
 
+   Die Finanzierung prüft die Pro-forma-Verschuldung nach dem Abschluss —
+   (Nettoverschuldung + Kaufpreis) / (EBITDA + EBITDA des Ziels) — gegen den
+   Covenant abzüglich ADDON_HEADROOM. Die Banken finanzieren nicht bis auf den
+   letzten Zentimeter an den Covenant heran; sie verlangen Puffer für den Fall,
+   dass die Integration schiefgeht. Reißt die Pro-forma-Zahl die Grenze, kommt
+   die Finanzierung nicht zustande.                                         */
+export function addonCheck(c, market, opts = {} as AddonOpts) {
+  const eb = ebitdaOf(c);
+  const legacy = !!opts.legacy;
+  const addEb = legacy ? addonEbitda(c)
+    : clamp(opts.addEb ?? ebitdaOf(c) * ADDON_REF_SHARE, 0, addonMaxEb(c));
+  const ask = legacy ? addonMultiple(c, market) : addonAsk(c, market, addEb);
+  // "Maximales Multiple" ist eine Obergrenze: Über der Preisvorstellung des
+  // Verkäufers zahlt niemand, darunter steigt das Risiko.
+  const mult = legacy ? ask : Math.max(1, Math.min(opts.mult ?? ask, ask));
+  const price = addEb * mult;
+  /* Ein Zukauf muss nicht vollständig fremdfinanziert sein. Der Fonds kann
+     Eigenkapital nachschießen — genau das tut ein Sponsor, wenn die Plattform
+     die Akquisitionsschuld nicht mehr trägt, der Zukauf aber strategisch
+     richtig ist. Der Eigenkapitalanteil mindert die Schuld und damit die
+     Pro-forma-Verschuldung; die Kostenbasis des Deals steigt entsprechend,
+     der Zukauf wird also nicht billiger, sondern nur finanzierbar.         */
+  const eqIn = clamp(opts.equity ?? 0, 0, price);
+  const debt = price - eqIn;
+  const lev = (c.netDebt + debt) / Math.max(0.5, eb + addEb);
+  const limit = (c.covLimit ?? COV_DEFAULT) - ADDON_HEADROOM;
+  const failOpts = { addEb, mult, ask, runs: opts.runs || 0 };
+  const fail = legacy ? null : addonFailRisk(c, failOpts);
+  return {
+    addEb, ask, mult, price, equity: eqIn, debt, lev, limit, fail,
+    failParts: legacy ? [] : addonFailParts(c, failOpts),
+    share: addEb / Math.max(0.5, eb), gap: Math.max(0, ask - mult),
+    ok: lev <= limit && addEb > 0.05,
+  };
+}
+/* Wie viel Eigenkapital ein Zukauf mindestens braucht, damit die Pro-forma-
+   Verschuldung die Finanzierungsgrenze hält. Null, wenn er ohnehin trägt;
+   der volle Kaufpreis, wenn auch das nicht reicht (dann steht die Plattform
+   schon über der Grenze und der Zukauf ist unabhängig vom Preis nicht
+   finanzierbar).                                                           */
+export function addonEquityNeeded(c, market, opts = {} as AddonOpts) {
+  const k = addonCheck(c, market, { ...opts, equity: 0 });
+  const room = k.limit * Math.max(0.5, ebitdaOf(c) + k.addEb) - c.netDebt;
+  return clamp(k.price - room, 0, k.price);
+}
+
+/* Wie viel Growth-Reifegrad die Beteiligung tragen kann: People und Platform
+   setzen die Grenze, alles darüber ist Überdehnung. Steht als eigene Zeile,
+   weil außer accEff und overstretch auch der Maßnahmenkatalog sie braucht —
+   er sagt vor dem Start, wie viel des Reifegradgewinns überhaupt wirkt. Eine
+   Zahl, ein Ort: Vorher stand derselbe Ausdruck dreimal da.                 */
+export const accCap = (c) => Math.min(peopleLvl(c) + 1, c.plat + 1);
+// Acceleration wirkt nur, soweit People und Platform sie tragen
+export const accEff = (c) => Math.min(c.acc, accCap(c));
+export const overstretch = (c) => Math.max(0, c.acc - accCap(c));
+
+/* Wie lange eine Maßnahme läuft, ohne sie zu starten. buildInit() rechnet
+   genau diese Zeile; der Katalog (InitPicker) und die Vormerkung einer
+   Mehrspielerpartie (patchHolding) brauchen sie, bevor gewürfelt wird.
+
+   Bis zum 15.09.2026 rechnete die Vormerkung stattdessen `initDur(E)` allein
+   — ohne den Zuschlag der Maßnahme (`dm`) und ohne den Wiederholungsmalus.
+   Die Karte zeigte direkt nach dem Klick eine kürzere Restlaufzeit an als
+   nach der Auswertung. Eine Zahl, ein Ort.
+
+   Der Zukauf läuft mit Dauer 0: Signing und Closing fallen in dasselbe
+   Halbjahr. maturePeople() wird im selben Durchlauf nach der Entscheidung
+   aufgerufen und prüft `q < doneQ` — bei doneQ = q schließt der Zukauf noch
+   in derselben Periode ab, Akquisitionsschuld und erworbenes EBITDA kommen
+   zusammen an. Die Margenbelastung (drag) trägt die Periode des Erwerbs.
+   Bereits ausgewertete Halbjahre behalten ihre alte Laufzeit von zwei bis
+   drei Halbjahren — siehe buildInit (EngineCompat.legacyAddonMandate).      */
+export function initDurationOf(c, dim, id) {
+  const spec = initById(dim, id);
+  if (!spec) return null;
+  if (spec.ma) return 0;
+  const seat = dim === "plat" ? "cfo" : "r3";
+  const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
+  return Math.max(1, initDur(E) + (spec.dm || 0) + repeatMalus(initRuns(c, id)).dm);
+}
 
 /* Gemeinsamer Baustein für den Start einer Maßnahme. Spieler und KI benutzen
    dieselbe Funktion — vorher war die KI mit einem pauschalen Reifegradgewinn
    von 0,85 unterwegs, während der Spieler über initGain das Drei- bis Vierfache
    holte. Das war der eigentliche Grund, warum die Kohorte nie mithalten konnte. */
-export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineCompat = {}, equity = 0) {
+export function buildInit(
+  rng: Rng, c, dim, id, market, quarter,
+  compat: EngineCompat = {}, mandate: AddonOpts = {},
+) {
   const spec = initById(dim, id);
   if (!spec) return null;
   const runs = initRuns(c, id);
@@ -883,32 +1058,70 @@ export function buildInit(rng: Rng, c, dim, id, market, quarter, compat: EngineC
   if (spec.req && !spec.req(c)) return null;
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
-  const dur = Math.max(1, initDur(E) + (spec.dm || 0) + rep.dm);
-  const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0), 0.1, 0.97);
+  /* Der Zukauf rechnet sein Risiko aus dem Mandat des Spielers (Zielgröße und
+     Höchstgebot), jede andere Maßnahme aus Rating und Risikoklasse. Beides
+     ohne Ziehung — die Reihenfolge des Zufallsstroms bleibt damit dieselbe
+     wie vor der Umstellung, und bereits ausgewertete Halbjahre lassen sich
+     weiter nachrechnen.                                                     */
+  const legacy = !!compat.legacyAddonMandate;
+  /* Seit dem 16.09.2026 schließt ein Zukauf im Halbjahr der Entscheidung ab
+     (initDurationOf gibt 0). Vor der Umstellung gestartete Zukäufe liefen
+     initDur(E) + 1 Halbjahre — diese Zeile hält sie nachrechenbar.          */
+  const dur = spec.ma && legacy
+    ? Math.max(1, initDur(E) + 1 + rep.dm)
+    : initDurationOf(c, dim, id);
+  const chk = spec.ma ? addonCheck(c, market, { ...mandate, runs, legacy }) : null;
+  const p = spec.ma && !legacy
+    ? clamp(1 - chk.fail, 0.05, 0.98)
+    : clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0), 0.1, 0.97);
   const ok = rng.rnd() < p;
   const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
     : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
   let patch = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
   let debt = ebitdaOf(c) * (spec.oneOff || 0);
-  let chk = null;
   if (spec.ma) {
-    chk = addonCheck(c, market, equity);
     if (!chk.ok) return { blocked: chk };
-    /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung hier —
+    /* Ein Zukauf wird bezahlt. Bis 30.08.2026 fehlte diese Buchung ganz —
        im Mehrspieler- und KI-Pfad kam das EBITDA des Add-ons an, ohne dass
        die Akquisitionsschuld je gebucht wurde, während der Übungsmodus sie
-       (in seiner eigenen Kopie der Mechanik) korrekt buchte.               */
-    /* Nur der fremdfinanzierte Teil des Kaufpreises erhöht die Schuld; den
+       (in seiner eigenen Kopie der Mechanik) korrekt buchte.
+
+       Nur der fremdfinanzierte Teil des Kaufpreises erhöht die Schuld; den
        Rest schießt der Fonds als Eigenkapital nach (siehe fundEquityIn beim
-       Aufrufer). Ohne Nachschuss ist chk.debt der volle Kaufpreis, das
-       Verhalten also unverändert.                                          */
-    if (!compat.addonWithoutDebt) debt += chk.debt;
-    /* Der Reifegradgewinn ist bewusst klein: Der Wert eines Zukaufs steckt im
-       zugekauften EBITDA, nicht in einer dauerhaft schnelleren Organik. Vorher
-       gab es hier eine volle Stufe obendrauf — rund zwei Drittel des gemessenen
-       Vorteils kamen aus dieser Doppelzählung.                               */
+       Aufrufer). Das Eigenkapital fließt beim Signing an den Verkäufer, senkt
+       die Nettoverschuldung aber nicht (toDebt: false) — der Leverage bleibt
+       davon unberührt.
+
+       Gezogen wird die Akquisitionsschuld beim ABSCHLUSS, nicht beim Start.
+       Bis 15.09.2026 stand sie ab dem Start in der Bilanz, während das
+       gekaufte EBITDA erst mit der Integration ankam. Das war keine
+       Vorsichtsannahme, sondern eine falsche Bilanz: Die Karte prüft die
+       Finanzierbarkeit pro forma, also (Schuld + Kaufpreis) / (EBITDA +
+       EBITDA des Ziels), und genehmigt den Zukauf nur unterhalb der
+       Finanzierungsgrenze. Der Covenant wird aber jede Periode auf dem
+       tatsächlichen Leverage getestet — und der lief im Integrationsfenster
+       gegen das ALTE EBITDA. Gemessen über 121 Zukäufe: Karte im Schnitt
+       3,6×, tatsächlich 4,3×, Spitze 8,3× gegen einen Covenant von 6,5 — in
+       54 Halbjahren stand die Plattform über ihrem Covenant, auf einer Zahl,
+       die nirgends stand.
+
+       Jetzt kommen Schuld und EBITDA zusammen an (maturePeople). Damit ist
+       der Leverage nach dem Abschluss genau die Pro-forma-Zahl, auf der
+       entschieden wurde — und das Integrationsrisiko trägt weiter, was es
+       tragen soll: Scheitert sie, steht die Schuld trotzdem voll.
+
+       Seit dem 16.09.2026 ist das Integrationsfenster ohnehin null: Signing
+       und Closing fallen in dasselbe Halbjahr (initDurationOf gibt beim
+       Zukauf 0). Die Buchung beim Abschluss bleibt trotzdem die richtige
+       Stelle — sie hält Schuld und EBITDA aneinander, auch für Zukäufe aus
+       Partien mit altem Regelstand.                                        */
+    if (compat.addonDebtAtStart && !compat.addonWithoutDebt) debt += chk.debt;
+    const addDebt = compat.addonDebtAtStart || compat.addonWithoutDebt ? 0 : chk.debt;
+    /* `gain` stand hier bis zum 15.09.2026 auf 0,35 und wurde nie gelesen:
+       maturePeople() gibt einem gelungenen Zukauf fest +1,0 Reifegrad. Eine
+       Zahl, die nirgends hinführt, ist schlimmer als keine. */
     patch = { ...patch, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price,
-      equity: chk.equity, gain: 0.35, ok };
+      equity: chk.equity, addDebt, fail: chk.fail, ok };
   } else {
     patch = { ...patch, gain: initGain(E) * sp * (spec.gm || 1) * rep.gm * fitOf(id, c)
       * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
@@ -1505,6 +1718,15 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
     if (!IN || q < IN.doneQ) return;
     const spec = IN.id ? initById(IN.dim, IN.id) : null;
     if (IN.ma) {
+      /* Abschluss des Zukaufs: Jetzt wird die Akquisitionsschuld gezogen, und
+         zwar in beiden Fällen. Scheitert die Integration, steht sie voll und
+         das EBITDA kommt nicht — genau der Weg in den Covenant Breach, den
+         die Karte ankündigt.
+
+         `addDebt` fehlt in Beteiligungen, deren Zukauf vor dem 15.09.2026
+         gestartet wurde: Dort steckt die Schuld bereits seit dem Start in
+         netDebt, und sie darf hier nicht ein zweites Mal gebucht werden. */
+      if (IN.addDebt) { c.netDebt += IN.addDebt; bookOff(c, "addon", IN.addDebt); }
       /* Gekauft wird EBITDA, geliefert wird im Modell Umsatz — die Umrechnung
          muss deshalb über die Marge laufen, mit der die Plattform das EBITDA
          tatsächlich verdient. Bis zum 11.09.2026 stand hier die Branchenmarge:
@@ -1521,6 +1743,11 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
         c.revenue += addRev * 0.35; c.margin -= 1.8;
         c.marginDrift = (c.marginDrift || 0) - 1.0; c.quality -= 7;
       }
+      /* Zukaufshistorie mitschreiben. Ein Add-on ist die einzige Maßnahme, die
+         die Beteiligung dauerhaft umbaut. Ohne diese Zeile ließ sich nach
+         der Integration nirgends mehr ablesen, wann zugekauft wurde und wie
+         oft — `done` zählt nur die Kennung mit, nicht den Zeitpunkt.       */
+      c.addons = [...(c.addons || []), { q, eb: IN.addEb, mult: IN.mult, ok: !!IN.ok }];
     } else {
       // Verlässliche Maßnahmen scheitern nicht binär, sie unterliefern.
       // Adoptionsabhängige Programme liefern gar nichts und kosten den Sunk Cost.
@@ -1551,7 +1778,9 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
       tone: IN.ok ? "pos" : "neg",
       t: IN.ma
         ? (IN.ok
-          ? `<b>${c.name}</b>: Add-on integriert — ${eur(IN.addEb)} EBITDA zu ${x(IN.mult)} gekauft, Bewertung der Plattform liegt bei ${x(markMultiple(c, mk))}.`
+          ? `<b>${c.name}</b>: Add-on abgeschlossen und integriert — ${eur(IN.addEb)} EBITDA zu ${x(IN.mult)} gekauft`
+            + `${IN.addDebt ? `, ${eur(IN.addDebt)} Akquisitionsschuld gezogen` : ""}.`
+            + ` Leverage jetzt ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}, Bewertung der Plattform ${x(markMultiple(c, mk))}.`
           : `<b>${c.name}</b>: Integration des Add-ons gescheitert. Nur ein gutes Drittel des Umsatzes kommt an, die Akquisitionsschuld steht voll — Leverage jetzt ${x(c.netDebt / Math.max(0.5, ebitdaOf(c)))}.`)
         : IN.ok
           ? `<b>${c.name}</b>: ${IN.name || "Maßnahme"} abgeschlossen, Reifegrad +${IN.gain.toFixed(2)}${IN.dim === "acc" && IN.gain < 0.5 ? " — deutlich unter Erwartung." : IN.dim === "acc" && IN.gain > 1.1 ? " — weit über Erwartung." : "."}`
@@ -1821,6 +2050,70 @@ export function fundBridgeStep(now, was) {
 
 // Gesamter Rückfluss eines Deals und die zugehörige Kostenbasis
 export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c.costLeft ?? c.entryEquity);
+
+/* ---------- Tail-End-Verwertung ----------
+   Was am Laufzeitende mit allem passiert, was noch im Portfolio steht. Der
+   Fonds hat keine Zeit mehr zu verhandeln: LIQ_DISC Turns unter dem
+   Marktmultiple, zu bilateralen Kosten, und der MEP schneidet mit.
+
+   Eine Stelle, drei Aufrufer — die Auswertung des letzten Halbjahres
+   (runQuarter), der Übungsmodus (components/PeLeagues.tsx) und die Vorschau
+   (tailEndOf). Bis zum 15.09.2026 stand die Rechnung zweimal ausgeschrieben,
+   und die Kopie im Übungsmodus schrieb keine Value Bridge mit: Die
+   Endabrechnung einer Übungspartie verlor damit jeden Tail-End-Deal in den
+   Restposten "Transaktionskosten", obwohl dort die halbe Partie steckte.   */
+export function liquidateHoldings(f, market, quarter) {
+  const out = [];
+  (f.holdings || []).forEach((c) => {
+    // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
+    const gross = Math.max(0, eqvOf(c, markMultiple(c, market) - LIQ_DISC));
+    const net = exitNetOf(c, gross, BIL_FEE);
+    applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter);
+    const moic = dealMoic(c, net);
+    f.realized = [...(f.realized || []), {
+      name: c.name + " (Tail-End)", moic, bridge: makeBridge(c, gross, net),
+    }];
+    out.push({ c, gross, net, moic });
+  });
+  f.holdings = [];
+  return out;
+}
+
+/* Dieselbe Verwertung als Vorschau, ohne den Fonds anzufassen: Was bliebe,
+   wenn die Laufzeit heute endete?
+
+   Der Grund, dass es sie gibt: NAV und TVPI laufen über markMultiple(), und
+   markMultiple() kennt weder den Endfälligkeitsdruck (endPressure, nur in
+   dealMultiple) noch den Zwangsabschlag der Tail-End-Verwertung. In den
+   letzten Halbjahren einer Partie steht auf dem Bildschirm deshalb ein Wert,
+   den niemand mehr bezahlt — in Testpartien 1,58× TVPI im Halbjahr 19 gegen
+   1,13× in der Endabrechnung. Die Zahl war nie falsch (sie ist die Bewertung
+   des Bestands), aber sie war die falsche Zahl für die Entscheidung, die in
+   diesen Halbjahren ansteht: verkaufen oder liegen lassen.
+
+   Die Vorschau rechnet nicht selbst, sondern lässt liquidateHoldings() auf
+   einer Kopie laufen. Damit kann sie gar nicht von dem abweichen, was am Ende
+   tatsächlich passiert — genau das sichert der Test in
+   __tests__/tailEnd.test.ts.                                               */
+export function tailEndOf(f, market, quarter) {
+  const g = {
+    ...f,
+    holdings: (f.holdings || []).map((c) => ({ ...c })),
+    realized: [...(f.realized || [])],
+    calls: [...(f.calls || [])],
+    dists: [...(f.dists || [])],
+  };
+  const deals = liquidateHoldings(g, market, quarter);
+  return {
+    fund: g, deals,
+    tvpi: tvpiOf(g, market, quarter),
+    irr: irrOf(g, market, quarter),
+    score: scoreOf(g, market, quarter),
+    value: totalValueOf(g, market) - carryOf(g, market, quarter),
+    // Was die Zwangsverwertung gegenüber der Bewertung des Bestands kostet
+    haircut: navOf(f, market) - deals.reduce((s, d) => s + d.net, 0),
+  };
+}
 
 /* ---------- Implied Money Multiple (Base Case) ----------
    Was das Zielunternehmen bei diesem Gebot und diesem Leverage über eine

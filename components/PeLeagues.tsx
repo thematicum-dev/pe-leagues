@@ -10,15 +10,15 @@ import Link from "next/link";
    createRng() liefert je Partie eine eigene Zufallsinstanz — kein geteilter
    Modul-Zustand mehr, der parallele Partien gegenseitig stören könnte.       */
 import { createRng } from "@/lib/engine";
-import type { Rng } from "@/lib/engine";
+import type { AddonOpts, Rng } from "@/lib/engine";
 import {
   ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, CAPITAL, COV_DEFAULT, COV_FLOOR,
   COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P,
-  INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LIQ_DISC, LM_ANNOUNCE, LM_DEAL,
+  END_PRESSURE_FROM, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL,
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
-  exitNetOf, mepCut, fundEquityIn,
+  exitNetOf, mepCut, fundEquityIn, liquidateHoldings,
   RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
-  chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
+  addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
@@ -29,7 +29,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek,
 } from "@/components/pel/ui";
 
 export default function PeLeagues() {
@@ -37,6 +37,25 @@ export default function PeLeagues() {
   const [attrs, setAttrs] = useState({ ...DEFAULT_HUMAN_ATTRS });
   const [tab, setTab] = useState("deals");
   const [quarter, setQuarter] = useState(0);
+  /* Das Halbjahr, über das gerade entschieden wird. `quarter` zählt die bereits
+     ausgewerteten Halbjahre; gespielt wird immer das nächste.
+
+     Jede Frist, die eine Entscheidung setzt, und jede Zahlung, die sie auslöst,
+     hängt an dieser Zahl — genauso wie in einer Mehrspielerpartie, wo
+     runQuarter() mit halfYear = quarter + 1 rechnet. Bis zum 15.09.2026 stand
+     an diesen Stellen `quarter`, und das hatte zwei Folgen, die beide in
+     dieselbe Richtung liefen:
+
+     - Maßnahmen, Search-Mandate, Verkaufsprozesse und Sperren des Spielers
+       liefen im Übungsmodus ein Halbjahr kürzer als dieselbe Entscheidung in
+       einer echten Partie.
+     - Innerhalb derselben Übungspartie liefen sie ein Halbjahr kürzer als bei
+       den KI-Fonds, die in next() bereits mit `q` (= quarter + 1) rechnen.
+       Der Spieler hatte damit einen Vorsprung, den die Regeln nicht vorsehen.
+
+     Die angezeigte Restlaufzeit (hj(doneQ − quarter)) ist damit in beiden Modi
+     dieselbe Zahl und zählt sauber bis 1 herunter.                          */
+  const decQ = quarter + 1;
   const [market, setMarket] = useState(() => { const m = {}; SECNAMES.forEach((s) => (m[s] = SECTORS[s].m)); return m; });
   const [funds, setFunds] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -102,7 +121,7 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
       const g = { ...f, holdings: f.holdings.map((h) => h.uid === uid ? { ...h, dd: true } : h) };
-      spendFund(g, DD_COST / 2, quarter, true);
+      spendFund(g, DD_COST / 2, decQ, true);
       return g;
     }));
     if (c) setFeed((p) => [{ q: quarter, e: "📊", tone: "neu",
@@ -114,7 +133,7 @@ export default function PeLeagues() {
     const d = deals.find((x2) => x2.id === dealId);
     if (!d) return;
     const cost = ddCostOf(d);
-    setFunds((F) => F.map((f, i) => { if (i !== 0) return f; const g = { ...f }; spendFund(g, cost, quarter, true); return g; }));
+    setFunds((F) => F.map((f, i) => { if (i !== 0) return f; const g = { ...f }; spendFund(g, cost, decQ, true); return g; }));
     setDd((p) => ({ ...p, [dealId]: true }));
   }
 
@@ -495,25 +514,23 @@ export default function PeLeagues() {
   }
 
   /* Ende der Fondslaufzeit: alle verbliebenen Beteiligungen werden zu
-     bilateralen Konditionen abgewickelt — 0,5× Abschlag plus Kosten.     */
+     bilateralen Konditionen abgewickelt — LIQ_DISC Abschlag plus Kosten.
+
+     Die Rechnung selbst steht in lib/engine (liquidateHoldings), gemeinsam mit
+     der Auswertung einer Mehrspielerpartie und der Vorschau (tailEndOf). Die
+     Kopie, die vorher hier stand, schrieb keine Value Bridge mit — in der
+     Endabrechnung einer Übungspartie fiel damit jeder Tail-End-Deal in den
+     Restposten "Transaktionskosten", obwohl dort oft die halbe Partie steckte. */
   function liquidate(F, mk, q) {
     const news = [];
     F.forEach((f, i) => {
-      f.holdings.forEach((c) => {
-        // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
-        const gross = Math.max(0, eqvOf(c, markMultiple(c, mk) - LIQ_DISC));
-        const net = exitNetOf(c, gross, BIL_FEE);
-        applyProceeds(f, net, c.costLeft ?? c.entryEquity, q);
-        f.realized.push({ name: c.name + " (Tail-End)", moic: dealMoic(c, net) });
-        if (i === 0) {
-          const mo = dealMoic(c, net);
-          news.push({
-            q, e: mo >= 1 ? "⏳" : "💀", tone: mo >= 1 ? "neu" : "neg",
-            t: `Tail-End-Verwertung: <b>${c.name}</b> zum Laufzeitende veräußert für ${eur(net)} — ${mo.toFixed(2)}× auf das eingesetzte Eigenkapital.`,
-          });
-        }
+      liquidateHoldings(f, mk, q).forEach(({ c, net, moic }) => {
+        if (i !== 0) return;
+        news.push({
+          q, e: moic >= 1 ? "⏳" : "💀", tone: moic >= 1 ? "neu" : "neg",
+          t: `Tail-End-Verwertung: <b>${c.name}</b> zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`,
+        });
       });
-      f.holdings = [];
     });
     setFunds([...F]);
     if (news.length) setFeed((p) => [...news, ...p].slice(0, 60));
@@ -536,7 +553,7 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", retainerOf(seat, ebitdaOf(h))),
-        searches: [...(h.searches || []), { seat, readyQ: quarter + 1 }],
+        searches: [...(h.searches || []), { seat, readyQ: decQ + 1 }],
       }),
     }));
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
@@ -571,18 +588,24 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", retainerOf(item.seat, ebitdaOf(h)) * 0.5),
-        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: quarter + 1 } : se),
+        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se),
       }),
     }));
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }
 
-  function startInit(c, dim, id, equity = 0) {
+  function startInit(c, dim, id, mandate: AddonOpts = {}) {
     haptic(8);
-    /* Eigenkapitalanteil an einem Zukauf: gedeckelt am investierbaren Kapital
-       — der Fonds kann nur geben, was er hat. */
-    const eqWant = id === "ma" ? Math.min(Math.max(0, equity), investableOf(me, quarter)) : 0;
-    const B = buildInit(rng, c, dim, id, market, quarter, {}, eqWant);
+    /* Zukaufsmandat wie in der Mehrspielerpartie: Zielgröße gegen die
+       Obergrenze, Eigenkapital gegen das investierbare Kapital — der Fonds
+       kann nur geben, was er hat. */
+    const fallback = id === "ma" ? addonMandate(c, market) : null;
+    const ma = id === "ma" ? {
+      addEb: clamp(Number(mandate.addEb) || fallback.addEb, 0, addonMaxEb(c)),
+      mult: Number(mandate.mult) || fallback.mult,
+      equity: Math.min(Math.max(0, Number(mandate.equity) || 0), investableOf(me, quarter)),
+    } : {};
+    const B = buildInit(rng, c, dim, id, market, decQ, {}, ma);
     if (!B) return;
     if (B.blocked) {
       setFeed((p2) => [{
@@ -594,7 +617,7 @@ export default function PeLeagues() {
     const { spec, dur, p, debt, chk } = B;
     const eqIn = spec.ma ? (chk?.equity || 0) : 0;
     const msg = spec.ma
-      ? ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)} — ${eur(chk.debt)} fremdfinanziert${eqIn > 0.05 ? `, ${eur(eqIn)} aus Fondskapital` : ""}. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
+      ? ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)} — ${eur(chk.debt)} fremdfinanziert${eqIn > 0.05 ? `, ${eur(eqIn)} aus Fondskapital` : ""}. Closing zum Halbjahresende, Leverage dann ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`
       : ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
 
     setFunds((F) => F.map((f, i) => {
@@ -605,7 +628,7 @@ export default function PeLeagues() {
          weiter (toDebt: false) — es ersetzt den Teil der Akquisitionsschuld,
          der nicht aufgenommen wird, und senkt die Verschuldung der Plattform
          deshalb nicht. */
-      if (h && eqIn > 0) fundEquityIn(g, h, eqIn, quarter, { toDebt: false });
+      if (h && eqIn > 0) fundEquityIn(g, h, eqIn, decQ, { toDebt: false });
       if (h) {
         h.netDebt += debt;
         bookOff(h, spec.ma ? "addon" : "restr", debt + eqIn);
@@ -629,7 +652,7 @@ export default function PeLeagues() {
       if (i !== 0) return f;
       const g = { ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h }) };
       const h = g.holdings.find((z) => z.uid === c.uid);
-      if (h) fundEquityIn(g, h, amt, quarter);
+      if (h) fundEquityIn(g, h, amt, decQ);
       return g;
     }));
     setFeed((p) => [{ q: quarter, e: "💶", tone: "neu",
@@ -654,8 +677,8 @@ export default function PeLeagues() {
   }
 
   function startProcess(c) {
-    patchHolding(c.uid, { proc: { resolveQ: quarter + PROC_Q } });
-    setFeed((p) => [{ q: quarter, e: "📣", tone: "neu", t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Gebote liegen in zwei Halbjahren vor.` }, ...p]);
+    patchHolding(c.uid, { proc: { resolveQ: decQ + PROC_Q } });
+    setFeed((p) => [{ q: quarter, e: "📣", tone: "neu", t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Gebote liegen in ${hj(PROC_Q + 1)} vor.` }, ...p]);
   }
 
 function finalize(c, gross, buyer, feeRate, extra) {
@@ -677,7 +700,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
       const g = { ...f, holdings: f.holdings.filter((h) => h.uid !== c.uid), realized: [...f.realized, { name: c.name, moic: dealMoic(c, net) }] };
-      applyProceeds(g, net, c.costLeft ?? c.entryEquity, quarter, keep);
+      applyProceeds(g, net, c.costLeft ?? c.entryEquity, decQ, keep);
       return g;
     }));
     const recap = c.recapOut || 0;
@@ -717,7 +740,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
         }),
         realized: [...f.realized, { name: c.name + " (Teilexit)", moic: net / costSold }],
       };
-      applyProceeds(g, net, costSold, quarter);
+      applyProceeds(g, net, costSold, decQ);
       return g;
     }));
     setFeed((p) => [{
@@ -738,11 +761,11 @@ function finalize(c, gross, buyer, feeRate, extra) {
         holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
           ...h, st: (h.st ?? 1) * (1 - IPO_PLACE), entryEquity: h.entryEquity * (1 - IPO_PLACE),
           costLeft: Math.max(0.01, (h.costLeft ?? h.entryEquity) - costSold),
-          cashOut: (h.cashOut || 0) + net, lockUntil: quarter + 2, proc: null,
+          cashOut: (h.cashOut || 0) + net, lockUntil: decQ + 2, proc: null,
         }),
         realized: [...f.realized, { name: c.name + " (IPO)", moic: net / costSold }],
       };
-      applyProceeds(g, net, costSold, quarter);
+      applyProceeds(g, net, costSold, decQ);
       return g;
     }));
     setFeed((p) => [{ q: quarter, e: "🔔", tone: "pos", t: `Börsengang <b>${c.name}</b>: ${Math.round(IPO_PLACE * 100)} % platziert für ${eur(net)} netto. Restbeteiligung ein Jahr im Lock-up.` }, ...p]);
@@ -858,7 +881,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     if (!c) { shift(); return; }
 
     if (action === "abort") {
-      patchHolding(c.uid, { block: quarter + 2 });
+      patchHolding(c.uid, { block: decQ + 2 });
       setFeed((p) => [{ q: quarter, e: "🚫", tone: "neg", t: `Verkaufsprozess für <b>${c.name}</b> abgebrochen. Ein Jahr Sperre — die anderen Fonds haben es gesehen.` }, ...p]);
       shift(); return;
     }
@@ -872,7 +895,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
       } else if (r < 0.85) {
         const second = item.offers.filter((o) => o !== offer).sort((a, b) => b.price - a.price)[0];
         if (!second) {
-          patchHolding(c.uid, { block: quarter + 2 });
+          patchHolding(c.uid, { block: decQ + 2 });
           setFeed((p) => [{ q: quarter, e: "🚫", tone: "neg", t: `<b>${offer.buyer}</b> springt bei ${c.name} ab. Kein weiteres Gebot, ein Jahr Sperre.` }, ...p]);
           shift(); return;
         }
@@ -884,7 +907,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     }
 
     if (final.risk && rng.rnd() < final.risk) {
-      patchHolding(c.uid, { block: quarter + 2 });
+      patchHolding(c.uid, { block: decQ + 2 });
       setFeed((p) => [{ q: quarter, e: "⚖️", tone: "neg", t: `Die Fusionskontrolle stoppt den Verkauf von <b>${c.name}</b>. ${final.buyer} zieht zurück, ein Jahr Sperre.` }, ...p]);
       shift(); return;
     }
@@ -966,6 +989,13 @@ function finalize(c, gross, buyer, feeRate, extra) {
           <span className="mono">TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}×</span>
           <span className="mono">Platz {myRank}/{funds.length}{streak >= 2 ? ` · 🔥×${streak}` : ""} · {me.holdings.length}/{MAX_SLOTS} PortCos</span>
         </div>
+        {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
+            was davon nach der Zwangsverwertung übrig bliebe. */}
+        {PERIODS - quarter <= END_PRESSURE_FROM + PROC_Q && (
+          <div className="barrow mono" style={{ marginTop: 2, fontSize: 10.5 }}>
+            <TailEndPeek fund={me} market={market} quarter={quarter} />
+          </div>
+        )}
         <div className="barrow" style={{ marginTop: 2, fontSize: 10.5, opacity: .45 }}>
           <span className="mono">
             {eur(me.undrawn ?? CAPITAL)} offenes Commitment{(me.recyc || 0) > 0.5 ? ` + ${eur(me.recyc)} einbehalten` : ""}
@@ -1181,7 +1211,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
       {initPick && me.holdings.find((h) => h.uid === initPick.uid) && (
         <InitPicker c={me.holdings.find((h) => h.uid === initPick.uid)} dim={initPick.dim} market={market}
           investable={investableOf(me, quarter)}
-          start={(id, eq) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, eq); setInitPick(null); }}
+          start={(id, mandate) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, mandate); setInitPick(null); }}
           close={() => setInitPick(null)} />
       )}
       {injectPick && me.holdings.find((h) => h.uid === injectPick) && (

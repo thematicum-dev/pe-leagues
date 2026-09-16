@@ -399,6 +399,169 @@ Frage des Spiels — wann verkauft man ein Asset, das noch weiterläuft — nich
 tun hat. Sie ist hier notiert, damit sie eine Entscheidung bleibt und nicht zum
 Versehen wird.
 
+### 19 — Wann wird die Akquisitionsschuld eines Zukaufs gezogen?
+
+**Frage.** Ein Add-on läuft über mehrere Halbjahre, bis die Integration steht.
+Steht die Akquisitionsschuld in dieser Zeit schon in der Bilanz?
+
+**Befund.** Bis zum 15.09.2026 ja — und das gekaufte EBITDA nicht.
+`buildInit()` addierte den Kaufpreis sofort auf `c.netDebt`, `maturePeople()`
+lieferte den Umsatz erst beim Abschluss. Dazwischen trug die Plattform die volle
+Schuld gegen ihr altes Ergebnis.
+
+Das ist nicht nur eine Anzeigefrage. Die Karte genehmigt einen Zukauf auf der
+**Pro-forma-Verschuldung** — `(netDebt + Kaufpreis) / (EBITDA + EBITDA des
+Ziels)`, geprüft gegen Covenant minus `ADDON_HEADROOM`. Der Covenant selbst wird
+in `stepCompany()` jede Periode auf dem **tatsächlichen** Leverage getestet, und
+der lief im Integrationsfenster gegen den alten Nenner. Gemessen über 121 Zukäufe
+in acht Partien: Karte im Schnitt 3,6×, tatsächlich 4,3×, Spitze 8,3× gegen einen
+Covenant von 6,5 — in 54 Halbjahren stand die Plattform über ihrem Covenant, auf
+einer Zahl, die nirgends in der Ansicht stand.
+
+Der Realität entspricht es ohnehin nicht: Akquisitionsfinanzierung wird beim
+Closing gezogen, nicht beim Signing, und konsolidiert wird zum selben Zeitpunkt.
+
+**Konsequenz.** Geändert. Die Schuld hängt jetzt als `addDebt` am Vorgang und
+wird in `maturePeople()` beim Abschluss gebucht — zusammen mit dem gekauften
+EBITDA und in beiden Fällen: Scheitert die Integration, steht sie trotzdem voll,
+und genau daraus entsteht der Covenant Breach, den die Karte ankündigt. Der
+Eigenkapitalanteil fließt weiterhin beim Signing an den Verkäufer; er erhöht die
+Kostenbasis, nicht die Verschuldung (`toDebt: false`), und lässt den Leverage
+deshalb unberührt.
+
+Dieselbe Messung danach: tatsächlicher Leverage im Integrationsfenster 2,6×,
+Spitze 6,5×, vier Halbjahre über Covenant — und die übrig gebliebenen haben
+andere Ursachen als den Zukauf. Der Leverage nach dem Abschluss ist jetzt die
+Pro-forma-Zahl, auf der entschieden wurde.
+
+### 20 — Der Zukauf als Entscheidung, nicht als Angebot
+
+**Frage.** Was entscheidet der Spieler bei einem Add-on, und woraus entsteht
+sein Risiko?
+
+**Befund.** Bis zum 15.09.2026: nichts und fast nichts. Die Zielgröße lag als
+`addonSize` beim Kauf der Plattform fest (20–35 %), der Preis stand über
+`addonMultiple()`, und die einzige Entscheidung war ja oder nein. Das Risiko kam
+aus `addonRisk()` — Prozessreife, Leverage, Zielgröße —, also aus Zahlen, die
+der Spieler nicht gesetzt hatte. Gemessen über 60 Partien scheiterte dabei
+**47 %** der Integrationen.
+
+Ein Ausfall des Deals selbst gab es nie: kein Ereignis brach einen laufenden
+Zukauf ab, kein Wettbewerber nahm das Ziel weg (`addonComp` verteuerte nur),
+und selbst im Fehlschlag kamen 35 % des Umsatzes an. Die einzige Schranke davor
+war die Finanzierung, und die ist binär.
+
+**Konsequenz.** Geändert. Der Spieler erteilt jetzt ein Mandat, wie in der
+Praxis: **Zielgröße** (bis `ADDON_MAX_SHARE` des Konzern-EBITDA) und
+**Höchstgebot** (ein Multiple; über die Preisvorstellung des Verkäufers hinaus
+zahlt niemand). Beides bewegt dasselbe Risiko, aus dem gleichen Grund, aus dem
+Buy-&-Build in der Praxis scheitert:
+
+- Ein größerer Bissen ist schwerer zu verdauen — und er ist relativ teurer, weil
+  der Größenabschlag jetzt am EBITDA des **Ziels** hängt, nicht mehr an dem der
+  Plattform. Wer groß zukauft, zahlt fast das eigene Multiple und verdient an
+  der Arbitrage nichts mehr.
+- Wer unter der Preisvorstellung bleibt, bekommt nicht denselben Zukauf
+  billiger, sondern einen anderen. Zu dem Preis ist nur zu haben, was sonst
+  niemand will. Adverse Selektion, und sie zeigt sich in der Integration.
+
+Kalibriert ist die Skala auf den Referenzfall: Zielgröße `ADDON_REF_SHARE`,
+voller Preis, Plattform in der gemessenen Mitte (Prozessreife 2,0, effektives
+Rating der Fachrolle 2,0, Leverage bei `LEV_FREE`). Dort liegt das Risiko bei
+`ADDON_FAIL_BASE` = 10 %. Gemessen über 60 Partien:
+
+| Mandat | Risiko laut Karte | tatsächlich gescheitert |
+|---|---|---|
+| 20 % der Plattform, voller Preis | 7 % | 7 % |
+| 25 % (Referenz), voller Preis | 11 % | 7 % |
+| 30 %, voller Preis | 16 % | 15 % |
+| 50 %, voller Preis | 36 % | 30 % |
+| 25 %, ein Turn unter Ask | 29 % | 28 % |
+| 25 %, zwei Turns unter Ask | 47 % | 44 % |
+
+Das Grundrauschen ist damit deutlich niedriger als vorher, die Spanne aber
+größer — der Preis für ein hohes Risiko kommt jetzt aus der Entscheidung des
+Spielers statt aus der Ziehung beim Kauf der Plattform. Die KI-Fonds erteilen
+das Referenzmandat; die Kohorte steht damit genau auf dem kalibrierten Punkt.
+
+Nicht geändert: Es gibt weiterhin keinen Ausfall des Deals selbst. Scheitert ein
+Zukauf, ist er vollzogen und schlecht integriert — 35 % des Umsatzes, volle
+Akquisitionsschuld, Marge und Qualität beschädigt.
+
+### 21 — Wie lange dauert ein Zukauf?
+
+**Frage.** Ein Add-on lief wie jede andere Maßnahme über mehrere Halbjahre. Ist
+das die richtige Laufzeit für eine Transaktion?
+
+**Befund.** Nein. `initDurationOf()` gab dem Zukauf `initDur(E) + 1` Halbjahre —
+die Dauer eines Umsetzungsprogramms plus einen Zuschlag. Gemessen über 28
+Zukäufe in acht Partien waren das im Schnitt **4,6 Halbjahre**, also gut zwei
+Jahre zwischen Signing und Closing.
+
+Das ist aus zwei Gründen falsch. Erstens läuft eine Akquisitionsfinanzierung in
+der Praxis über Wochen bis wenige Monate, nicht über zwei Jahre; die
+Integration dauert danach, aber sie ist kein Vollzugsvorbehalt. Zweitens
+blockierte der Vorgang die ganze Zeit den Growth-Maßnahmenplatz der Beteiligung
+— die Operating-Kapazität, die im Spiel die knappe Ressource ist. Über eine
+volle Partie kamen in derselben Fixture nur **1,9 Zukäufe je Partie** zustande.
+Buy-&-Build war damit als Strategie nicht spielbar.
+
+**Konsequenz.** Geändert. `initDurationOf()` gibt beim Zukauf 0: `buildInit()`
+setzt `doneQ = quarter`, und `maturePeople()` läuft im selben Durchlauf nach der
+Entscheidung. Signing und Closing fallen in dasselbe Halbjahr, Akquisitionsschuld
+und erworbenes EBITDA werden gemeinsam gebucht (Punkt 19 bleibt damit erhalten,
+das Integrationsfenster ist nur noch null Halbjahre lang). Die Margenbelastung
+aus der Integration (`drag`) trägt die Periode des Erwerbs.
+
+Dieselbe Fixture danach, gleiche Startwerte: **3,5 Zukäufe je Partie** statt 1,9.
+Die Erfolgsquote sinkt leicht von 87 % auf 82 % — nicht weil ein einzelner
+Zukauf riskanter geworden wäre, sondern weil mehr Auflagen zustande kommen und
+der Wiederholungsmalus greift. Halbjahre über Covenant: 6 von 308 vorher, 4 von
+307 danach, also unverändert.
+
+Bereits ausgewertete Halbjahre behalten die alte Laufzeit
+(`EngineCompat.legacyAddonMandate`, siehe `buildInit`).
+
+### 22 — Wie viel des Reifegradgewinns trägt die Beteiligung überhaupt?
+
+**Frage.** Der Maßnahmenkatalog nennt für jedes Programm einen
+Reifegradgewinn. Bekommt der Spieler ihn auch?
+
+**Befund.** Bei Performance ja, bei Growth nicht. `c.plat` geht direkt in
+Zielmarge, Investitions- und Kapitalbindungsquote. `c.acc` wirkt nur bis
+`accCap()` = `min(People + 1, Performance + 1)`; alles darüber ist
+Überdehnung und kostet je Punkt **1,4 pp Zielmarge** (`targetMargin`) und
+**1,8 Qualitätspunkte je Halbjahr** (`stepCompany`). Auf der Karte stand bis
+zum 16.09.2026 nur der volle Gewinn.
+
+Das ist keine Randlage, sondern der Normalfall: Eine frisch erworbene
+Plattform steht auf Performance 2,0, die Wirkgrenze liegt damit bei 3,0, und
+ein gelungenes Wachstumsprogramm liefert 2,0 bis 2,5 Reifegrad. Wirksam ist
+davon 1,0, der Rest zieht die Beteiligung jede Periode nach unten. Gemessen
+über zehn Halbjahre, dieselbe Beteiligung, derselbe Zufallsstrom:
+
+| | Assetqualität | NAV |
+|---|---|---|
+| nur Growth | 60 → **43,4** | 131,4 Mio. € |
+| Growth und Performance parallel | 60 → **75,5** | 267,8 Mio. € |
+
+In einer live durchgespielten Partie derselbe Verlauf: Eine Beteiligung lief
+den halben Haltezeitraum überdehnt und endete bei Qualität 44 (−11 seit
+Einstieg), eine zweite fiel auf 61 und erholte sich auf 73, sobald der
+Performance-Ausbau nachzog.
+
+**Konsequenz.** Die Mechanik bleibt — sie bildet ab, was Skalieren ohne
+operativen Unterbau in der Praxis kostet, und belohnt balancierte
+Portfolioarbeit. Geändert hat sich die Entscheidungsgrundlage: Der Katalog
+zeigt bei jedem Growth-Programm eine Zeile **„Davon wirksam"** mit dem
+wirksamen Zuwachs, der Wirkgrenze, der bindenden Seite (People oder
+Performance) und dem, was ein Überhang je Halbjahr kostet. Beim Zukauf steht
+derselbe Hinweis an der Zeile „Bei Erfolg", und nur dann, wenn er greift.
+
+Die Grenze steht als `accCap()` an einer Stelle und trägt `accEff()`,
+`overstretch()` und die Karte — vorher stand derselbe Ausdruck dreimal da.
+Eine Warnung, die man erst nach der Entscheidung bekommt, ist keine.
+
 ---
 
 ## Was sich am Spiel geändert hat
@@ -421,8 +584,23 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
    nicht.
 8. **MOIC-Basis vereinheitlicht** (13).
 
-Die beiden Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge
-eines bereits ausgewerteten Halbjahres verschieben, tragen Schalter in
-`EngineCompat` (`legacyNoIntBarrier`, `legacyAddonBenchMargin`) und stehen in
-`LEGACY_COMPAT`, damit sich alte Halbjahre weiterhin exakt nachrechnen lassen
+9. **Akquisitionsschuld beim Abschluss** (19). Ein Zukauf belastet den Leverage
+   nicht mehr über das ganze Integrationsfenster, sondern ab dem Abschluss — und
+   dann genau um die Pro-forma-Zahl, auf der er genehmigt wurde.
+10. **Zukauf als Mandat** (20). Zielgröße und Höchstgebot sind jetzt
+   Entscheidungen des Spielers und bestimmen das Scheiterungsrisiko. Im Band der
+   alten Logik fällt es von 47 % auf rund 10 %, oberhalb davon steigt es
+   deutlich stärker als vorher.
+11. **Zukauf im selben Halbjahr** (21). Signing und Closing fallen zusammen,
+   statt den Growth-Maßnahmenplatz gut zwei Jahre zu binden. Buy-&-Build kommt
+   damit von 1,9 auf 3,5 Zukäufe je Partie.
+12. **Wirksamer Reifegrad im Katalog** (22). Growth-Programme sagen vor dem
+   Start, wie viel ihres Gewinns die Beteiligung trägt und was ein Überhang
+   kostet. Die Mechanik ist unverändert, sichtbar war sie bisher erst danach.
+
+Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
+bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`
+(`legacyNoIntBarrier`, `legacyAddonBenchMargin`, `addonDebtAtStart`,
+`legacyAddonMandate`) und stehen
+in `LEGACY_COMPAT`, damit sich alte Halbjahre weiterhin exakt nachrechnen lassen
 (`lib/engine/replay.ts`).

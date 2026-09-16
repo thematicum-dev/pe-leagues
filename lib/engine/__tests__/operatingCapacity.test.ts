@@ -70,9 +70,19 @@ describe("Operating Capacity wird serverseitig durchgesetzt", () => {
     const initiatives = targets.map((h) => ({ holdingUid: h.uid, dim: "plat" as const, id: "opex" }));
 
     hy++;
+    const before = new Map(targets.map((t) => [t.uid, ((t.done || []) as string[]).length]));
     const out = runQuarter({ state, halfYear: hy, decisionsBySlot: { 0: { initiatives } }, rng });
     const after = out.state.funds[0].holdings as Any[];
-    const started = targets.filter((t) => after.find((h) => h.uid === t.uid)?.initP);
+    /* Angelaufen ist eine Maßnahme auch dann, wenn sie in diesem Halbjahr schon
+       wieder fertig wurde: Das Ereignis "Managementteam zieht ein Großprojekt
+       vor" zieht doneQ um ein Halbjahr nach vorn, und eine Maßnahme mit
+       Mindestlaufzeit landet damit noch in derselben Periode in `done`. Nur
+       auf initP zu schauen zählte sie als nie gestartet — der Test hing dann
+       daran, ob ein Zufallsereignis eintritt. */
+    const started = targets.filter((t) => {
+      const h = after.find((z) => z.uid === t.uid);
+      return !!h && (h.initP || ((h.done || []) as string[]).length > (before.get(t.uid) ?? 0));
+    });
 
     // operations = 0 -> maxInitSlots = INIT_SLOTS: von 5 eingereichten
     // Maßnahmen darf höchstens diese Zahl tatsächlich anlaufen.

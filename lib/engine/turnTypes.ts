@@ -31,6 +31,14 @@ export interface InitiativeIntent {
      finanzieren. Wird serverseitig gegen das investierbare Kapital und gegen
      den Kaufpreis gekappt. */
   equity?: number;
+  /* Ebenfalls nur beim Add-on: das Mandat. `addEb` ist das EBITDA, bis zu dem
+     gesucht werden soll (Mio. €, serverseitig gegen ADDON_MAX_SHARE des
+     Plattform-EBITDA gekappt), `maxMult` das Höchstgebot als Multiple. Über
+     die Preisvorstellung des Verkäufers hinaus zahlt niemand, darunter steigt
+     das Scheiterungsrisiko — siehe addonFailRisk. Fehlen beide, gilt das
+     Referenzmandat (addonMandate). */
+  addEb?: number;
+  maxMult?: number;
 }
 
 /* Kapitalzuführung in eine bestehende Beteiligung: Equity Cure vor einem
@@ -144,10 +152,23 @@ export interface RuntimeFund {
   dists: unknown[];
 }
 
+/* Ein Eintrag des Nachrichtenfeeds. Der Feed liegt gemeinsam im Spielstand;
+   wer welchen Eintrag sieht, entscheiden zwei Felder:
+
+   - `slot` gesetzt: nur dieser Fondsplatz sieht ihn. Das ist die Vorgabe für
+     alles Operative — Maßnahmen, Besetzungen, Covenant-Warnungen, der eigene
+     Zuschlag. Was ein Wettbewerber in seinem Portfolio tut, steht nicht in
+     deiner Zeitung.
+   - `slot` nicht gesetzt: alle sehen ihn. Markt- und Sektormeldungen, und der
+     Marktbericht über jede Transaktion.
+   - `exceptSlot`: eine öffentliche Meldung, die genau ein Platz NICHT sieht —
+     der Fonds, der sie ausgelöst hat. Er hat zu derselben Transaktion seine
+     eigene, ausführlichere Meldung und braucht die Tickerzeile nicht doppelt. */
 export interface RuntimeFeedEntry {
   halfYear: number;
   emoji: string;
   tone: "neu" | "pos" | "neg";
   text: string;
   slot?: number;
+  exceptSlot?: number;
 }

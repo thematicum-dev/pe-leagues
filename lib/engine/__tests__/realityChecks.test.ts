@@ -3,7 +3,7 @@ import { createRng } from "../rng";
 import {
   CAPITAL, CARRY, COV_DEFAULT, HURDLE, INT_BARRIER, INVEST_PERIOD, LTIP_SHARE, MGMT_FEE,
   PERIODS, SECNAMES, SECTORS, TAX_RATE, ARCHES, DEFAULT_HUMAN_ATTRS,
-  addonCheck, addonEquityNeeded, bookOff, bridgeStep, carryOf, dealMoic, ebitdaOf, exitNetOf,
+  addonCheck, addonEquityNeeded, bookOff, bridgeStep, buildInit, carryOf, dealMoic, ebitdaOf, exitNetOf,
   feeReserveOf, fundEquityIn, investableOf, liveHist, makeBridge, maturePeople, mepCut,
   navValueOf, offOf, periodFin, recycleRoom, retentionFactor, stepCompany, taxOf, tvpiOf,
   applyProceeds,
@@ -194,7 +194,7 @@ describe("Add-on", () => {
     expect(ohne.ok).toBe(false);
     const need = addonEquityNeeded(c, market);
     expect(need).toBeGreaterThan(0);
-    const mit = addonCheck(c, market, need);
+    const mit = addonCheck(c, market, { equity: need });
     expect(mit.ok).toBe(true);
     // Der Kaufpreis bleibt derselbe, nur seine Finanzierung verschiebt sich
     expect(mit.price).toBeCloseTo(ohne.price, 9);
@@ -320,6 +320,84 @@ describe("Zinsschranke", () => {
 });
 
 /* ---------- 10 — Über eine ganze Partie ---------- */
+/* 19 — Die Akquisitionsschuld eines Zukaufs wird beim Abschluss gezogen, nicht
+   beim Signing. Vorher trug die Plattform sie über das ganze Integrationsfenster
+   gegen ihr altes EBITDA: Die Karte genehmigte pro forma, der Covenant testete
+   den tatsächlichen Leverage, und zwischen beiden lag im Schnitt fast ein
+   Turn. */
+describe("Zukauf: Signing und Closing", () => {
+  function platform(over: Any = {}): Any {
+    return company({ netDebt: 24, revenue: 100, margin: 12, covLimit: 6.5, addonSize: 0.25,
+      entryEbitda: 12, entryDebt: 24, ...over });
+  }
+
+  /* 21 — Signing und Closing fallen in dasselbe Halbjahr. Der Vorgang steht
+     mit doneQ = quarter in der Beteiligung, und maturePeople() läuft im selben
+     Durchlauf danach: Der Leverage der Plattform ist beim Periodenschluss
+     bereits die Pro-forma-Zahl, der Maßnahmenplatz wieder frei.             */
+  it("vollzieht den Zukauf im Halbjahr der Entscheidung", () => {
+    const c = platform();
+    const lev0 = c.netDebt / ebitdaOf(c);
+    const B = buildInit(createRng(3), c, "acc", "ma", market, 2) as Any;
+    expect(B.blocked, "Testaufbau: der Zukauf muss finanzierbar sein").toBeUndefined();
+    expect(B.dur, "keine Laufzeit zwischen Signing und Closing").toBe(0);
+    expect(B.init.doneQ, "Closing im Halbjahr der Entscheidung").toBe(2);
+    c.netDebt += B.debt;
+    c[B.slot] = B.init;
+    // Bis hierhin ist nur der Eigenkapitalanteil geflossen, nicht die Schuld
+    expect(c.netDebt / ebitdaOf(c), "Leverage beim Signing").toBeCloseTo(lev0, 9);
+
+    // Derselbe Periodenschluss, über den auch entschieden wurde
+    maturePeople(createRng(3), c, market, 2, false, [], []);
+    expect(c.initA, "Maßnahmenplatz wieder frei").toBeNull();
+    expect((c.addons as Any[]).length, "Zukauf in der Historie").toBe(1);
+    expect((c.addons as Any[])[0].q, "im Halbjahr der Entscheidung verbucht").toBe(2);
+    expect(c.netDebt / ebitdaOf(c), "Leverage nach dem Closing").toBeGreaterThan(lev0);
+  });
+
+  it("zieht sie beim Abschluss — auch wenn die Integration scheitert", () => {
+    /* Beide Ausgänge ausdrücklich durchgespielt statt über Zufallsstarts
+       gesucht: Der Generator ist ein LCG, und seine erste Ziehung aus einem
+       frisch gesetzten kleinen Startwert liegt immer bei rund 0,24 (C/M
+       dominiert, solange A·seed klein gegen 2^32 ist). Ein Test, der Erfolg
+       und Fehlschlag über `createRng(1..34)` einsammeln will, bekommt deshalb
+       immer denselben Ausgang. In einer echten Partie ist der Startwert
+       zufällig über den ganzen Bereich (siehe start_season) und der Strom
+       längst weitergelaufen — dort trägt das nicht. */
+    for (const ok of [true, false]) {
+      const c = platform();
+      const chk = addonCheck(c, market);
+      const nd0 = c.netDebt;
+      const B = buildInit(createRng(3), c, "acc", "ma", market, 2) as Any;
+      expect(B.blocked, "Testaufbau: der Zukauf muss finanzierbar sein").toBeUndefined();
+      c.netDebt += B.debt;
+      c[B.slot] = { ...B.init, ok };
+      const rng = createRng(3);
+      for (let q = 2; q <= B.init.doneQ; q++) maturePeople(rng, c, market, q, false, [], []);
+      expect(c.initA, `ok=${ok}: Maßnahme abgeschlossen`).toBeNull();
+      // Beide Male die volle Schuld — daraus entsteht der angekündigte Breach
+      expect(c.netDebt - nd0, `ok=${ok}: volle Akquisitionsschuld gebucht`).toBeCloseTo(chk.price, 9);
+      expect((c.addons as Any[]).length, `ok=${ok}: in der Zukaufshistorie`).toBe(1);
+      expect((c.addons as Any[])[0].ok).toBe(ok);
+    }
+  });
+
+  it("landet nach dem Abschluss auf der Pro-forma-Zahl, die die Karte genehmigt hat", () => {
+    const c = platform();
+    const chk = addonCheck(c, market);
+    expect(chk.ok).toBe(true);
+    const B = buildInit(createRng(3), c, "acc", "ma", market, 2) as Any;
+    c.netDebt += B.debt;
+    c[B.slot] = B.init;
+    const rng = createRng(3);
+    for (let q = 2; q <= B.init.doneQ; q++) maturePeople(rng, c, market, q, false, [], []);
+    if (B.init.ok) {
+      expect(c.netDebt / ebitdaOf(c), "Leverage nach dem Abschluss").toBeCloseTo(chk.lev, 1);
+      expect(c.netDebt / ebitdaOf(c), "unter der Finanzierungsgrenze").toBeLessThanOrEqual(chk.limit + 0.05);
+    }
+  });
+});
+
 describe("über eine ganze Partie", () => {
   function initialFund(slot: number, isAi: boolean, archetype: string | null): RuntimeFund {
     const arch = archetype ? ARCHES.find((a) => a.key === archetype)! : null;

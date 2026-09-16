@@ -23,22 +23,23 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek,
 } from "@/components/pel/ui";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
   ExitStartIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
+import type { AddonOpts } from "@/lib/engine";
 import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
 import {
   BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
   INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
-  PERIODS, PROC_FEE, PROC_Q,
+  PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
   SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
   eur, exitNetOf, fairOf,
-  gebote, grossMoicOf, hj, initDur, initSuccess, effSkill, initsOf, investableOf, irrOf,
+  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
   markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -668,18 +669,39 @@ export default function MultiplayerGame({
     const p = { ...c };
     const staged = stagedSearchByHolding[c.uid];
     if (staged?.length) {
-      p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 1 }))];
+      // runQuarter setzt readyQ = halfYear + 1, und gespielt wird quarter + 1
+      p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 2 }))];
     }
-    const platInit = stagedInitByKey[initKey(c.uid, "plat")];
-    if (platInit && !p.initP) {
-      const E = effSkill(c, "cfo") * (c.onboard > 0 ? 0.7 : 1);
-      p.initP = { doneQ: quarter + Math.max(1, initDur(E)) };
-    }
-    const accInit = stagedInitByKey[initKey(c.uid, "acc")];
-    if (accInit && !p.initA) {
-      const E = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
-      p.initA = { doneQ: quarter + Math.max(1, initDur(E)) };
-    }
+    /* Eine vorgemerkte Maßnahme muss dieselbe Frist zeigen, die die Auswertung
+       ihr dann gibt: buildInit() setzt doneQ = halfYear + initDurationOf(),
+       und das Halbjahr, über das hier entschieden wird, ist quarter + 1.
+
+       Beim Zukauf ist initDurationOf() 0 — Signing und Closing liegen im
+       selben Halbjahr, die Karte zeigt entsprechend ein Halbjahr Restlaufzeit
+       und die Auswertung bucht Schuld und EBITDA noch in dieser Periode.
+
+       Vorher stand hier `quarter + initDur(E)` — ein Halbjahr zu früh
+       verankert, ohne den Dauerzuschlag der Maßnahme und ohne den
+       Wiederholungsmalus. Die Karte meldete direkt nach dem Klick
+       "Ergebnis in 2 Halbjahre" und nach der Abgabe "in 3 Halbjahre", ohne
+       dass sich irgendetwas geändert hätte. Dazu fehlten Name und ma-Kennung,
+       sodass der Zukauf bis zur Abgabe als namenlose "Maßnahme" dastand. */
+    const stageInit = (slot: string, dim: string, intent: InitiativeIntent | undefined) => {
+      if (!intent || p[slot]) return;
+      const dur = initDurationOf(c, dim, intent.id);
+      if (dur == null) return;
+      const spec = initById(dim, intent.id) as Any;
+      const chk = spec?.ma
+        ? addonCheck(c, state.market, { addEb: intent.addEb, mult: intent.maxMult, equity: intent.equity })
+        : null;
+      p[slot] = {
+        dim, id: intent.id, name: spec?.n ?? null, ma: !!spec?.ma, drag: spec?.drag || 0,
+        doneQ: quarter + 1 + dur,
+        ...(chk ? { addEb: chk.addEb, mult: chk.mult, price: chk.price, equity: chk.equity, fail: chk.fail } : {}),
+      };
+    };
+    stageInit("initP", "plat", stagedInitByKey[initKey(c.uid, "plat")]);
+    stageInit("initA", "acc", stagedInitByKey[initKey(c.uid, "acc")]);
     /* Eine vorgemerkte Kapitalzuführung sofort zeigen: Leverage, Zins und
        Covenant-Abstand auf der Karte sind sonst die von vorhin, und der
        Spieler entscheidet über den Rest des Halbjahres auf veralteten Zahlen. */
@@ -692,7 +714,9 @@ export default function MultiplayerGame({
     if (studyStaged.includes(c.uid)) p.dd = true;
     const exit = stagedExitByHolding[c.uid];
     if (exit && !p.proc) {
-      p.proc = { resolveQ: quarter + (exit.action === "process" ? PROC_Q : 1) };
+      // Wie bei den Maßnahmen: runQuarter verankert auf halfYear = quarter + 1.
+      // Ein bilateraler Verkauf wird in derselben Auswertung abgewickelt.
+      p.proc = { resolveQ: quarter + 1 + (exit.action === "process" ? PROC_Q : 0) };
     }
     return p;
   }
@@ -861,11 +885,20 @@ export default function MultiplayerGame({
     setShortlistCursor((i) => i + 1);
   }
 
-  function startInitStage(id: string, equity = 0) {
+  /* Beim Zukauf geht das ganze Mandat in die Abgabe: Zielgröße, Höchstgebot
+     und Eigenkapitalanteil. Der Server kappt alle drei noch einmal gegen den
+     tatsächlichen Spielstand (siehe applyImmediateDecisions) — die Ansicht
+     rechnet nur vor, sie entscheidet nichts. */
+  function startInitStage(id: string, mandate: AddonOpts = {}) {
     if (!initPick) return;
     const { uid, dim } = initPick;
+    const ma = id === "ma" ? {
+      addEb: mandate.addEb,
+      maxMult: mandate.mult,
+      ...((mandate.equity || 0) > 0.05 ? { equity: mandate.equity } : {}),
+    } : {};
     setInitiatives((arr) => [...arr.filter((i) => !(i.holdingUid === uid && i.dim === dim)),
-      { holdingUid: uid, dim, id, ...(id === "ma" && equity > 0.05 ? { equity } : {}) }]);
+      { holdingUid: uid, dim, id, ...ma }]);
     setInitPick(null);
   }
 
@@ -944,13 +977,28 @@ export default function MultiplayerGame({
   const tone = (dir: string) => (dir ? " " + dir : "");
   const landmark = state.landmark as Any;
 
+  /* Was dieser Fondsplatz vom gemeinsamen Feed sieht.
+
+     Der Feed liegt für alle in einem Spielstand, und jeder Eintrag sagt selbst,
+     wer ihn sehen darf: `slot` gesetzt heißt privat, nicht gesetzt heißt
+     öffentlich, `exceptSlot` ist eine öffentliche Meldung ohne den Fonds, der
+     sie ausgelöst hat (der hat seine eigene, ausführlichere).
+
+     Bis zum 16.09.2026 wurde hier gar nicht gefiltert: Jeder Spieler las die
+     Betriebsmeldungen aller anderen mit — welche Maßnahme ein Wettbewerber
+     gestartet hat, wo er eine Position sucht, wann sein Covenant reißt. Das
+     war nie so gemeint; `slot` wird seit jeher mitgeschrieben und war nur nie
+     ausgewertet.                                                            */
+  /* Bewusst ohne useMemo: Der Feed einer Partie hat ein paar hundert Einträge,
+     und die Hooks dieser Komponente stehen hinter einem frühen Return — ein
+     weiterer wäre ein weiterer bedingter Hook. */
+  const visibleFeed = state.feed.filter(
+    (f) => (f.slot == null || f.slot === humanSlot) && f.exceptSlot !== humanSlot,
+  );
   // News (aus components/pel/ui.tsx) erwartet dieselben Kurzfeldnamen wie im
   // Übungsmodus ({q,e,tone,t}); der Server schreibt sprechende Feldnamen
   // ({halfYear,emoji,tone,text}) — hier nur umbenannt, keine Datenänderung.
-  const feedForNews = useMemo(
-    () => state.feed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text })),
-    [state.feed],
-  );
+  const feedForNews = visibleFeed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text }));
 
   async function handleSubmit() {
     setError(null);
@@ -1085,6 +1133,14 @@ export default function MultiplayerGame({
             <span>DPI {dpi.toFixed(2)}×
               <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
+          {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
+              was davon nach der Zwangsverwertung übrig bliebe. Ohne diese
+              Zeile springt die Wertung erst in der Endabrechnung. */}
+          {PERIODS - quarter <= END_PRESSURE_FROM + PROC_Q && (
+            <div className="cockkpi mono">
+              <TailEndPeek fund={me} market={state.market} quarter={quarter} />
+            </div>
+          )}
         </div>
         {/* Kapital: womit lässt sich arbeiten. */}
         <div className="cockgrp">
@@ -1193,10 +1249,10 @@ export default function MultiplayerGame({
             ))}
             <div className="card">
               <h3 className="disp">Archiv</h3>
-              {state.feed.filter((f) => f.halfYear < quarter).length === 0 && (
+              {visibleFeed.filter((f) => f.halfYear < quarter).length === 0 && (
                 <div className="quiet">Noch keine älteren Meldungen.</div>
               )}
-              {state.feed.filter((f) => f.halfYear < quarter).slice(0, 15).map((f, i) => (
+              {visibleFeed.filter((f) => f.halfYear < quarter).slice(0, 15).map((f, i) => (
                 <div className={"item " + (f.tone || "neu")} key={i}>
                   <span className="em">{f.emoji || "·"}</span>
                   <span dangerouslySetInnerHTML={{ __html: `<span class="mono" style="opacity:.5">HJ ${f.halfYear}</span> ${f.text}` }} />

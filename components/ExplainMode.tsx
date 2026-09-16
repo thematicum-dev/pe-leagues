@@ -14,17 +14,17 @@ import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 
 import { createRng } from "@/lib/engine";
-import type { Rng } from "@/lib/engine";
+import type { AddonOpts, Rng } from "@/lib/engine";
 import {
-  ACC_SPREAD, BASE_RATE, BOOK, CAPITAL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST,
+  ADDON_FAIL_BASE, ADDON_MAX_SHARE, BASE_RATE, BOOK, CAPITAL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST,
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
   exitNetOf, mepCut,
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   CV_FEE, IPO_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
-  TVPI_BENCH, addonCheck, anyInit, bookOff, ceilingFactor, chargeOff, clamp, ddCapOf, ddCostOf,
-  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, effSkill, eqvOf, eur, growthPrem,
-  hj, initById, initDur, initGain, initRuns, initSuccess, initsOf, isCapped, makeBridge,
+  TVPI_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
+  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, growthPrem,
+  hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
   retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x,
 } from "@/lib/engine";
@@ -33,6 +33,9 @@ import {
   CSS, haptic, AnimatedNumber, News, Coach, CoachCtx, Kpi, DealCard, Holding, Def, InitPicker,
   Shortlist, Sheet,
 } from "@/components/pel/ui";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Any = any;
 
 /* Das Briefing: die Begriffe, bevor der geführte Durchlauf beginnt. */
 /* Gebührenreserve bei Auflage: dieselbe Rechnung wie feeReserveOf() für ein
@@ -136,7 +139,8 @@ function Briefing({ dark, setDark, onStart }) {
           </Def>
           <Def t="Positionen besetzen">
             CEO, CFO und eine branchenspezifische Rolle. Das Rating dieser drei bestimmt, wie schnell und wie
-            zuverlässig jedes Programm läuft. Eine Suche dauert ein Halbjahr und kostet 30 % eines Jahresgehalts;
+            zuverlässig jedes Programm läuft. Eine Suche kostet 30 % eines Jahresgehalts und bringt nach zwei
+            Halbjahren drei Kandidaten;
             mehrere Suchen laufen parallel. Eine unbesetzte Stelle spart nichts — sie wird interimistisch besetzt,
             und das ist teurer als eine reguläre Besetzung.
           </Def>
@@ -149,8 +153,32 @@ function Briefing({ dark, setDark, onStart }) {
             freisetzen, Preise durchsetzen. Sie gelingen in 55–97 % der Fälle, und selbst wenn sie das Ziel
             verfehlen, kommt ein Teil an. <b>Transformationen</b> wie ERP oder KI sind aufwendig und gehen
             binär aus: 50–92 % je nach Team, ein Fehlschlag bringt nichts außer Kosten. <b>Marktabhängige</b>
-            Programme — neuer Markt, Zukauf — hängen an Dritten und gelingen nur in 20–82 % der Fälle.
-            Alle drei Spannen hängen fast vollständig am Rating der zuständigen Position.
+            Programme wie der Eintritt in einen neuen Markt hängen an Dritten und gelingen nur in 20–82 %
+            der Fälle. Diese drei Spannen hängen fast vollständig am Rating der zuständigen Position.
+          </Def>
+          <Def t="Der Zukauf ist ein Mandat, kein Angebot">
+            Beim <b>Add-on M&amp;A</b> erteilst du zwei Parameter; beide bestimmen das Scheiterungsrisiko.
+            <br /><br />
+            Die <b>Zielgröße</b> in EBITDA, bis zu {pct(ADDON_MAX_SHARE * 100)} des Konzern-EBITDA. Kleinere
+            Einheiten werden strukturell niedriger bewertet — das ist die Multiple-Arbitrage eines
+            Buy-&amp;-Build. Mit der Zielgröße steigen Einstiegsmultiple und Integrationsaufwand.
+            <br /><br />
+            Das <b>Höchstgebot</b> als Multiple, gedeckelt auf die Preisvorstellung des Verkäufers. Ein
+            Gebot darunter senkt den Kaufpreis und erhöht zugleich die Wahrscheinlichkeit, dass das Mandat
+            nur noch auf Ziele minderer Qualität trifft.
+            <br /><br />
+            Im Referenzfall — ein Viertel des Konzern-EBITDA, voller Preis, Plattform auf Branchenniveau —
+            liegt das Scheiterungsrisiko bei rund {pct(ADDON_FAIL_BASE * 100)}. Maximale Zielgröße oder ein
+            Gebot deutlich unter der Preisvorstellung heben es auf ein Drittel bis die Hälfte. Reife
+            Prozesse und ein starkes Team senken es, hoher Leverage hebt es.
+            <br /><br />
+            <b>Scheitern heißt nicht, dass der Deal platzt.</b> Das Unternehmen gehört dir, die
+            Akquisitionsschuld steht in voller Höhe, der Umsatzbeitrag liegt bei 35 %, Marge und
+            Assetqualität sind beschädigt.
+            <br /><br />
+            <b>Signing und Closing fallen in dasselbe Halbjahr.</b> Akquisitionsschuld und erworbenes
+            EBITDA werden gemeinsam gebucht; der Leverage steht danach auf der Pro-forma-Zahl, gegen die
+            die Finanzierung genehmigt wurde.
           </Def>
           <Def t="Assetqualität">
             Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
@@ -367,13 +395,24 @@ const COACH = [
   { id: "cost", when: (o) => o.q === 1,
     t: "Erste Periode gelaufen. Beachte: die <b>2 % Transaktionskosten</b> beim Kauf sind sofort weg und stecken bereits im Einstieg — die ersten Prozentpunkte verdienst du zurück, bevor du überhaupt Wert schaffst. Deshalb ist der Einstiegspreis die wichtigste Einzelentscheidung im ganzen Deal." },
   { id: "vac", when: (o) => o.c.cfo.skill <= 0 && !(o.c.searches || []).some((s) => s.seat === "cfo") && o.q <= 3,
-    t: "Der <b>CFO ist vakant</b>. Eine unbesetzte Position zieht das People-Niveau nach unten — und über <code>min(Growth, People+1, Performance+1)</code> deckelt sie direkt dein Wachstum. Und sie spart kein Geld: die Position wird interimistisch besetzt, und Interim kostet ein Viertel mehr als der Vorgänger. Ein Mandat kostet 30 % eines Jahresgehalts und ein Halbjahr — gemessen an der Wirkung auf jede spätere Maßnahme die schnellste Rendite im ganzen Katalog. Du darfst auch beide offenen Positionen gleichzeitig ausschreiben." },
+    t: "Der <b>CFO ist vakant</b>. Eine unbesetzte Position zieht das People-Niveau nach unten — und über <code>min(Growth, People+1, Performance+1)</code> deckelt sie direkt dein Wachstum. Und sie spart kein Geld: die Position wird interimistisch besetzt, und Interim kostet ein Viertel mehr als der Vorgänger. Ein Mandat kostet 30 % eines Jahresgehalts und zwei Halbjahre — gemessen an der Wirkung auf jede spätere Maßnahme die schnellste Rendite im ganzen Katalog. Du darfst auch beide offenen Positionen gleichzeitig ausschreiben." },
   { id: "search", when: (o) => (o.c.searches || []).some((s) => !s.waiting),
-    t: "Search läuft. Nach einem Halbjahr bekommst du drei Kandidaten. Das angezeigte Rating ist eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und der wahre Wert steht erst beim Antritt fest." },
+    t: "Search läuft. Nach zwei Halbjahren bekommst du drei Kandidaten. Das angezeigte Rating ist eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und der wahre Wert steht erst beim Antritt fest." },
   { id: "cap", when: (o) => ["cfo", "r3"].some((k) => isCapped(o.c, k)),
     t: "Eine Fachposition wirkt höchstens bis <b>CEO-Rating + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. A-Player berichten nicht dauerhaft an C-Player; wenn du oben investieren willst, fang beim CEO an." },
-  { id: "init", when: (o) => anyInit(o.c) && o.q >= 1,
-    t: "Maßnahme läuft. Zwei Dinge bestimmen den Ausgang: das <b>effektive Rating</b> auf der zuständigen Position — es steuert Erfolgswahrscheinlichkeit, Dauer und Höhe des Gewinns — und die <b>Risikoklasse</b>. Mit einem schwachen Team liefern verlässliche Maßnahmen rund 70 %, Transformationsprogramme wie ERP oder KI 50–60 %, marktabhängige nur 20–37 %. Mit einem A-Team sind es 97 %, 78–88 % und bis 86 %. Die Besetzung entscheidet mehr als die Auswahl." },
+  { id: "init", when: (o) => anyInit(o.c) && !(o.c.initA && o.c.initA.ma) && o.q >= 1,
+    t: "Maßnahme läuft. Zwei Dinge bestimmen den Ausgang: das <b>effektive Rating</b> auf der zuständigen Position — es steuert Erfolgswahrscheinlichkeit, Dauer und Höhe des Gewinns — und die <b>Risikoklasse</b>. Mit einem schwachen Team liefern verlässliche Maßnahmen rund 70 %, Transformationsprogramme wie ERP oder KI 50–60 %, marktabhängige nur 20–37 %. Mit einem A-Team sind es 97 %, 78–88 % und bis 86 %. Die Besetzung entscheidet mehr als die Auswahl. Der <b>Zukauf</b> ist die Ausnahme: sein Risiko kommt aus dem Mandat, das du erteilst." },
+  /* Der Zukauf rechnet als einzige Maßnahme nicht über Rating und Risikoklasse,
+     sondern über das Mandat. Der Hinweis hängt seit dem 16.09.2026 an der
+     Zukaufshistorie, nicht mehr am belegten Maßnahmenplatz: Signing und
+     Closing fallen in dasselbe Halbjahr, der Platz ist beim Periodenschluss
+     also längst wieder frei.                                                */
+  { id: "addon", when: (o) => (o.c.addons || []).some((a) => a.q === o.q),
+    t: "<b>Zukauf vollzogen.</b> Das Ergebnis folgt aus deinem Mandat: Die <b>Zielgröße</b> bestimmt die Multiple-Arbitrage — kleinere Einheiten werden strukturell niedriger bewertet, große kosten nahezu das Plattformmultiple und binden mehr Integrationskapazität. Das <b>Höchstgebot</b> senkt den Kaufpreis und erhöht zugleich das Scheiterungsrisiko. Beides steht als Prozentsatz auf der Karte.<br><br>Signing und Closing liegen im selben Halbjahr: Akquisitionsschuld und erworbenes EBITDA sind gemeinsam gebucht, der Leverage steht auf der Pro-forma-Zahl." },
+  { id: "addonok", when: (o) => o.news.some((n) => n.t.includes("Add-on abgeschlossen")),
+    t: "Der Zukauf ist integriert: Umsatz und EBITDA sind gebucht, die Akquisitionsschuld steht, der Reifegrad ist eine Stufe höher. Prüfe den <b>Leverage</b> gegen den Covenant. Buy-&-Build trägt, solange das integrierte Ergebnis schneller wächst als die Akquisitionsschuld." },
+  { id: "addonfail", when: (o) => o.news.some((n) => n.t.includes("Integration des Add-ons gescheitert")),
+    t: "Die Integration ist gescheitert — <b>kein geplatzter Deal</b>. Das Unternehmen gehört dir, die Akquisitionsschuld steht in voller Höhe, der Umsatzbeitrag liegt bei 35 %, Marge und Assetqualität sind beschädigt. Der typische Weg in den Covenant Breach." },
   { id: "jcurve", when: (o) => o.q >= 2 && o.c.margin < (o.c.hist[0] ? o.c.hist[0].mg : 0) && o.c.plat > 1.4,
     t: "Die Marge liegt unter dem Einstiegsniveau, obwohl der Reifegrad steigt. Das ist die <b>J-Kurve</b>: Umsetzungskosten fallen sofort an, der Ertrag kommt mit Verzögerung. Der Anlauf kostet in der ersten zusammenhängenden Periode voll, danach nur noch halb — durchlaufen zu lassen ist billiger als stoppen und neu starten. Wer hier abbricht, hat nur bezahlt." },
   { id: "relfail", when: (o) => o.news.some((n) => n.e === "➖"),
@@ -454,6 +493,12 @@ function GuidedRun({ dark, setDark, back }) {
   useEffect(() => { window.scrollTo(0, 0); }, [q]);
 
   const freeSlots = c ? PRAC_SLOTS - initsOf(c).length : 0;
+  /* Das Halbjahr, über das gerade entschieden wird. `q` zählt die bereits
+     gelaufenen; next() rechnet nq = q + 1. Jede Frist hängt daran — genau wie
+     in einer Partie, wo runQuarter() mit halfYear = quarter + 1 rechnet.
+     Vorher standen die Fristen hier auf `q`, und die geteilten Karten zählten
+     deshalb ein Halbjahr zu kurz herunter.                                  */
+  const decQ = q + 1;
 
   function patch(p) { setC((h) => ({ ...h, ...p })); }
 
@@ -461,7 +506,7 @@ function GuidedRun({ dark, setDark, back }) {
     haptic(8);
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     patch({ ...chargeOff(c, "mgmt", retainerOf(seat, ebitdaOf(c))),
-      searches: [...(c.searches || []), { seat, readyQ: q + 1 }] });
+      searches: [...(c.searches || []), { seat, readyQ: decQ + 1 }] });
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
 
@@ -481,43 +526,43 @@ function GuidedRun({ dark, setDark, back }) {
 
   function reject(item) {
     patch({ ...chargeOff(c, "mgmt", retainerOf(item.seat, ebitdaOf(c)) * 0.5),
-      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: q + 1 } : se) });
+      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se) });
     setSl((p) => p.slice(1));
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }
 
-  function startInit(dim, id) {
+  /* Maßnahme starten — über buildInit(), dieselbe Funktion wie in der Partie.
+
+     Bis zum 15.09.2026 stand hier eine eigene Kopie: eigene Dauer (ohne den
+     Wiederholungsmalus), eigene Erfolgsquote (ohne rep.sm), eigene Buchung des
+     Zukaufspreises. Sie war nie grob falsch, aber sie war eine zweite Wahrheit
+     — und beim Umbau des Zukaufs zum Mandat wäre sie die dritte geworden. Was
+     der geführte Durchlauf wirklich anders macht, ist der fehlende Fonds: Es
+     gibt kein Eigenkapital zum Nachschießen, ein Zukauf muss also über die
+     Zielgröße finanzierbar werden.                                          */
+  function startInit(dim, id, mandate: AddonOpts = {}) {
     haptic(8);
-    const spec = initById(dim, id);
-    if (initRuns(c, id) >= REPEAT_MAX) return;
-    const seat = dim === "plat" ? "cfo" : "r3";
-    const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
-    const dur = Math.max(1, initDur(E) + (spec.dm || 0));
-    const p = clamp(initSuccess(E, spec.cls) + (spec.sm || 0), 0.1, 0.97);
-    const ok = rng.rnd() < p;
-    const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
-      : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
-    let pt = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
-    let debt = ebitdaOf(c) * (spec.oneOff || 0), msg = "";
-    // Der Zukaufspreis wird getrennt geführt: in der Berichtsansicht ist er eine
-    // Akquisition, während die Programmkosten Einmalaufwand sind.
-    let addonPrice = 0;
-    if (spec.ma) {
-      const chk = addonCheck(c, market);
-      if (!chk.ok) {
-        setFeed((f2) => [{ q, e: "🏦", tone: "neg", t: `<b>${c.name}</b>: Der Zukauf scheitert an der Finanzierung. Pro forma ${x(chk.lev)} Leverage gegen einen Covenant von ${x(chk.limit)} — die Banken steigen aus.` }, ...f2]);
-        return;
-      }
-      addonPrice = chk.price;
-      debt += chk.price;
-      pt = { ...pt, ma: true, addEb: chk.addEb, mult: chk.mult, price: chk.price, gain: 1.0, ok };
-      msg = ` Add-on mit ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert. Leverage pro forma ${x(chk.lev)}. Integrationswahrscheinlichkeit ${Math.round(p * 100)} %.`;
-    } else {
-      pt = { ...pt, gain: initGain(E) * sp * (spec.gm || 1) * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
-      msg = ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, ${hj(dur)}.${spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : ""}`;
+    const B = buildInit(rng, c, dim, id, market, decQ, {}, {
+      addEb: mandate.addEb, mult: mandate.mult, equity: 0,
+    }) as Any;
+    if (!B) return;
+    if (B.blocked) {
+      setFeed((f2) => [{ q, e: "🏦", tone: "neg",
+        t: `<b>${c.name}</b>: Der Zukauf scheitert an der Finanzierung. Pro forma ${x(B.blocked.lev)} Leverage `
+          + `gegen eine Finanzierungsgrenze von ${x(B.blocked.limit)} — die Banken steigen aus. `
+          + `In einer Partie könntest du Fondskapital nachschießen; hier hilft nur ein kleineres Ziel.` }, ...f2]);
+      return;
     }
-    patch({ ...chargeOff(chargeOff(c, "restr", debt - addonPrice), "addon", addonPrice),
-      [dim === "plat" ? "initP" : "initA"]: { dim, id, name: spec.n, doneQ: q + dur, ...pt } });
+    const { spec, chk, p } = B;
+    const msg = spec.ma
+      ? ` Signing: ${eur(chk.addEb)} EBITDA zu ${x(chk.mult)} für ${eur(chk.price)}, fremdfinanziert.`
+        + ` Closing zum Halbjahresende, Leverage dann ${x(chk.lev)}.`
+        + ` Scheiterungsrisiko ${Math.round(chk.fail * 100)} %.`
+      : ` Erfolgswahrscheinlichkeit ${Math.round(p * 100)} %, Ergebnis in ${hj(B.dur + 1)}.`
+        + (spec.oneOff ? ` Einmalaufwand ${eur(ebitdaOf(c) * spec.oneOff)}.` : "");
+    // Programmkosten sind Einmalaufwand; der Zukaufspreis ist eine Akquisition
+    // und wird erst beim Abschluss gebucht (maturePeople, über addDebt).
+    patch({ ...chargeOff(c, "restr", B.debt), [B.slot]: B.init });
     setFeed((f2) => [{ q, e: spec.ma ? "🏢" : "🛠️", tone: "neu", t: `<b>${c.name}</b>: ${spec.n} gestartet.${msg}` }, ...f2]);
   }
 
@@ -557,9 +602,9 @@ function GuidedRun({ dark, setDark, back }) {
      Angebot auf dem Tisch — dieselbe Preisbildung wie in der Partie.        */
   function startProc() {
     haptic(12);
-    setProc({ resolveQ: q + PROC_Q });
+    setProc({ resolveQ: decQ + PROC_Q });
     setFeed((p) => [{ q, e: "📣", tone: "neu",
-      t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Die Bank spricht Käufer an, der Datenraum wird aufbereitet — Gebote liegen in ${hj(PROC_Q)} vor. Bis dahin läuft das Unternehmen weiter, und du kannst weiter daran arbeiten.` }, ...p]);
+      t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Die Bank spricht Käufer an, der Datenraum wird aufbereitet — Gebote liegen in ${hj(PROC_Q + 1)} vor. Bis dahin läuft das Unternehmen weiter, und du kannst weiter daran arbeiten.` }, ...p]);
   }
 
   function acceptOffer() {
@@ -1057,7 +1102,7 @@ function GuidedRun({ dark, setDark, back }) {
       {sheet && <Sheet sheet={sheet} close={() => setSheet(null)} onConfirm={() => setSheet(null)} />}
       {initPick && (
         <InitPicker c={c} dim={initPick.dim} market={market}
-          start={(id) => { startInit(initPick.dim, id); setInitPick(null); }} close={() => setInitPick(null)} />
+          start={(id, mandate) => { startInit(initPick.dim, id, mandate); setInitPick(null); }} close={() => setInitPick(null)} />
       )}
       {!sheet && !initPick && sl.length > 0 && (
         <Shortlist item={sl[0]} holding={c} analysis={PRAC_ATTRS.analysis} hire={hire} reject={reject} />

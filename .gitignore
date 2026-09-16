@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Wegwerf-Harness des Live-Durchlaufs (.claude/skills/live) — er wird von
+# setup.sh angelegt und von teardown.sh entfernt und gehört nie in einen Commit.
+/app/live-test/
