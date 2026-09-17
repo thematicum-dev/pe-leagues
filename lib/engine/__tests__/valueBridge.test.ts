@@ -374,9 +374,71 @@ describe("Value Bridge des Fonds", () => {
     f.holdings = [];
     const step = fundBridgeStep(fundBridge(f, market, 8), was)!;
 
-    expect(Math.abs(step.uEbitda + step.uMult + step.uDelev), "unrealisiert").toBeLessThan(0.5);
-    expect(Math.abs(step.rEbitda + step.rMult + step.rDelev), "realisiert").toBeLessThan(0.5);
+    expect(Math.abs(step.uEbitda + step.uMult + step.uDelev + step.uRest), "unrealisiert")
+      .toBeLessThan(0.5);
+    expect(Math.abs(step.rEbitda + step.rMult + step.rDelev + step.rRest), "realisiert")
+      .toBeLessThan(0.5);
     expect(Math.abs(step.gain), "Gewinn des Halbjahres").toBeLessThan(0.5);
+  });
+
+  /* Und die Gegenprobe zum ganzen Deal: Was eine total verlorene Beteiligung
+     vernichtet hat, steht im realisierten Block — vollständig und an einer
+     Stelle. Bis zum 17.09.2026 fiel der Restposten der Kettenzerlegung aus der
+     Aufstellung heraus: Der realisierte Block wies −96,7 aus, obwohl der Deal
+     76,3 vernichtet hatte, und "Transaktionskosten" stand bei +20,4 — ein
+     Fonds, der alles verloren hatte, mit positiven Transaktionskosten. */
+  it("zeigt den ganzen Verlust einer total verlorenen Beteiligung als realisiert", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 92, rate: 8.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 2 }, cfo: { skill: 0 }, r3: { skill: 0 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 6, nwcPct: 15, benchMargin: 17, benchCapex: 4, benchNwc: 15,
+      drift: -4, marginDrift: -2.5, addonSize: 0.25, addonComp: 0,
+      entryMult: 11, entryEbitda: 15, entryDebt: 92, entryEV: 165,
+      entryEquity: 76.3, costTotal: 76.3, costLeft: 76.3, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 92, mg: 15, ql: 60, eq: 73, mult: 11, st: 1, out: 0, ei: 0 }],
+    };
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 76.3, fees: 0, holdings: [c], realized: [],
+      undrawn: 0, drawn: 76.3, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+      calls: [{ q: 1, amt: 76.3 }], dists: [],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 8; k++) {
+      stepCompany(rng, c, market, 2);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const einstiegNav = c.hist[0].eq;
+    expect(navValueOf(c, market), "Testaufbau: Totalverlust").toBeLessThan(0.01);
+
+    // Enforcement ohne Erlös, wie in runQuarter Abschnitt 3z
+    f.realized = [{ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0),
+      bridge: makeBridge(c, 0, 0), uOut: takeUnrealized(c, market, 0) }];
+    f.holdings = [];
+    const b = fundBridge(f, market, 9);
+
+    /* Der realisierte Block trägt die vernichtete Wertsubstanz vollständig:
+       von der Einstiegsbewertung auf null. Die Einstiegsgebühr ist kein
+       Wertbeitrag und steht unter Kosten — dort steht jede Gebühr. */
+    const real = b.rEbitda + b.rMult + b.rDelev + b.rRest + b.rExit + b.recaps;
+    expect(real, "realisierter Block").toBeCloseTo(-einstiegNav, 6);
+    expect(b.uEbitda + b.uMult + b.uDelev + b.uRest, "nichts mehr unrealisiert").toBe(0);
+    // Und kein positiver Restposten in einem Fonds, der alles verloren hat
+    expect(b.txCost, "Transaktionskosten").toBeLessThanOrEqual(0);
+    expect(b.txCost, "Transaktionskosten = Einstiegsgebühr")
+      .toBeCloseTo(einstiegNav - c.costTotal, 6);
+    // Die Aufstellung erklärt den Gewinn weiterhin vollständig
+    expect(sumParts(b), "Posten erklären den Gewinn").toBeCloseTo(b.gain, 6);
+    expect(b.gain, "ganzer Verlust").toBeCloseTo(-c.costTotal, 6);
   });
 
   /* Realisierter und unrealisierter Block beschreiben dieselbe Beteiligung mit

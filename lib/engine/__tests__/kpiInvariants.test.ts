@@ -189,9 +189,16 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
      mit dem Anteil, der damals galt. Für die Probe gehört er dazu, sonst
      prüfte sie nur noch, dass beide Seiten dieselbe Lücke haben. */
   const sold = open.reduce((s: number, c: Any) => s
-    + ((c.uSold?.ebitda || 0) + (c.uSold?.mult || 0) + (c.uSold?.delev || 0)), 0);
-  expect(b.uEbitda + b.uMult + b.uDelev + sold + chainRest + chainInj, `${where}: unrealisierte Treiber`)
+    + ((c.uSold?.ebitda || 0) + (c.uSold?.mult || 0) + (c.uSold?.delev || 0) + (c.uSold?.rest || 0)), 0);
+  /* Der Restposten der Kette steht seit dem 17.09.2026 als "Übriges" IM Block
+     und nicht mehr daneben: Er trägt vor allem die beschränkte Haftung (der
+     NAV fällt nicht unter null, während Multiple und Verschuldung rechnerisch
+     weiterlaufen) und gehört damit zur Wertentwicklung, nicht zu den Kosten.
+     Die Kapitalzuführung bleibt draußen — sie hebt NAV und abgerufenes Kapital
+     gleichermaßen und trägt nichts zum Gewinn bei. */
+  expect(b.uEbitda + b.uMult + b.uDelev + b.uRest + sold + chainInj, `${where}: unrealisierte Treiber`)
     .toBeCloseTo(chainNav, 6);
+  void chainRest;
   /* …und die Kette erklärt dieselbe Wertänderung wie eine einzelne Spanne vom
      Einstieg bis heute: Sie verteilt sie nur anders auf die Treiber. */
   const spanNav = open.reduce((s: number, c: Any) => {

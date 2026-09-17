@@ -621,11 +621,39 @@ Zähler stünde der platzierte Teil beim späteren Vollverkauf ein zweites Mal d
 Was die Beteiligung im Halbjahr ihres Abgangs noch erwirtschaftet, bleibt unter
 "Unrealisiert" stehen: Es ist Bewegung dieser Periode, keine Umgliederung.
 
-**Nicht geändert.** "Transaktionskosten" ist weiter der sichtbare Restposten
-der Aufstellung und trägt neben den echten Kosten den Rest der Kettenzerlegung
-(`rest`, `inj`). Über eine ganze Partie gemessen ist er von −47,0 auf +9,6
-Mio. € geschrumpft, aber er ist kein reiner Kostenposten, und die Beschriftung
-sagt das nicht.
+**Nachgetragen am 17.09.2026.** Der erste Wurf war noch nicht vollständig: Der
+Restposten der Kettenzerlegung fiel weiter aus der Aufstellung heraus und
+landete in "Transaktionskosten". Bei einer total verlorenen Beteiligung stand
+der realisierte Block deshalb bei **−96,7**, obwohl der Deal **76,3** vernichtet
+hatte — und die Kostenzeile wies **+20,4** aus. Ein Fonds, der alles verloren
+hat, hatte positive Transaktionskosten.
+
+Der Restposten trägt vor allem die **beschränkte Haftung**: Ist das
+Eigenkapital aufgezehrt, fällt der NAV nicht unter null, während Multiple und
+Verschuldung rechnerisch weiterlaufen. Das ist Wertentwicklung, keine Gebühr.
+Er steht jetzt als **Übriges** in beiden Blöcken — dieselbe Bezeichnung wie in
+der Beteiligungsansicht — und bekommt nur dann eine Zeile, wenn er etwas
+erklärt.
+
+Dieselbe Messung danach: realisierter Block **−73,00**, also genau die
+vernichtete Wertsubstanz von der Einstiegsbewertung auf null, Abweichung 0,00.
+Die Einstiegsgebühr von 3,30 steht unter Kosten — dort steht jede Gebühr, und
+zusammen ergeben beide den vollen Verlust von 76,30.
+
+Ein Teilexit brauchte dafür eine zweite Korrektur: Er senkt den NAV um den
+platzierten Anteil, die Kette sieht diesen Rückgang in der Folgeperiode und
+legt ihn mangels Treiber in den Restposten. Dort sieht er aus wie
+Wertvernichtung, ist aber ein Eigentümerwechsel, und sein Gegenwert steht
+bereits als Erlös in `exit`. Ohne diese Korrektur stand in einer Partie mit
+fünf Teilexits "Übriges −300" neben "Transaktionskosten +270". Der Zähler
+`uSold` nimmt den Abgang deshalb vorweg; gemessen über zwei Partien mit vier
+und fünf Teilexits steht "Übriges" danach bei 0,0 und der Restposten bei −11,3
+bzw. −12,1 Mio. €.
+
+**Nicht geändert.** "Transaktionskosten" bleibt der sichtbare Restposten der
+Aufstellung. Er trägt jetzt im Wesentlichen das, was er behauptet — Einstiegs-
+und Ausstiegsgebühren —, aber daneben weiterhin die Kapitalzuführung aus der
+Kettenzerlegung.
 
 ---
 

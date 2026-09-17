@@ -1894,16 +1894,19 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
      als ein Wort breiter als die Bezeichnungsspalte auf einem schmalen Gerät. */
   const HEAD = { r: "Realisiert", u: "Unrealisiert", k: "Kosten" };
   const LABEL = {
-    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung",
+    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung", rRest: "Übriges",
     rExit: "Exit gegen letzte Bewertung",
     recaps: "Kapital­rückführungen",
-    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung",
+    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung", uRest: "Übriges",
     fees: "Management Fee", txCost: "Transaktions­kosten", carry: "Carry",
   };
   const groups = FUND_BRIDGE_GROUPS.map((g) => ({
     key: g.key, head: HEAD[g.key],
-    // Carry ist bis weit in die Partie hinein null und bekommt dann keine Zeile
-    rows: g.parts.filter((k) => k !== "carry" || has("carry")).map((k) => ({ l: LABEL[k], k })),
+    /* Carry ist bis weit in die Partie hinein null, und "Übriges" bleibt in
+       den meisten Partien klein. Beide bekommen nur eine Zeile, wenn sie in
+       einer der Spalten etwas erklären — wie in der Beteiligungsansicht. */
+    rows: g.parts.filter((k) => !["carry", "rRest", "uRest"].includes(k) || has(k))
+      .map((k) => ({ l: LABEL[k], k })),
   }));
   // Summe einer Gruppe je Spalte — die Kopfzeile trägt sie, damit die
   // Aufstellung auch zugeklappt vollständig bleibt.
