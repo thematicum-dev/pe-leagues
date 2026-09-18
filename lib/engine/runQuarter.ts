@@ -34,7 +34,7 @@ import {
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
-  liquidateHoldings, takeUnrealized, eur, x, SECLABEL,
+  liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
 
@@ -478,6 +478,18 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   const F: RuntimeFund[] = input.state.funds.map(cloneFund);
   const deals = [...(input.state.deals as Any[])];
   const news: Any[] = [];
+  /* Womit jede Beteiligung in dieses Halbjahr geht. Genau dieser Betrag stand
+     im unrealisierten Block, als die Halbjahresspalte ihren Ausgangsstand nahm
+     — und genau er wird dort herausgerechnet, wenn die Beteiligung das
+     Portfolio verlässt (siehe unrealizedOut).
+
+     Der Schnappschuss steht am ANFANG der Periode und nicht am Periodenschluss:
+     Abgänge verteilen sich über den ganzen Durchlauf. Der Covenant Breach
+     kommt vor dem Periodenschluss, die Tail-End-Verwertung und das Auslaufen
+     einer Lock-up danach. Am Ende festgehalten wäre der Wert für die einen der
+     Anfangs- und für die anderen der Endstand, und die Bewegung des letzten
+     Halbjahres bliebe bei ihnen unter "Unrealisiert" stehen.               */
+  F.forEach((f) => (f.holdings as Any[]).forEach((c) => closeUnrealized(c)));
   const exitQueueBySlot: Record<string, ExitQueueItem[]> = { ...input.state.exitQueue };
   const shortlistBySlot: Record<string, ShortlistItem[]> = { ...input.state.shortlist };
   const decisionsBySlot = input.decisionsBySlot;
@@ -613,6 +625,11 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       // (EBITDA, Multiple, Entschuldung) -- siehe bridgeStep in lib/engine/engine.ts.
       equityIn: 0,
       hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0, ei: 0, eiF: 0 }],
+      /* In diesem Halbjahr gerade erworben: Im unrealisierten Block des
+         Ausgangsstands stand sie noch gar nicht. Ohne diese Null fiele sie auf
+         den Ersatzweg für Partien ohne das Feld zurück und brächte ihre ganze
+         Kette als Umgliederung mit. */
+      uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
     };
     c.baseLoad = seatLoad(c);
     spendFund(f, c.entryEquity, q, undefined);

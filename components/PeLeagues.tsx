@@ -20,7 +20,7 @@ import {
   RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
-  initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
+  closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
 } from "@/lib/engine";
@@ -163,6 +163,9 @@ export default function PeLeagues() {
     const mk = { ...market };
     const news = [];
     const q = quarter + 1;
+    // Womit jede Beteiligung in dieses Halbjahr geht — siehe runQuarter in
+    // lib/engine/runQuarter.ts, dieselbe Stelle und derselbe Grund.
+    F.forEach((f) => f.holdings.forEach((c) => closeUnrealized(c)));
 
     /* 1 — Auktionen */
     deals.forEach((d) => {
@@ -251,6 +254,8 @@ export default function PeLeagues() {
         cashOut: 0, recapOut: 0, costLeft: eb * w.mult - eb * w.lev + eb * w.mult * ENTRY_FEE,
         entryQ: q,
         hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
+        // Gerade erworben: im unrealisierten Block des Ausgangsstands noch nicht da
+        uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
       };
       c.baseLoad = seatLoad(c);
       spendFund(f, c.entryEquity, q);

@@ -2078,6 +2078,30 @@ export function unrealizedOut(c, market, net = 0, soldShare = 1) {
     delev: ch.delev - (sold.delev || 0),
     rest: ch.rest - (sold.rest || 0),
   };
+  /* Dieselbe Rechnung auf dem letzten Periodenstand (`uClose`, festgehalten
+     beim Periodenschluss). Das ist genau der Betrag, mit dem die Beteiligung
+     im unrealisierten Block stand, als die Halbjahresspalte ihren
+     Ausgangsstand nahm — und damit der Betrag, der aus diesem Block
+     herausgerechnet werden muss.
+
+     Der Unterschied zu `offen` ist, was sich in DIESEM Halbjahr noch bewegt
+     hat, bevor die Beteiligung das Portfolio verließ. Bis zum 18.09.2026 blieb
+     das unter "Unrealisiert" stehen. Bei einer Beteiligung, die im Covenant
+     Breach an die Kreditgeber ging, stand dort +14,9 — obwohl das Portfolio
+     leer war. Gemessen über mehrere Startwerte reichte es von −6 bis +126.
+     Was eine Beteiligung in ihrem letzten Halbjahr noch erwirtschaftet, ist
+     mit ihr realisiert worden und gehört in den realisierten Block.
+
+     Ohne `uClose` (Beteiligungen aus älteren Partien) bleibt es beim alten
+     Verhalten: Dann ist `atStart` der volle Stand, und die Spalte rechnet wie
+     vorher.                                                                 */
+  const close = c.uClose || ch;
+  const offenClose = {
+    ebitda: close.ebitda - (sold.ebitda || 0),
+    mult: close.mult - (sold.mult || 0),
+    delev: close.delev - (sold.delev || 0),
+    rest: close.rest - (sold.rest || 0),
+  };
   // Der Anteil des heutigen NAV, der mit dieser Realisierung den Besitzer wechselt
   const navShare = Math.max(0, navValueOf(c, market)) * soldShare;
   return {
@@ -2093,7 +2117,21 @@ export function unrealizedOut(c, market, net = 0, soldShare = 1) {
        hat, hatte positive Transaktionskosten.                               */
     rest: offen.rest * soldShare,
     exit: net - navShare,
+    // Was beim Abgang aus dem unrealisierten Block genommen wird
+    atStart: {
+      ebitda: offenClose.ebitda * soldShare, mult: offenClose.mult * soldShare,
+      delev: offenClose.delev * soldShare, rest: offenClose.rest * soldShare,
+    },
   };
+}
+
+/* Den Stand festhalten, mit dem eine Beteiligung in den unrealisierten Block
+   eingeht. Aufgerufen beim Periodenschluss, nachdem der Eintrag zur Historie
+   gehört — dieselbe Reihenfolge, in der auch bewertet wird.               */
+export function closeUnrealized(c) {
+  const ch = bridgeChain(c.hist || [], null);
+  c.uClose = { ebitda: ch.ebitda, mult: ch.mult, delev: ch.delev, rest: ch.rest };
+  return c.uClose;
 }
 
 /* Dasselbe, aber die Beteiligung merkt sich, was entnommen wurde. Jede
@@ -2143,7 +2181,8 @@ export function fundBridge(f, market, quarter) {
     const u = r.uOut;
     if (u) {
       rEbitda += u.ebitda || 0; rMult += u.mult || 0; rDelev += u.delev || 0; rRest += u.rest || 0;
-      xEbitda += u.ebitda || 0; xMult += u.mult || 0; xDelev += u.delev || 0; xRest += u.rest || 0;
+      const a = u.atStart || u;
+      xEbitda += a.ebitda || 0; xMult += a.mult || 0; xDelev += a.delev || 0; xRest += a.rest || 0;
       rExit += u.exit || 0;
       return;
     }
