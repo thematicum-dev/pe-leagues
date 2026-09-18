@@ -1318,6 +1318,34 @@ export function endPressure(q) {
 export function dealMultiple(c, market, neg, q) {
   return Math.max(2, markMultiple(c, market) * (1 + 0.02 * neg) - endPressure(q));
 }
+
+/* Die Kette vom Bewertungs- zum Exit-Multiple, zerlegt — für die Vorschau,
+   die jeder Exitweg vor der Entscheidung zeigt.
+
+   Sie existiert, weil die Vorschau zweimal ausgeschrieben war (Partie und
+   Übungsmodus) und dabei zweierlei schiefging. Erstens standen dort drei
+   Multiples ohne Rechenweg: das Bewertungsmultiple, darunter eine Zeile
+   "Verhandlungsprämie +X %", die in Wahrheit den fertigen dealMultiple()
+   zeigte — also samt Endfälligkeitsdruck —, und darunter dieselbe Zahl noch
+   einmal als Exit-Multiple. Kurz vor Laufzeitende zog die Zeile "+4 %" das
+   Multiple deshalb nach unten. Zweitens setzte der Börsengang das blanke
+   Bewertungsmultiple an, während die Auswertung ihn über fairOf(c, mk, 0, q)
+   rechnet — mit Endfälligkeitsdruck. In den letzten vier Halbjahren versprach
+   die Vorschau damit einen Erlös, den die Auswertung nie zahlte.
+
+   Eine Zerlegung, eine Quelle: `exit` ist genau das Multiple, mit dem
+   runQuarter den jeweiligen Weg abrechnet.                                */
+export function exitMultiples(c, market, neg: number, q: number,
+  ch: "bil" | "cv" | "ipo" | "proc") {
+  const mark = markMultiple(c, market);
+  // Am Kapitalmarkt zählt kein Verhandlungsgeschick, der Zeitdruck aber schon.
+  const negUsed = ch === "ipo" ? 0 : neg;
+  const negMult = mark * (1 + 0.02 * negUsed);
+  const press = endPressure(q);
+  const base = dealMultiple(c, market, negUsed, q);
+  return { mark, negUsed, negMult, press, bilDisc: ch === "bil" ? BIL_DISC : 0,
+    exit: ch === "bil" ? base - BIL_DISC : base };
+}
 export const evOf = (c, mult) => ebitdaOf(c) * mult;
 export const eqvOf = (c, mult) => (evOf(c, mult) - c.netDebt) * (c.st ?? 1);
 

@@ -254,3 +254,73 @@ describe("Format des Feeds", () => {
     }
   });
 });
+
+/* Der Zuschlag entscheidet sich am GEBOT; das Verhandlungsgeschick des
+   Gewinners drückt den Preis erst danach (1 % je Punkt). Die Meldung an den
+   unterlegenen Bieter stellte bis zum 18.09.2026 den fertig verhandelten
+   Vertragspreis des Gewinners neben das Gebot des Unterlegenen — zwei
+   verschiedene Größen in einem Satz. Lag der Vertragspreis unter dem fremden
+   Gebot, las sich die Meldung als "das niedrigere Gebot gewinnt": ein Fehler,
+   wo keiner war.                                                           */
+describe("Überboten-Meldung bei verhandeltem Kaufpreis", () => {
+  /* Ein Gewinner mit hohem Verhandlungsgeschick, damit der Rabatt das Gebot
+     des Unterlegenen tatsächlich unterschreitet. */
+  function partie(negGewinner: number, gebotHoch: number, gebotNiedrig: number) {
+    const rng = createRng(20260918);
+    const state = baseState() as Any;
+    (state.funds as Any[])[1].attrs = { ...(state.funds as Any[])[1].attrs, negotiation: negGewinner };
+    const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+    const st = { ...state, deals: boot.deals, landmark: boot.landmark };
+    const deal = (st.deals as Any[])[0];
+    const out = runQuarter({
+      state: st, halfYear: 1, rng,
+      decisionsBySlot: {
+        0: { bids: [{ dealId: deal.id, multiple: deal.askMult * gebotNiedrig, leverage: 2 }] },
+        1: { bids: [{ dealId: deal.id, multiple: deal.askMult * gebotHoch, leverage: 2 }] },
+      },
+    } as Any);
+    return { out, deal };
+  }
+
+  it("nennt das Gebot des Gewinners, nicht nur seinen Vertragspreis", () => {
+    const { out, deal } = partie(5, 1.30, 1.25);
+    const gewinner = (out.state.funds as Any[]).find((f) => (f.holdings as Any[]).some((c) => c.name === deal.name))!;
+    expect(gewinner.slot, "Testaufbau: das höhere Gebot gewinnt").toBe(1);
+    const gekauft = (gewinner.holdings as Any[]).find((c) => c.name === deal.name)!;
+
+    const gebotGewinner = deal.askMult * 1.30;
+    const gebotVerlierer = deal.askMult * 1.25;
+    // Testaufbau: der Rabatt muss das Gebot des Unterlegenen unterschreiten,
+    // sonst prüft dieser Test nicht den Fall, um den es geht.
+    expect(gekauft.entryMult, "verhandelter Preis unter dem fremden Gebot").toBeLessThan(gebotVerlierer);
+
+    const msg = sichtbarFuer(out.feed as RuntimeFeedEntry[], 0)
+      .find((f) => f.text.includes("Überboten") && f.text.includes(deal.name));
+    expect(msg, "keine Überboten-Meldung").toBeTruthy();
+    const zahlen = (msg!.text.match(/(\d+),(\d)×/g) || []).map((t) => Number(t.replace("×", "").replace(",", ".")));
+    // Das Gebot des Gewinners steht drin — und es liegt über dem eigenen
+    expect(zahlen, `Gebot des Gewinners fehlt in: ${msg!.text}`)
+      .toContainEqual(Math.round(gebotGewinner * 10) / 10);
+    expect(zahlen, `eigenes Gebot fehlt in: ${msg!.text}`)
+      .toContainEqual(Math.round(gebotVerlierer * 10) / 10);
+    // ... und der Vertragspreis wird als solcher benannt, nicht als Gebot
+    expect(msg!.text, "der Rabatt wird nicht erklärt").toContain("Verhandlungstisch");
+  });
+
+  it("erklärt dem Gewinner, warum er weniger zahlt als geboten", () => {
+    const { out, deal } = partie(5, 1.30, 1.25);
+    const msg = sichtbarFuer(out.feed as RuntimeFeedEntry[], 1)
+      .find((f) => f.text.includes("Zuschlag") && f.text.includes(deal.name));
+    expect(msg, "keine Zuschlagsmeldung").toBeTruthy();
+    expect(msg!.text, "der eigene Rabatt bleibt unerklärt").toContain("Geboten hattest du");
+  });
+
+  it("lässt die Erklärung weg, wo es nichts zu erklären gibt", () => {
+    // Verhandlungsgeschick 0: Gebot und Vertragspreis sind dieselbe Zahl
+    const { out, deal } = partie(0, 1.30, 1.25);
+    const msg = sichtbarFuer(out.feed as RuntimeFeedEntry[], 0)
+      .find((f) => f.text.includes("Überboten") && f.text.includes(deal.name));
+    expect(msg, "keine Überboten-Meldung").toBeTruthy();
+    expect(msg!.text).not.toContain("Verhandlungstisch");
+  });
+});
