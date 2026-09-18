@@ -651,9 +651,59 @@ und fünf Teilexits steht "Übriges" danach bei 0,0 und der Restposten bei −11
 bzw. −12,1 Mio. €.
 
 **Nicht geändert.** "Transaktionskosten" bleibt der sichtbare Restposten der
-Aufstellung. Er trägt jetzt im Wesentlichen das, was er behauptet — Einstiegs-
-und Ausstiegsgebühren —, aber daneben weiterhin die Kapitalzuführung aus der
-Kettenzerlegung.
+Aufstellung. Er trägt jetzt die Einstiegsgebühren und die Kosten der
+Benchmarkstudien; die Ausstiegsgebühr steckt in "Exit gegen letzte Bewertung",
+weil diese Zeile den Nettoerlös gegen den Buchwert stellt.
+
+---
+
+### 24 — Wer zahlt eine Kapitalerhöhung nach einem Teilexit?
+
+**Frage.** Die Kapitalzuführung stand im Verdacht, den Restposten der
+Fondsaufstellung zu speisen. Tut sie das?
+
+**Befund.** Nicht so, wie vermutet. Gemessen über vier Partien ohne Teilexit ist
+der Restposten auf den Cent genau die Summe der Einstiegsgebühren und
+Benchmarkstudien — die Zuführung hinterlässt dort nichts. Sie hebt den NAV und
+das abgerufene Kapital um denselben Betrag und trägt deshalb nichts zum Gewinn
+bei.
+
+Dahinter lag aber ein echter wirtschaftlicher Fehler, der nur nach einem
+**Teilexit** auftrat. `fundEquityIn()` belastete den Fonds mit dem vollen
+Betrag, senkte damit aber die Nettoverschuldung der Beteiligung — und die kommt
+allen Gesellschaftern zugute. Wer nach einem Börsengang (40 % platziert) 10
+Mio. € nachschoss, verschenkte 4 Mio. € an die Publikumsaktionäre; nach einem
+Continuation Vehicle (60 % platziert) 6 Mio. € an dessen Erwerber. Die Lücke war
+auf den Cent `Betrag × (1 − Anteil)`, und sie stand in keiner Zeile: Weil
+abgerufenes Kapital und NAV auseinanderliefen, buchte die Aufstellung sie als
+Restposten unter "Transaktionskosten". Über vier Partien mit Nachschüssen waren
+das 5,2 / 10,7 / 15,8 / 16,1 Mio. €.
+
+**Konsequenz.** Geändert. Die Zuführung ist jetzt eine **Kapitalerhöhung pro
+rata**: `amt` ist der Betrag, der bei der Beteiligung ankommt, der Fonds trägt
+davon seinen Anteil, die Mitgesellschafter den Rest. Gedeckelt wird deshalb der
+Anteil des Fonds und nicht die Kapitalerhöhung, und die Karte weist beide
+Beträge aus, sobald der Fonds nicht mehr allein hält. Solange er allein hält
+(der Normalfall), ist es dieselbe Zahl wie vorher — an bestehenden Partien
+ändert sich dort nichts.
+
+Dazu kam eine zweite Korrektur: Die Kette konnte den Anteil des Fonds nicht aus
+dem Periodenende zurückrechnen, wenn im selben Halbjahr auch ein Teilexit lag.
+Dann stand die Zuführung mit dem Anteil **nach** dem Teilexit in der Zerlegung,
+während der Fonds sie mit dem Anteil **davor** bezahlt hatte — gemessen fehlten
+so 4 von 10 Mio. €. Die Beteiligung schreibt den Anteil des Fonds deshalb als
+`equityInFund` selbst mit, und die Periodenstände führen ihn als `eiF`. Ältere
+Partien kennen das Feld nicht; dort bleibt es beim alten Ansatz.
+
+Nachgemessen: Restposten 0,00 über alle Kombinationen aus Teilexit-Art
+(keiner / Continuation Vehicle / Börsengang) und Nachschuss.
+
+**Offen.** In einer von vier gemessenen Partien bleibt am Laufzeitende ein
+Restposten von 1,22 Mio. €, der nicht aus der Kapitalzuführung stammt — er
+tritt auch ohne jeden Nachschuss auf und entsteht erst bei der
+Tail-End-Verwertung eines zuvor teilverkauften Portfolios. Einzeln nachgebaut
+(Teilexit, dann Tail-End) geht die Aufstellung auf; die Ursache liegt in einer
+Kombination, die sich so noch nicht reproduzieren ließ.
 
 ---
 
@@ -694,6 +744,10 @@ Für laufende Partien relevant, in der Reihenfolge der Wirkung:
    Blöcken, statt in der Halbjahresspalte als Wertentwicklung zu erscheinen.
    Neu ist die Zeile "Exit gegen letzte Bewertung"; die Zahlen der Partie
    ändern sich nicht, nur ihre Zuordnung.
+14. **Kapitalerhöhung pro rata** (24). Nach einem Teilexit trägt der Fonds nur
+   noch seinen Anteil eines Nachschusses. Vorher zahlte er alles und
+   verschenkte den Rest an die Mitgesellschafter — je nach Platzierung 40 bis
+   60 % jedes nachgeschossenen Euro.
 
 Die Regeländerungen, die den Zufallsstrom nicht, wohl aber die Beträge eines
 bereits ausgewerteten Halbjahres verschieben, tragen Schalter in `EngineCompat`

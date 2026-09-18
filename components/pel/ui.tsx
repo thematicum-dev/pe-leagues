@@ -2567,8 +2567,15 @@ export function EquityInjection({ c, investable, confirm, close }) {
   const cov = c.covLimit ?? COV_DEFAULT;
   const lev = c.netDebt / Math.max(0.5, eb);
   const toCov = Math.max(0, c.netDebt - cov * eb);
-  const max = Math.max(0, Math.min(investable, Math.max(0, c.netDebt)));
+  /* Der Regler steht auf dem Betrag, der BEI DER BETEILIGUNG ankommt. Hält der
+     Fonds nach einem Teilexit nur noch einen Teil, tragen die
+     Mitgesellschafter ihren Anteil der Kapitalerhöhung mit — gedeckelt ist
+     deshalb der Fondsanteil, nicht die Kapitalerhöhung (siehe
+     fundEquityIn).                                                         */
+  const st = c.st ?? 1;
+  const max = Math.max(0, Math.min(investable / Math.max(0.01, st), Math.max(0, c.netDebt)));
   const [amt, setAmt] = useState(() => Math.min(max, Math.max(0, toCov)));
+  const ausFonds = amt * st;
   const levAfter = (c.netDebt - amt) / Math.max(0.5, eb);
   const cost = (c.costLeft ?? c.entryEquity) || 0;
   return (
@@ -2586,13 +2593,19 @@ export function EquityInjection({ c, investable, confirm, close }) {
               style={{ width: "100%", accentColor: "var(--gold)" }} />
           </div>
           <table className="ledger fix"><tbody>
-            <tr><td className="lab">Betrag</td><td>{eur(amt)}</td></tr>
+            <tr><td className="lab">Betrag</td><td>{eur(amt)}
+              {st < 0.999 && (
+                <span className="ctl">
+                  Davon aus dem Fonds {eur(ausFonds)} — du hältst {Math.round(st * 100)} %,
+                  die Mitgesellschafter tragen ihren Anteil der Kapitalerhöhung mit.
+                </span>
+              )}</td></tr>
             <tr><td className="lab">Investierbar</td><td>{eur(investable)}</td></tr>
             <tr><td className="lab">Leverage danach</td>
               <td style={{ color: levAfter > cov ? "var(--ox)" : "var(--teal)", fontWeight: 600 }}>
                 {x(Math.max(0, levAfter))} gegen Covenant {x(cov)}</td></tr>
             <tr><td className="lab">Kostenbasis danach</td>
-              <td>{eur(cost + amt)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>statt {eur(cost)}</span></td></tr>
+              <td>{eur(cost + ausFonds)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>statt {eur(cost)}</span></td></tr>
           </tbody></table>
           <p className="hint" style={{ padding: "0 15px 12px" }}>
             {toCov > 0

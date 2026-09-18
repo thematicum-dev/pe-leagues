@@ -260,12 +260,18 @@ function applyImmediateDecisions(
   (decisions.equityInjections || []).forEach((inj) => {
     const c = holdingByUid(inj.holdingUid);
     if (!c) return;
-    const amt = Math.min(Math.max(0, Number(inj.amount) || 0), investableOf(f, quarter));
+    /* Gedeckelt wird, was der FONDS aufbringt, nicht was bei der Beteiligung
+       ankommt: Nach einem Teilexit tragen die Mitgesellschafter ihren Anteil
+       der Kapitalerhöhung mit (siehe fundEquityIn). */
+    const st = c.st ?? 1;
+    const amt = Math.min(Math.max(0, Number(inj.amount) || 0), investableOf(f, quarter) / Math.max(0.01, st));
     if (!(amt > 0.05)) return;
-    if (!fundEquityIn(f, c, amt, quarter)) return;
+    const ausFonds = fundEquityIn(f, c, amt, quarter);
+    if (!ausFonds) return;
     pushFeed(news, quarter, "💶", "neu",
-      `${c.name}: ${amt.toFixed(1)} Mio. € Eigenkapital nachgeschossen — Leverage jetzt `
-      + `${(c.netDebt / Math.max(0.5, ebitdaOf(c))).toFixed(1)}×.`, f.slot);
+      `${c.name}: ${amt.toFixed(1)} Mio. € Eigenkapital nachgeschossen`
+      + (st < 0.999 ? ` (${ausFonds.toFixed(1)} Mio. € davon aus dem Fonds, Rest von den Mitgesellschaftern)` : "")
+      + ` — Leverage jetzt ${(c.netDebt / Math.max(0.5, ebitdaOf(c))).toFixed(1)}×.`, f.slot);
   });
 
   // 5 — Maßnahmen starten (Operating Capacity: höchstens maxInitSlots
@@ -606,7 +612,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       // Wertveränderung eines Halbjahres später in ihre Treiber zerlegen
       // (EBITDA, Multiple, Entschuldung) -- siehe bridgeStep in lib/engine/engine.ts.
       equityIn: 0,
-      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0, ei: 0 }],
+      hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0, ei: 0, eiF: 0 }],
     };
     c.baseLoad = seatLoad(c);
     spendFund(f, c.entryEquity, q, undefined);
@@ -801,7 +807,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const before = compat.legacyHistMark
         ? { mult: markMultiple(c, mk), eq: navValueOf(c, mk) + (c.cashOut || 0) } : null;
       const entry: Any = { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
-        st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0,
+        st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0, eiF: c.equityInFund || 0,
         ...(f.isAi ? {} : { fin: periodFin(c) }) };
       c.hist = [...(c.hist || []), entry];
       entry.mult = before ? before.mult : markMultiple(c, mk);

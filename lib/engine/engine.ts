@@ -1416,20 +1416,49 @@ export function spendFund(f, amt, quarter, accrue) {
    Beteiligung, und der MOIC misst danach gegen einen höheren Einstand. Genau
    deshalb zählt sie auch in der Value Bridge nicht als Entschuldung (siehe
    makeBridge/bridgeStep) — sie ist Kapital, nicht Leistung.                 */
+/* Eigenkapital in eine Beteiligung. `amt` ist der Betrag, der BEI DER
+   BETEILIGUNG ankommt; der Fonds trägt davon seinen Anteil, die
+   Mitgesellschafter den Rest — eine Kapitalerhöhung pro rata.
+
+   Solange der Fonds allein hält (st = 1, der Normalfall), ist das dieselbe
+   Zahl wie vorher. Nach einem Teilexit war es das nicht: Bis zum 18.09.2026
+   zahlte der Fonds den ganzen Betrag, die gesenkte Verschuldung kam aber allen
+   Gesellschaftern zugute. Wer nach einem Börsengang (40 % platziert) 10 Mio. €
+   nachschoss, verschenkte 4 Mio. € an die Publikumsaktionäre; nach einem
+   Continuation Vehicle (60 % platziert) 6 Mio. € an dessen Erwerber. Gemessen
+   war die Lücke auf den Cent genau `Betrag × (1 − Anteil)`, und sie stand in
+   keiner Zeile: Die Fondsaufstellung buchte sie als Restposten unter
+   "Transaktionskosten", weil abgerufenes Kapital und NAV auseinanderliefen.
+
+   Zurückgegeben wird, was der Fonds tatsächlich aufgebracht hat.           */
 export function fundEquityIn(f, c, amt: number, quarter: number, opts: { toDebt?: boolean } = {}) {
   if (!(amt > 0)) return 0;
-  if (!spendFund(f, amt, quarter, undefined)) return 0;
+  const st = c.st ?? 1;
+  const ausFonds = amt * st;                     // der Anteil des Fonds
+  if (!(ausFonds > 0)) return 0;
+  if (!spendFund(f, ausFonds, quarter, undefined)) return 0;
   if (opts.toDebt !== false) c.netDebt -= amt;
-  // Reihenfolge zählt: costLeft fällt ersatzweise auf entryEquity zurück, das
-  // hier gerade selbst erhöht wird — der Rückfallwert muss der alte sein.
+  /* `equityIn` ist eine Größe der Beteiligung und trägt deshalb den vollen
+     Betrag — die Value Bridge skaliert ihn mit dem Anteil (siehe bridgeStep).
+     Kostenbasis und investiertes Kapital sind Größen des Fonds und tragen
+     seinen Anteil.
+
+     Reihenfolge zählt: costLeft fällt ersatzweise auf entryEquity zurück, das
+     hier gerade selbst erhöht wird — der Rückfallwert muss der alte sein.   */
   const costLeft0 = c.costLeft ?? c.entryEquity ?? 0;
   c.equityIn = (c.equityIn || 0) + amt;
-  c.entryEquity = (c.entryEquity || 0) + amt;
-  c.costTotal = (c.costTotal || 0) + amt;
-  c.costLeft = costLeft0 + amt;
-  f.investedTotal = (f.investedTotal || 0) + amt;
+  /* Was der FONDS beigesteuert hat, kumuliert. Die Kette braucht diese Zahl
+     getrennt: Sie kann den Anteil nicht aus dem Periodenende zurückrechnen,
+     wenn im selben Halbjahr auch ein Teilexit lag — dann stünde die Zuführung
+     mit dem Anteil NACH dem Teilexit in der Zerlegung, während der Fonds sie
+     mit dem Anteil DAVOR bezahlt hat. Gemessen fehlten so 4 von 10 Mio. €. */
+  c.equityInFund = (c.equityInFund || 0) + ausFonds;
+  c.entryEquity = (c.entryEquity || 0) + ausFonds;
+  c.costTotal = (c.costTotal || 0) + ausFonds;
+  c.costLeft = costLeft0 + ausFonds;
+  f.investedTotal = (f.investedTotal || 0) + ausFonds;
   bookOff(c, "inj", -amt);
-  return amt;
+  return ausFonds;
 }
 
 /* Wie viel eines Exiterlöses überhaupt einbehalten werden darf. Zwei Schranken
@@ -1902,7 +1931,7 @@ export function liveHist(c, market) {
   return {
     rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
     eq: navValueOf(c, market) + (c.cashOut || 0), mult: markMultiple(c, market),
-    st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0,
+    st: c.st ?? 1, out: c.cashOut || 0, ei: c.equityIn || 0, eiF: c.equityInFund || 0,
   };
 }
 
@@ -1927,8 +1956,16 @@ export function bridgeStep(prev, now) {
   if (!prev || !now) return null;
   const stP = prev.st ?? 1, stN = now.st ?? 1;
   const outP = prev.out ?? 0, outN = now.out ?? 0;
-  // Kapitalzuführung der Periode: kumuliert mitgeschrieben, hier differenziert
+  /* Kapitalzuführung der Periode: kumuliert mitgeschrieben, hier differenziert.
+     Zwei Größen, weil sie auseinanderfallen können — `inj` ist, was bei der
+     Beteiligung ankam (und die Nettoverschuldung gesenkt hat), `injF` der
+     Anteil, den der Fonds dafür aufgebracht hat. Beteiligungen aus Partien vor
+     dem 18.09.2026 führen `eiF` nicht mit; dort bleibt es beim alten Ansatz,
+     den Anteil des Periodenendes anzusetzen.                                */
   const inj = (now.ei ?? 0) - (prev.ei ?? 0);
+  const injF = now.eiF != null || prev.eiF != null
+    ? (now.eiF ?? 0) - (prev.eiF ?? 0)
+    : inj * stN;
   // Nur der NAV-Teil trägt die Zerlegung; bereits ausgeschüttete
   // Rekapitalisierungen stehen als eigene Position daneben.
   const navP = prev.eq - outP, navN = now.eq - outN;
@@ -1942,8 +1979,8 @@ export function bridgeStep(prev, now) {
   const delev = (prev.nd - now.nd - inj) * stN;
   const dist = outN - outP;
   const nav = navN - navP;
-  return { ebitda, mult, delev, dist, inj: inj * stN,
-    rest: nav - ebitda - mult - delev - inj * stN, nav, total: nav + dist };
+  return { ebitda, mult, delev, dist, inj: injF,
+    rest: nav - ebitda - mult - delev - injF, nav, total: nav + dist };
 }
 
 /* ---------- Value Bridge des Fonds ----------

@@ -434,6 +434,8 @@ export default function PeLeagues() {
         // Detailmitschrift nur für den eigenen Fonds — siehe runQuarter, Schritt 4b
         c.hist = [...(c.hist || []), { rev: c.revenue, eb, nd: c.netDebt, mg: c.margin, ql: c.quality,
           eq: navValueOf(c, mk) + (c.cashOut || 0), mult: markMultiple(c, mk), st: c.st ?? 1, out: c.cashOut || 0,
+          // Ohne diese beiden zählte der Übungsmodus jede Zuführung als Entschuldung
+          ei: c.equityIn || 0, eiF: c.equityInFund || 0,
           ...(f.me ? { fin: periodFin(c) } : {}) }];
         resetPeriod(c);
       });
@@ -645,7 +647,11 @@ export default function PeLeagues() {
      Verschuldung setzt den Bruchzähler also von selbst zurück. */
   function injectCapital(c, amount) {
     setInjectPick(null);
-    const amt = Math.min(Math.max(0, amount), investableOf(me, quarter));
+    /* Gedeckelt wird der Anteil des Fonds, nicht die Kapitalerhöhung: Nach
+       einem Teilexit tragen die Mitgesellschafter ihren Teil mit (siehe
+       fundEquityIn). Ohne Teilexit ist das dieselbe Zahl wie vorher. */
+    const st = c.st ?? 1;
+    const amt = Math.min(Math.max(0, amount), investableOf(me, quarter) / Math.max(0.01, st));
     if (!(amt > 0.05)) return;
     haptic(8);
     setFunds((F) => F.map((f, i) => {
@@ -656,7 +662,9 @@ export default function PeLeagues() {
       return g;
     }));
     setFeed((p) => [{ q: quarter, e: "💶", tone: "neu",
-      t: `<b>${c.name}</b>: ${eur(amt)} Eigenkapital nachgeschossen — die Nettoverschuldung sinkt entsprechend, die Kostenbasis des Deals steigt um denselben Betrag.` }, ...p]);
+      t: `<b>${c.name}</b>: ${eur(amt)} Eigenkapital nachgeschossen`
+        + (st < 0.999 ? ` (${eur(amt * st)} davon aus dem Fonds, den Rest tragen die Mitgesellschafter)` : "")
+        + ` — die Nettoverschuldung sinkt entsprechend, die Kostenbasis des Deals steigt um den Anteil des Fonds.` }, ...p]);
   }
 
   function toggleLtip(c) {

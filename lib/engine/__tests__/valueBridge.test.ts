@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, COV_DEFAULT,
+  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, BIL_FEE, exitNetOf, fairOf, applyProceeds,
   fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
-  bridgeChain, liveHist, makeBridge, dealMoic, takeUnrealized, navValueOf,
+  bridgeChain, liveHist, makeBridge, dealMoic, takeUnrealized, navValueOf, fundEquityIn,
   stepCompany, ebitdaOf, periodFin, resetPeriod,
   tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
@@ -489,5 +490,115 @@ describe("Value Bridge des Fonds", () => {
     const b = fundBridge(f, market, 8);
     expect(b.rEbitda, "realisiert EBITDA").toBeCloseTo(kette.ebitda, 9);
     expect(b.uEbitda + b.uMult + b.uDelev, "nichts mehr unrealisiert").toBe(0);
+  });
+
+  /* Eine Kapitalzuführung darf im Restposten nichts hinterlassen. Sie hebt den
+     NAV und das abgerufene Kapital um denselben Betrag, trägt deshalb nichts
+     zum Gewinn bei und steht aus gutem Grund in keinem der beiden Blöcke
+     (siehe fundBridge).
+
+     Bis zum 18.09.2026 stimmte das nur, solange der Fonds allein hielt. Nach
+     einem Teilexit zahlte er den ganzen Nachschuss, die gesenkte Verschuldung
+     kam aber allen Gesellschaftern zugute; die Differenz landete als
+     Restposten unter "Transaktionskosten". Über vier Partien waren das 5 bis
+     16 Mio. €.
+
+     Geprüft wird auf einem gestellten Ablauf statt auf einer ganzen Partie:
+     Ein Nachschuss verändert sonst, was der Fonds danach noch kaufen kann, und
+     mit der Kaufhistorie ändern sich die Einstiegsgebühren — der Vergleich
+     zweier Partien misst dann beides auf einmal. */
+  it("lässt eine Kapitalzuführung im Restposten spurlos, auch nach einem Teilexit", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const basis = (): Any => ({
+      uid: "c1", name: "T", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 80, rate: 7.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 3 }, cfo: { skill: 3 }, r3: { skill: 3 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 4, nwcPct: 15, benchMargin: 14, benchCapex: 4, benchNwc: 15,
+      drift: 0.5, marginDrift: 0, addonSize: 0.25, addonComp: 0,
+      entryMult: 10, entryEbitda: 15, entryDebt: 80, entryEV: 150,
+      // Ohne Einstiegsgebühr: Dann muss der Restposten glatt null sein
+      entryEquity: 70, costTotal: 70, costLeft: 70, entryFees: 0,
+      cashOut: 0, recapOut: 0, equityIn: 0, equityInFund: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 80, mg: 15, ql: 60, eq: 70, mult: 10, st: 1, out: 0, ei: 0, eiF: 0 }],
+    });
+
+    for (const teilexit of [null, "cv", "ipo"] as const) {
+      for (const nachschuss of [false, true]) {
+        const c = basis();
+        const f: Any = {
+          slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+          cash: CAPITAL - 70, proceeds: 0, investedTotal: 70, fees: 0, holdings: [c], realized: [],
+          undrawn: CAPITAL - 70, drawn: 70, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+          calls: [{ q: 1, amt: 70 }], dists: [],
+        };
+        const rng = createRng(4242);
+        const hj = () => {
+          stepCompany(rng, c, market, 3);
+          c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+            eq: navValueOf(c, market) + (c.cashOut || 0), st: c.st ?? 1, out: c.cashOut || 0,
+            ei: c.equityIn || 0, eiF: c.equityInFund || 0, fin: periodFin(c) }];
+          resetPeriod(c);
+        };
+        for (let k = 0; k < 3; k++) hj();
+        if (teilexit) {
+          const share = teilexit === "cv" ? CV_STAKE : IPO_PLACE;
+          const disc = teilexit === "cv" ? CV_DISC : IPO_DISC;
+          const fee = teilexit === "cv" ? CV_FEE : IPO_FEE;
+          const gross = fairOf(c, market, 3, 4) * share * disc;
+          const net = exitNetOf(c, gross, fee);
+          const costSold = c.entryEquity * share;
+          const uOut = takeUnrealized(c, market, net, share);
+          c.st = (c.st ?? 1) * (1 - share);
+          c.entryEquity = c.entryEquity * (1 - share);
+          c.costLeft = Math.max(0.01, (c.costLeft ?? c.entryEquity) - costSold);
+          c.cashOut = (c.cashOut || 0) + net;
+          f.realized = [...(f.realized as Any[]), { name: "T (Teilexit)", moic: net / costSold,
+            bridge: makeBridge(c, gross, net, { stake: (c.st ?? 1) * share, cost: costSold, recap: 0 }), uOut }];
+          applyProceeds(f, net, costSold, 4);
+        }
+        // NACH dem Teilexit nachschießen — genau hier lief die Lücke auf
+        if (nachschuss) fundEquityIn(f, c, 10, 5);
+        for (let k = 0; k < 2; k++) hj();
+        const gross2 = fairOf(c, market, 3, 7);
+        const net2 = exitNetOf(c, gross2, BIL_FEE);
+        const uOut2 = takeUnrealized(c, market, net2);
+        applyProceeds(f, net2, c.costLeft ?? c.entryEquity, 7);
+        f.realized = [...(f.realized as Any[]), { name: "T", moic: dealMoic(c, net2),
+          bridge: makeBridge(c, gross2, net2), uOut: uOut2 }];
+        f.holdings = [];
+        const b = fundBridge(f, market, 7);
+        const wo = `${teilexit ?? "kein Teilexit"}/${nachschuss ? "mit" : "ohne"} Nachschuss`;
+        expect(b.txCost, `${wo}: Restposten ohne Einstiegsgebühr`).toBeCloseTo(0, 6);
+        expect(sumParts(b), `${wo}: Posten erklären den Gewinn`).toBeCloseTo(b.gain, 6);
+      }
+    }
+  });
+
+  /* Und die Gegenprobe an der Beteiligung: Nach einem Teilexit trägt der Fonds
+     nur noch seinen Anteil der Kapitalerhöhung, die Beteiligung bekommt aber
+     den vollen Betrag. */
+  it("verteilt eine Kapitalzuführung nach einem Teilexit pro rata", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = { uid: "c1", name: "T", sector: "Industrials", netDebt: 80,
+      st: 0.4, entryEquity: 30, costTotal: 30, costLeft: 30, equityIn: 0, equityInFund: 0, off: {} };
+    const f: Any = { slot: 0, cash: 100, investedTotal: 30, drawn: 30, undrawn: 400,
+      recyc: 0, calls: [], dists: [], holdings: [c], realized: [] };
+    const ausFonds = fundEquityIn(f, c, 10, 4);
+    expect(ausFonds, "der Fonds trägt seinen Anteil").toBeCloseTo(4, 9);
+    expect(c.netDebt, "die Beteiligung bekommt den vollen Betrag").toBeCloseTo(70, 9);
+    expect(c.equityIn, "Größe der Beteiligung").toBeCloseTo(10, 9);
+    expect(c.equityInFund, "Größe des Fonds").toBeCloseTo(4, 9);
+    expect(c.costTotal, "Kostenbasis steigt um den Anteil des Fonds").toBeCloseTo(34, 9);
+    // Und bei alleinigem Halten ist es unverändert dieselbe Zahl
+    const d: Any = { uid: "c2", name: "T2", sector: "Industrials", netDebt: 80,
+      st: 1, entryEquity: 30, costTotal: 30, costLeft: 30, equityIn: 0, equityInFund: 0, off: {} };
+    expect(fundEquityIn(f, d, 10, 4), "ohne Teilexit unverändert").toBeCloseTo(10, 9);
+    expect(d.netDebt).toBeCloseTo(70, 9);
+    expect(d.costTotal).toBeCloseTo(40, 9);
   });
 });
