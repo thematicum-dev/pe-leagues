@@ -3,7 +3,9 @@ import { createRng } from "../rng";
 import {
   ARCHES, CAPITAL, DEFAULT_HUMAN_ATTRS, PERIODS, SECNAMES, SECTORS,
   ADDON_FAIL_BASE, ADDON_MAX_SHARE, ADDON_REF_SHARE, ADDON_REF_PLAT, ADDON_REF_SKILL, ADDON_REF_LEV,
-  addonAsk, addonCheck, addonMandate, addonMaxEb, buildInit, ebitdaOf, effSkill, markMultiple,
+  ADDON_TEAM_SLOPE,
+  addonAsk, addonCheck, addonFailParts, addonMandate, addonMaxEb, buildInit, ebitdaOf, effSkill,
+  markMultiple,
 } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -113,6 +115,58 @@ describe("Zukaufsmandat", () => {
 });
 
 /* ---------------------------------------------------------------- */
+
+/* Hängt das Scheiterungsrisiko eines Zukaufs an der Qualität des Managements
+   — so wie der Erfolg jeder anderen Maßnahme?
+
+   Ja, und über dieselbe Größe: effSkill(c, "r3"), das effektive Rating der
+   Fachrolle. Es trägt die gedeckelte Fachposition, den halben CEO, den
+   MEP-Bonus und den Abschlag für eine frisch besetzte Position — genau die
+   Zahl, mit der initSuccess() über jede andere Maßnahme entscheidet. Beim
+   Zukauf steht sie als Posten "Team" in addonFailParts() und damit auch als
+   Begründung auf der Karte.
+
+   Diese Tests halten den Zusammenhang fest, weil er sonst nur in einer
+   Konstante (ADDON_TEAM_SLOPE) und einem Funktionsaufruf steht.           */
+describe("Managementqualität im Zukauf", () => {
+  const risk = (over: Any) => {
+    const c = refPlatform(over);
+    return addonCheck(c, market, addonMandate(c, market)).fail;
+  };
+  const basis = risk({});
+
+  it("senkt das Risiko mit dem Rating der Fachrolle", () => {
+    expect(risk({ r3: { skill: 4 } }), "stärkere Fachrolle").toBeLessThan(basis);
+    expect(risk({ r3: { skill: 0 } }), "vakante Fachrolle").toBeGreaterThan(basis);
+  });
+
+  it("rechnet den CEO mit, wie effSkill() es überall tut", () => {
+    /* Der halbe CEO steckt im effektiven Rating — und er deckelt die
+       Fachrolle obendrein (cappedSkill). Ein schwacher CEO muss den Zukauf
+       deshalb riskanter machen, auch wenn die Fachrolle steht. */
+    expect(risk({ ceo: { skill: 4 } }), "starker CEO").toBeLessThan(basis);
+    expect(risk({ ceo: { skill: 0 } }), "vakanter CEO").toBeGreaterThan(basis);
+  });
+
+  it("nimmt Managementbeteiligung und Einarbeitung wie jede andere Maßnahme mit", () => {
+    expect(risk({ ltip: true }), "MEP aufgesetzt").toBeLessThan(basis);
+    expect(risk({ onboard: 2 }), "frisch besetzte Position").toBeGreaterThan(basis);
+  });
+
+  it("benutzt dieselbe Ratingzahl, die die Maßnahmenkarte zeigt", () => {
+    /* Die Karte schreibt "effektives Rating" über die Growth-Maßnahmen und
+       meint effSkill(c, "r3") mit dem Einarbeitungsabschlag. Weicht der
+       Zukauf davon ab, stünde auf der Karte eine Zahl, die für ihn nicht
+       gilt. Geprüft über den Posten "Team" des Risikos.                  */
+    [{ r3: { skill: 3 } }, { ceo: { skill: 1 }, r3: { skill: 5 } }, { onboard: 1 }, { ltip: true }]
+      .forEach((over) => {
+        const c = refPlatform(over);
+        const E = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
+        const team = addonFailParts(c, addonMandate(c, market)).find((t) => t.k === "team")!;
+        expect(team.v, JSON.stringify(over)).toBeCloseTo(-ADDON_TEAM_SLOPE * (E - ADDON_REF_SKILL), 9);
+      });
+  });
+});
 
 function initialFund(slot: number, isAi: boolean, archetype: string | null): RuntimeFund {
   const arch = archetype ? ARCHES.find((a) => a.key === archetype)! : null;

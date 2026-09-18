@@ -1502,7 +1502,11 @@ function bsRows(st): FinRow[] {
 
 function cfRows(st): FinRow[] {
   const anyAcq = st.periods.some((p) => Math.abs(p.acquisitions) > 0.05);
-  const anyDist = st.periods.some((p) => Math.abs(p.distributions) > 0.05);
+  /* Der Kapitalverkehr mit dem Fonds, in beide Richtungen getrennt. Beide
+     Zeilen erscheinen gemeinsam, sobald eine Richtung bewegt wurde: Eine
+     Einlage neben einer leeren Ausschüttungszeile sagt, dass hier zwei
+     verschiedene Vorgänge stehen und nicht einer mit Vorzeichen. */
+  const anyFin = st.periods.some((p) => Math.abs(p.distPaid) > 0.05 || Math.abs(p.equityIn) > 0.05);
   const rows: FinRow[] = [
     { k: "adj", l: "Adjusted EBITDA", v: (p) => (p.opening ? null : p.adjEbitda) },
     { k: "off", l: "Einmalaufwendungen", v: (p) => (p.opening ? null : -p.oneOff) },
@@ -1522,11 +1526,25 @@ function cfRows(st): FinRow[] {
   if (st.levered) rows.push({ k: "int", l: "Zinsen", v: (p) => (p.opening ? null : -p.interest) });
   rows.push({ k: "ncf", l: "Netto-Cashflow", v: (p) => (p.opening ? null : p.netCashFlow), sum: true });
   if (st.levered) {
-    if (anyDist) rows.push({ k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distributions) });
+    /* Der Kapitalverkehr mit dem Fonds. Er stand bis zum 18.09.2026 als eine
+       einzige Zeile "Ausschüttung an den Fonds" da, und zwar nur, wenn der
+       Saldo von null abwich — frisches Eigenkapital erschien dort als
+       negative Ausschüttung oder, wenn im selben Halbjahr auch ausgeschüttet
+       wurde, gar nicht. Wer wissen wollte, wo die Einlage geblieben ist, fand
+       sie nirgends.                                                        */
+    if (anyFin) rows.push(
+      { k: "eqin", l: "Einlage des Fonds (Eigenkapital)", v: (p) => (p.opening ? null : p.equityIn) },
+      { k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distPaid) },
+    );
     rows.push(
       { k: "h", head: true, l: "Überleitung Nettoverschuldung" },
       { k: "nd0", l: "Nettoverschuldung Anfang", v: (p) => (p.opening ? null : p.netDebtOpen) },
-      { k: "dnd", l: "Veränderung", v: (p) => (p.opening ? null : p.dNetDebt) },
+      /* Dieselbe Zahl wie vorher, nur benannt: Die Veränderung der
+         Nettoverschuldung IST die Netto-Neuverschuldung der Periode. Das
+         Modell führt keine Kasse neben der Nettoverschuldung — jeder
+         Mittelbedarf wird gezogen, jeder Überschuss tilgt. Eine eigene Zeile
+         "Aufnahme Fremdkapital" gäbe es nur doppelt. */
+      { k: "dnd", l: "Fremdkapital: Aufnahme (+) / Tilgung (−)", v: (p) => (p.opening ? null : p.dNetDebt) },
       { k: "nd1", l: "Nettoverschuldung Ende", v: (p) => p.netDebt, sum: true },
     );
   }
@@ -1646,6 +1664,7 @@ function StatementsSheet({ st, hidden, close }) {
    Abschreibung, deren Höhe niemand nachvollziehen kann, und eine Steuer, die
    auf einem anderen Ergebnis bemessen ist als dem darüber. */
 function StatementNotes({ st, view, hidden }) {
+  const anyAcq = st.periods.some((p) => Math.abs(p.acquisitions) > 0.05);
   if (hidden) {
     return (
       <p className="finnote ox" style={{ color: "var(--ox)" }}>
@@ -1688,8 +1707,15 @@ function StatementNotes({ st, view, hidden }) {
       {view === "cf" && st.levered && (
         <p className="finnote">
           <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Netto-Cashflow zuzüglich
-          Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
-          Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
+          Ausschüttungen abzüglich Einlagen ergibt exakt den Stand am Periodenende — dieselbe
+          Zahl, mit der die Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
+          {" "}<b>Neues Fremd- und Eigenkapital.</b> Frisches Eigenkapital des Fonds steht in
+          der <i>Einlage</i>; es fließt an den Verkäufer eines Zukaufs oder in die Beteiligung
+          und mindert dort die Schuld. Neues Fremdkapital hat keine eigene Mittelzuflusszeile,
+          weil das Modell neben der Nettoverschuldung keine Kasse führt: Was der Netto-Cashflow
+          nach Einlagen und Ausschüttungen offen lässt, wird gezogen, ein Überschuss tilgt.
+          Genau das steht in der Zeile <i>Fremdkapital: Aufnahme / Tilgung</i>.
+          {anyAcq ? " Der Kaufpreis eines Zukaufs steht in voller Höhe in den Akquisitionen — auch der Teil, den der Fonds als Einlage beisteuert." : ""}
         </p>
       )}
       {st.kind === "deal" && (

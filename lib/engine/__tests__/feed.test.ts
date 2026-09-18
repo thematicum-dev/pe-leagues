@@ -167,3 +167,90 @@ describe("Nachrichtenfeed", () => {
     expect(privat, "keine privaten Meldungen erzeugt").toBeGreaterThan(10);
   });
 });
+
+/* ---------------------------------------------------------------- */
+
+/* Der Feed hat ein Format, und wer hineinschreibt, muss es einhalten.
+
+   maturePeople() stammt aus dem Übungsmodus und schreibt in dessen Kurzform
+   ({q, e, tone, t}); der gemeinsame Feed einer Partie führt sprechende Felder
+   und den Fondsplatz. Bis zum 18.09.2026 landeten die Kurzform-Einträge
+   unverändert im Spielstand: ohne `halfYear` fiel jeder von ihnen durch beide
+   Filter der Ansicht, ohne `slot` wäre er an jeden Platz gegangen. Unsichtbar
+   war damit genau das, was eine Periode ausmacht — Abschluss und Fehlschlag
+   jeder Maßnahme, die gescheiterte Integration eines Zukaufs, der Rückzug
+   eines Gründer-CEO.
+
+   Ein Format lässt sich nicht an einer Stelle prüfen, an der es schon richtig
+   ist. Gespielt wird deshalb eine Partie mit laufenden Maßnahmen und
+   Zukäufen, und JEDER erzeugte Eintrag muss das Format tragen.            */
+describe("Format des Feeds", () => {
+  function spieleMitMassnahmen(seed: number) {
+    const rng = createRng(seed);
+    let state = baseState();
+    const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+    state = { ...state, deals: boot.deals, landmark: boot.landmark };
+    const alle: RuntimeFeedEntry[] = [];
+    for (let hy = 1; hy <= PERIODS; hy++) {
+      const d: Record<number, TurnDecisions> = {};
+      [0, 1].forEach((slot) => {
+        const me = (state.funds as Any[]).find((f) => f.slot === slot)!;
+        const dec: TurnDecisions = {};
+        const deal = (state.deals as Any[])[slot % Math.max(1, state.deals.length)];
+        if ((me.holdings as Any[]).length < MAX_SLOTS && deal) {
+          dec.bids = [{ dealId: deal.id, multiple: deal.askMult * (1 + slot * 0.05), leverage: deal.levCap * 0.8 }];
+          dec.dueDiligence = [deal.id];
+        }
+        const inits: Any[] = [];
+        const freiP = (me.holdings as Any[]).find((h) => !h.initP);
+        if (freiP) inits.push({ holdingUid: freiP.uid, dim: "plat", id: "opex" });
+        /* Bewusst ein überzogenes Mandat: große Zielgröße, Gebot deutlich
+           unter der Preisvorstellung. Das erzeugt beides — gescheiterte
+           Integrationen und Zukäufe, an denen die Finanzierung scheitert. */
+        const freiA = (me.holdings as Any[]).find((h) => !h.initA);
+        if (freiA) inits.push({ holdingUid: freiA.uid, dim: "acc", id: "ma", addEb: 1e9, maxMult: 1 });
+        if (inits.length) dec.initiatives = inits;
+        d[slot] = dec;
+      });
+      const out = runQuarter({ state, halfYear: hy, decisionsBySlot: d, rng } as Any);
+      state = out.state;
+      alle.push(...(out.feed as RuntimeFeedEntry[]));
+    }
+    return alle;
+  }
+
+  it("schreibt jeden Eintrag in den Feldern des Spielstands", () => {
+    const alle = spieleMitMassnahmen(20260918);
+    expect(alle.length, "keine Meldungen erzeugt").toBeGreaterThan(20);
+    for (const f of alle) {
+      expect(f.halfYear, `Eintrag ohne Halbjahr: ${JSON.stringify(f)}`).toBeTypeOf("number");
+      expect(f.emoji, `Eintrag ohne Emoji: ${JSON.stringify(f)}`).toBeTypeOf("string");
+      expect(f.text, `Eintrag ohne Text: ${JSON.stringify(f)}`).toBeTypeOf("string");
+      expect(f.text.length, `leerer Text: ${JSON.stringify(f)}`).toBeGreaterThan(0);
+      // Kurzform des Übungsmodus darf im Spielstand nicht vorkommen
+      for (const k of ["q", "e", "t"]) {
+        expect((f as Any)[k], `Kurzform-Feld "${k}" im Spielstand: ${JSON.stringify(f)}`).toBeUndefined();
+      }
+    }
+  });
+
+  it("meldet Abschluss und Fehlschlag einer Maßnahme an den eigenen Fonds", () => {
+    const alle = spieleMitMassnahmen(20260918);
+    const massnahme = alle.filter((f) => /abgeschlossen|gescheitert|verfehlt das Ziel/.test(f.text));
+    expect(massnahme.length, "kein Ausgang einer Maßnahme gemeldet").toBeGreaterThan(3);
+    // Betriebsmeldungen sind privat: genau ein Platz sieht sie
+    for (const f of massnahme) {
+      expect(f.slot, `Betriebsmeldung ohne Fondsplatz: ${f.text}`).toBeTypeOf("number");
+    }
+  });
+
+  it("meldet einen Zukauf, den die Banken nicht finanzieren", () => {
+    const alle = spieleMitMassnahmen(20260918);
+    const geplatzt = alle.filter((f) => f.text.includes("scheitert an der Finanzierung"));
+    expect(geplatzt.length, "abgelehnte Finanzierung blieb stumm").toBeGreaterThan(0);
+    for (const f of geplatzt) {
+      expect(f.slot, "auch diese Meldung gehört nur dem eigenen Fonds").toBeTypeOf("number");
+      expect(f.text, "die Meldung nennt die Pro-forma-Verschuldung").toMatch(/\d,\d×/);
+    }
+  });
+});

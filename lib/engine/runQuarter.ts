@@ -302,7 +302,21 @@ function applyImmediateDecisions(
       equity: Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)),
     } : {};
     const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, mandate);
-    if (!B || B.blocked) return;
+    if (!B) return;
+    /* Ein Zukauf, den die Banken nicht finanzieren, verschwand bis zum
+       18.09.2026 hier lautlos: Die Abgabe enthielt das Mandat, die Auswertung
+       verwarf es, und im Feed stand kein Wort davon. Der Spieler sah nur, dass
+       nichts passiert war — nicht, dass die Pro-forma-Verschuldung die
+       Finanzierungsgrenze gerissen hatte. Der Übungsmodus meldete es seit
+       jeher (siehe PeLeagues/ExplainMode); jetzt meldet es die Partie auch. */
+    if (B.blocked) {
+      pushFeed(news, quarter, "🏦", "neg",
+        `${c.name}: Der Zukauf scheitert an der Finanzierung. Pro forma `
+        + `${x(B.blocked.lev)} Leverage gegen eine Finanzierungsgrenze von `
+        + `${x(B.blocked.limit)} — die Banken steigen aus. Kleinere Zielgröße `
+        + `oder mehr Eigenkapital aus dem Fonds.`, f.slot);
+      return;
+    }
     const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
     // Das Eigenkapital fließt unmittelbar an den Verkäufer weiter (toDebt:
     // false) — es senkt die Nettoverschuldung der Plattform nicht, sondern
@@ -724,7 +738,24 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   /* 3y — People */
   const newShortlists: { uid: string; name: string; seat: string; cands: Any[] }[] = [];
   F.forEach((f) => {
-    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists, compat));
+    /* maturePeople() stammt aus dem Übungsmodus und schreibt seine Meldungen
+       in dessen Kurzform ({q, e, tone, t}). Der gemeinsame Feed einer Partie
+       führt sprechende Felder — und vor allem den Fondsplatz, der entscheidet,
+       wer eine Meldung überhaupt sieht (RuntimeFeedEntry).
+
+       Bis zum 18.09.2026 landeten die Kurzform-Einträge unverändert im
+       gemeinsamen Feed. Ohne `halfYear` fiel jeder von ihnen durch beide
+       Filter der Ansicht — weder der Feed des laufenden Halbjahres noch das
+       Archiv zeigte sie. Unsichtbar war damit genau das, was eine Periode
+       ausmacht: Abschluss und Fehlschlag jeder Maßnahme, die gescheiterte
+       Integration eines Zukaufs, der Rückzug eines Gründer-CEO, eine
+       Abwerbung. Ohne `slot` wären sie außerdem an jeden Platz gegangen.
+
+       Hier werden sie deshalb übersetzt und dem Fonds zugeordnet, in dessen
+       Portfolio sie entstanden sind.                                       */
+    const own: Any[] = [];
+    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, own, newShortlists, compat));
+    own.forEach((m) => pushFeed(news, m.q ?? q, m.e, m.tone, m.t, f.slot));
   });
   newShortlists.forEach((sl) => {
     const owner = F.find((f) => (f.holdings as Any[]).some((h) => h.uid === sl.uid));
