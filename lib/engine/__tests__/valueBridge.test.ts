@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
+import { SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, COV_DEFAULT,
+  CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, BIL_FEE, exitNetOf, fairOf, applyProceeds,
   fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep,
+  bridgeChain, liveHist, makeBridge, dealMoic, takeUnrealized, navValueOf, fundEquityIn,
+  stepCompany, ebitdaOf, periodFin, resetPeriod,
   tvpiOf, irrOf, cashflowsOf, IRR_FLOOR } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -272,6 +275,365 @@ describe("Value Bridge des Fonds", () => {
     const state = playSeason(SEEDS[0]);
     for (const f of state.funds) {
       expect(fundBridge(f as Any, state.market, PERIODS).openCount).toBe(0);
+    }
+  });
+
+  /* Ein Abgang ist eine Umgliederung, keine Wertentwicklung. Bis zum
+     16.09.2026 wies die Halbjahresspalte ihn als beides aus: Die Beteiligung
+     verließ den unrealisierten Block (dort erschien ihr bisheriger Beitrag mit
+     umgekehrtem Vorzeichen) und tauchte im realisierten wieder auf. Bei einer
+     im Covenant Breach verlorenen Beteiligung stand dann "Unrealisiert +78,
+     davon Entschuldung +127" — in dem Halbjahr, in dem die Kreditgeber das
+     Unternehmen übernahmen.                                                 */
+  it("weist einen Abgang nicht als unrealisierte Wertentwicklung aus", () => {
+    let geprueft = 0;
+    for (const seed of SEEDS) {
+      // Partie Halbjahr für Halbjahr mitschreiben, um Stände vergleichen zu können
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      const snaps: Any[] = [state];
+      for (let hy = 1; hy <= PERIODS; hy++) {
+        const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
+        snaps.push(state);
+      }
+      for (let i = 1; i < snaps.length; i++) {
+        const was = snaps[i - 1], now = snaps[i];
+        for (let slot = 0; slot < now.funds.length; slot++) {
+          const fNow = now.funds[slot] as Any, fWas = was.funds[slot] as Any;
+          if (!(fNow.drawn > 0) || !(fWas.drawn > 0)) continue;
+          if ((fNow.realized || []).length === (fWas.realized || []).length) continue;
+          const bNow = fundBridge(fNow, now.market, i), bWas = fundBridge(fWas, was.market, i - 1);
+          const step = fundBridgeStep(bNow, bWas)!;
+          /* Die Verschiebung zwischen den beiden Blöcken darf die Spalte nicht
+             aus der Balance bringen: Sie geht weiter exakt auf den Gewinn des
+             Halbjahres auf. Genau das ginge verloren, wenn die Umgliederung
+             nur aus einem der beiden Blöcke herausgerechnet würde. */
+          expect(FUND_BRIDGE_PARTS.reduce((a: number, k: string) => a + (step[k] || 0), 0),
+            `Seed ${seed}/HJ${i}/Fonds ${slot}: Summe der Posten`).toBeCloseTo(step.gain, 6);
+          /* Und jeder Abgang bringt eine übernommene Kette mit — ohne sie
+             fiele die Aufstellung auf die alte Spanne zurück und die
+             Umgliederung stünde wieder in der Spalte. */
+          for (const r of (fNow.realized as Any[]).slice((fWas.realized as Any[]).length)) {
+            expect(r.uOut, `Seed ${seed}/HJ${i}/Fonds ${slot}: ${r.name} ohne übernommene Kette`)
+              .toBeTruthy();
+          }
+          geprueft++;
+        }
+      }
+    }
+    expect(geprueft, "kein Abgang geprüft").toBeGreaterThan(10);
+  });
+
+  /* Der gemeldete Fall, ausbuchstabiert: eine Beteiligung, deren Wert über die
+     Halteperiode aufgezehrt wurde, geht im Covenant Breach an die Kreditgeber.
+     In diesem Halbjahr passiert wirtschaftlich nichts mehr — der Verlust ist
+     längst eingetreten und stand Periode für Periode im unrealisierten Block.
+     Vorher wies die Spalte ihn trotzdem aus: einmal positiv als "Unrealisiert"
+     (die Beteiligung verlässt den Block), einmal negativ als "Realisiert". */
+  it("zeigt beim Enforcement einer längst abgeschriebenen Beteiligung keine Bewegung", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 92, rate: 8.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 2 }, cfo: { skill: 0 }, r3: { skill: 0 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 6, nwcPct: 15, benchMargin: 17, benchCapex: 4, benchNwc: 15,
+      drift: -4, marginDrift: -2.5, addonSize: 0.25, addonComp: 0,
+      entryMult: 11, entryEbitda: 15, entryDebt: 92, entryEV: 165,
+      entryEquity: 78, costTotal: 78, costLeft: 78, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 92, mg: 15, ql: 60, eq: 73, mult: 11, st: 1, out: 0, ei: 0 }],
+    };
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 78, fees: 10, holdings: [c], realized: [],
+      undrawn: 0, drawn: 90, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+      calls: [{ q: 1, amt: 90 }], dists: [],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 6; k++) {
+      stepCompany(rng, c, market, 2);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const kette = bridgeChain(c.hist, liveHist(c, market));
+    // Testaufbau: Der Wert muss aufgezehrt und die Kette deutlich negativ sein
+    expect(navValueOf(c, market), "Testaufbau: NAV aufgezehrt").toBeLessThan(1);
+    expect(kette.ebitda + kette.mult + kette.delev, "Testaufbau: Kette").toBeLessThan(-50);
+
+    const was = fundBridge(f, market, 8);
+    // Enforcement wie in runQuarter Abschnitt 3z
+    f.realized = [{ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0),
+      bridge: makeBridge(c, 0, 0), uOut: takeUnrealized(c, market, 0) }];
+    f.holdings = [];
+    const step = fundBridgeStep(fundBridge(f, market, 8), was)!;
+
+    expect(Math.abs(step.uEbitda + step.uMult + step.uDelev + step.uRest), "unrealisiert")
+      .toBeLessThan(0.5);
+    expect(Math.abs(step.rEbitda + step.rMult + step.rDelev + step.rRest), "realisiert")
+      .toBeLessThan(0.5);
+    expect(Math.abs(step.gain), "Gewinn des Halbjahres").toBeLessThan(0.5);
+  });
+
+  /* Und die Gegenprobe zum ganzen Deal: Was eine total verlorene Beteiligung
+     vernichtet hat, steht im realisierten Block — vollständig und an einer
+     Stelle. Bis zum 17.09.2026 fiel der Restposten der Kettenzerlegung aus der
+     Aufstellung heraus: Der realisierte Block wies −96,7 aus, obwohl der Deal
+     76,3 vernichtet hatte, und "Transaktionskosten" stand bei +20,4 — ein
+     Fonds, der alles verloren hatte, mit positiven Transaktionskosten. */
+  it("zeigt den ganzen Verlust einer total verlorenen Beteiligung als realisiert", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 92, rate: 8.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 2 }, cfo: { skill: 0 }, r3: { skill: 0 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 6, nwcPct: 15, benchMargin: 17, benchCapex: 4, benchNwc: 15,
+      drift: -4, marginDrift: -2.5, addonSize: 0.25, addonComp: 0,
+      entryMult: 11, entryEbitda: 15, entryDebt: 92, entryEV: 165,
+      entryEquity: 76.3, costTotal: 76.3, costLeft: 76.3, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 92, mg: 15, ql: 60, eq: 73, mult: 11, st: 1, out: 0, ei: 0 }],
+    };
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 76.3, fees: 0, holdings: [c], realized: [],
+      undrawn: 0, drawn: 76.3, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+      calls: [{ q: 1, amt: 76.3 }], dists: [],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 8; k++) {
+      stepCompany(rng, c, market, 2);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const einstiegNav = c.hist[0].eq;
+    expect(navValueOf(c, market), "Testaufbau: Totalverlust").toBeLessThan(0.01);
+
+    // Enforcement ohne Erlös, wie in runQuarter Abschnitt 3z
+    f.realized = [{ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0),
+      bridge: makeBridge(c, 0, 0), uOut: takeUnrealized(c, market, 0) }];
+    f.holdings = [];
+    const b = fundBridge(f, market, 9);
+
+    /* Der realisierte Block trägt die vernichtete Wertsubstanz vollständig:
+       von der Einstiegsbewertung auf null. Die Einstiegsgebühr ist kein
+       Wertbeitrag und steht unter Kosten — dort steht jede Gebühr. */
+    const real = b.rEbitda + b.rMult + b.rDelev + b.rRest + b.rExit + b.recaps;
+    expect(real, "realisierter Block").toBeCloseTo(-einstiegNav, 6);
+    expect(b.uEbitda + b.uMult + b.uDelev + b.uRest, "nichts mehr unrealisiert").toBe(0);
+    // Und kein positiver Restposten in einem Fonds, der alles verloren hat
+    expect(b.txCost, "Transaktionskosten").toBeLessThanOrEqual(0);
+    expect(b.txCost, "Transaktionskosten = Einstiegsgebühr")
+      .toBeCloseTo(einstiegNav - c.costTotal, 6);
+    // Die Aufstellung erklärt den Gewinn weiterhin vollständig
+    expect(sumParts(b), "Posten erklären den Gewinn").toBeCloseTo(b.gain, 6);
+    expect(b.gain, "ganzer Verlust").toBeCloseTo(-c.costTotal, 6);
+  });
+
+  /* Realisierter und unrealisierter Block beschreiben dieselbe Beteiligung mit
+     derselben Zerlegung. Vorher rechnete der eine als Spanne (alles Wachstum
+     zum Einstiegsmultiple), der andere als Kette — die Differenz verschwand
+     still im Restposten "Transaktionskosten". */
+  it("übernimmt beim Abgang genau die Kette, die im Portfolio stand", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = {
+      uid: "c1", name: "Testwerk", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 60, rate: 6.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 4 }, cfo: { skill: 4 }, r3: { skill: 4 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 4, nwcPct: 15, benchMargin: 14, benchCapex: 4, benchNwc: 15,
+      drift: 1.5, marginDrift: 0, addonSize: 0.25, addonComp: 0,
+      entryMult: 9, entryEbitda: 15, entryDebt: 60, entryEV: 135,
+      entryEquity: 78, costTotal: 78, costLeft: 78, cashOut: 0, recapOut: 0, equityIn: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 60, mg: 15, ql: 60, eq: 75, mult: 9, st: 1, out: 0, ei: 0 }],
+    };
+    const rng = createRng(4242);
+    for (let k = 0; k < 6; k++) {
+      stepCompany(rng, c, market, 3);
+      c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+        eq: navValueOf(c, market) + (c.cashOut || 0), st: 1, out: c.cashOut || 0,
+        ei: c.equityIn || 0, fin: periodFin(c) }];
+      resetPeriod(c);
+    }
+    const kette = bridgeChain(c.hist, liveHist(c, market));
+    const nav = navValueOf(c, market);
+    const net = nav * 0.9;                       // Abschlag gegenüber der Bewertung
+    const u = takeUnrealized(c, market, net);
+    expect(u.ebitda, "EBITDA").toBeCloseTo(kette.ebitda, 9);
+    expect(u.mult, "Multiple").toBeCloseTo(kette.mult, 9);
+    expect(u.delev, "Entschuldung").toBeCloseTo(kette.delev, 9);
+    // Neu am Abgang ist nur der Erlös gegen die letzte Bewertung
+    expect(u.exit, "Exit gegen letzte Bewertung").toBeCloseTo(net - nav, 9);
+
+    const f: Any = {
+      slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+      cash: 0, proceeds: 0, investedTotal: 78, fees: 0, holdings: [],
+      realized: [{ name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, nav, net), uOut: u }],
+      undrawn: 0, drawn: 90, recyc: 0, recycled: 0, distTotal: net, accrued: 0,
+      calls: [{ q: 1, amt: 90 }], dists: [{ q: 8, amt: net }],
+    };
+    const b = fundBridge(f, market, 8);
+    expect(b.rEbitda, "realisiert EBITDA").toBeCloseTo(kette.ebitda, 9);
+    expect(b.uEbitda + b.uMult + b.uDelev, "nichts mehr unrealisiert").toBe(0);
+  });
+
+  /* Eine Kapitalzuführung darf im Restposten nichts hinterlassen. Sie hebt den
+     NAV und das abgerufene Kapital um denselben Betrag, trägt deshalb nichts
+     zum Gewinn bei und steht aus gutem Grund in keinem der beiden Blöcke
+     (siehe fundBridge).
+
+     Bis zum 18.09.2026 stimmte das nur, solange der Fonds allein hielt. Nach
+     einem Teilexit zahlte er den ganzen Nachschuss, die gesenkte Verschuldung
+     kam aber allen Gesellschaftern zugute; die Differenz landete als
+     Restposten unter "Transaktionskosten". Über vier Partien waren das 5 bis
+     16 Mio. €.
+
+     Geprüft wird auf einem gestellten Ablauf statt auf einer ganzen Partie:
+     Ein Nachschuss verändert sonst, was der Fonds danach noch kaufen kann, und
+     mit der Kaufhistorie ändern sich die Einstiegsgebühren — der Vergleich
+     zweier Partien misst dann beides auf einmal. */
+  it("lässt eine Kapitalzuführung im Restposten spurlos, auch nach einem Teilexit", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const basis = (): Any => ({
+      uid: "c1", name: "T", sector: "Industrials",
+      revenue: 100, margin: 15, quality: 60, netDebt: 80, rate: 7.5,
+      holdQ: 0, plat: 2, acc: 2, nwcFix: 0, nwcBal: 15,
+      ceo: { skill: 3 }, cfo: { skill: 3 }, r3: { skill: 3 },
+      initP: null, initA: null, onboard: 0, searches: [], done: [],
+      st: 1, ltip: false, breach: 0, covLimit: COV_DEFAULT,
+      capexPct: 4, nwcPct: 15, benchMargin: 14, benchCapex: 4, benchNwc: 15,
+      drift: 0.5, marginDrift: 0, addonSize: 0.25, addonComp: 0,
+      entryMult: 10, entryEbitda: 15, entryDebt: 80, entryEV: 150,
+      // Ohne Einstiegsgebühr: Dann muss der Restposten glatt null sein
+      entryEquity: 70, costTotal: 70, costLeft: 70, entryFees: 0,
+      cashOut: 0, recapOut: 0, equityIn: 0, equityInFund: 0, off: {},
+      hist: [{ rev: 100, eb: 15, nd: 80, mg: 15, ql: 60, eq: 70, mult: 10, st: 1, out: 0, ei: 0, eiF: 0 }],
+    });
+
+    for (const teilexit of [null, "cv", "ipo"] as const) {
+      for (const nachschuss of [false, true]) {
+        const c = basis();
+        const f: Any = {
+          slot: 0, name: "F", isAi: false, attrs: { ...DEFAULT_HUMAN_ATTRS },
+          cash: CAPITAL - 70, proceeds: 0, investedTotal: 70, fees: 0, holdings: [c], realized: [],
+          undrawn: CAPITAL - 70, drawn: 70, recyc: 0, recycled: 0, distTotal: 0, accrued: 0,
+          calls: [{ q: 1, amt: 70 }], dists: [],
+        };
+        const rng = createRng(4242);
+        const hj = () => {
+          stepCompany(rng, c, market, 3);
+          c.hist = [...c.hist, { rev: c.revenue, eb: ebitdaOf(c), nd: c.netDebt, mg: c.margin, ql: c.quality,
+            eq: navValueOf(c, market) + (c.cashOut || 0), st: c.st ?? 1, out: c.cashOut || 0,
+            ei: c.equityIn || 0, eiF: c.equityInFund || 0, fin: periodFin(c) }];
+          resetPeriod(c);
+        };
+        for (let k = 0; k < 3; k++) hj();
+        if (teilexit) {
+          const share = teilexit === "cv" ? CV_STAKE : IPO_PLACE;
+          const disc = teilexit === "cv" ? CV_DISC : IPO_DISC;
+          const fee = teilexit === "cv" ? CV_FEE : IPO_FEE;
+          const gross = fairOf(c, market, 3, 4) * share * disc;
+          const net = exitNetOf(c, gross, fee);
+          const costSold = c.entryEquity * share;
+          const uOut = takeUnrealized(c, market, net, share);
+          c.st = (c.st ?? 1) * (1 - share);
+          c.entryEquity = c.entryEquity * (1 - share);
+          c.costLeft = Math.max(0.01, (c.costLeft ?? c.entryEquity) - costSold);
+          c.cashOut = (c.cashOut || 0) + net;
+          f.realized = [...(f.realized as Any[]), { name: "T (Teilexit)", moic: net / costSold,
+            bridge: makeBridge(c, gross, net, { stake: (c.st ?? 1) * share, cost: costSold, recap: 0 }), uOut }];
+          applyProceeds(f, net, costSold, 4);
+        }
+        // NACH dem Teilexit nachschießen — genau hier lief die Lücke auf
+        if (nachschuss) fundEquityIn(f, c, 10, 5);
+        for (let k = 0; k < 2; k++) hj();
+        const gross2 = fairOf(c, market, 3, 7);
+        const net2 = exitNetOf(c, gross2, BIL_FEE);
+        const uOut2 = takeUnrealized(c, market, net2);
+        applyProceeds(f, net2, c.costLeft ?? c.entryEquity, 7);
+        f.realized = [...(f.realized as Any[]), { name: "T", moic: dealMoic(c, net2),
+          bridge: makeBridge(c, gross2, net2), uOut: uOut2 }];
+        f.holdings = [];
+        const b = fundBridge(f, market, 7);
+        const wo = `${teilexit ?? "kein Teilexit"}/${nachschuss ? "mit" : "ohne"} Nachschuss`;
+        expect(b.txCost, `${wo}: Restposten ohne Einstiegsgebühr`).toBeCloseTo(0, 6);
+        expect(sumParts(b), `${wo}: Posten erklären den Gewinn`).toBeCloseTo(b.gain, 6);
+      }
+    }
+  });
+
+  /* Und die Gegenprobe an der Beteiligung: Nach einem Teilexit trägt der Fonds
+     nur noch seinen Anteil der Kapitalerhöhung, die Beteiligung bekommt aber
+     den vollen Betrag. */
+  it("verteilt eine Kapitalzuführung nach einem Teilexit pro rata", () => {
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s2) => (market[s2] = SECTORS[s2].m));
+    const c: Any = { uid: "c1", name: "T", sector: "Industrials", netDebt: 80,
+      st: 0.4, entryEquity: 30, costTotal: 30, costLeft: 30, equityIn: 0, equityInFund: 0, off: {} };
+    const f: Any = { slot: 0, cash: 100, investedTotal: 30, drawn: 30, undrawn: 400,
+      recyc: 0, calls: [], dists: [], holdings: [c], realized: [] };
+    const ausFonds = fundEquityIn(f, c, 10, 4);
+    expect(ausFonds, "der Fonds trägt seinen Anteil").toBeCloseTo(4, 9);
+    expect(c.netDebt, "die Beteiligung bekommt den vollen Betrag").toBeCloseTo(70, 9);
+    expect(c.equityIn, "Größe der Beteiligung").toBeCloseTo(10, 9);
+    expect(c.equityInFund, "Größe des Fonds").toBeCloseTo(4, 9);
+    expect(c.costTotal, "Kostenbasis steigt um den Anteil des Fonds").toBeCloseTo(34, 9);
+    // Und bei alleinigem Halten ist es unverändert dieselbe Zahl
+    const d: Any = { uid: "c2", name: "T2", sector: "Industrials", netDebt: 80,
+      st: 1, entryEquity: 30, costTotal: 30, costLeft: 30, equityIn: 0, equityInFund: 0, off: {} };
+    expect(fundEquityIn(f, d, 10, 4), "ohne Teilexit unverändert").toBeCloseTo(10, 9);
+    expect(d.netDebt).toBeCloseTo(70, 9);
+    expect(d.costTotal).toBeCloseTo(40, 9);
+  });
+
+  /* Und die Probe über eine ganze Partie: Der Restposten heißt
+     "Transaktionskosten" und ist auch nur das — die Einstiegsgebühren der
+     gekauften Beteiligungen. Diese Partie beauftragt keine Due Diligence, es
+     bleibt also nichts anderes übrig.
+
+     Im letzten Halbjahr wird nicht mehr gekauft. Sonst könnte eine Beteiligung
+     im selben Durchlauf erworben und von der Tail-End-Verwertung mitgenommen
+     werden; sie stünde dann zu keinem Periodenschluss im Portfolio, und die
+     Zählung der Gebühren liefe an ihr vorbei. Genau daran ist eine frühere
+     Fassung dieser Probe gescheitert — sie meldete 1,22 Mio. € unerklärten
+     Rest, und das war ihre eigene Lücke, nicht die der Aufstellung. */
+  it("führt im Restposten nur die Einstiegsgebühren", () => {
+    for (const seed of SEEDS) {
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      let gebuehren = 0;
+      const gesehen = new Set<string>();
+      for (let hy = 1; hy <= PERIODS; hy++) {
+        const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+        if (hy === PERIODS) delete decisions.bids;
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
+        for (const c of state.funds[HUMAN_SLOT].holdings as Any[]) {
+          if (gesehen.has(c.uid)) continue;
+          gesehen.add(c.uid);
+          gebuehren += c.entryFees || 0;
+        }
+      }
+      const b = fundBridge(state.funds[HUMAN_SLOT] as Any, state.market, PERIODS);
+      expect(gesehen.size, `Seed ${seed}: Testaufbau, es muss gekauft worden sein`).toBeGreaterThan(2);
+      expect(b.txCost, `Seed ${seed}: Restposten sind die Einstiegsgebühren`).toBeCloseTo(-gebuehren, 6);
     }
   });
 });

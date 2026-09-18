@@ -1894,15 +1894,19 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
      als ein Wort breiter als die Bezeichnungsspalte auf einem schmalen Gerät. */
   const HEAD = { r: "Realisiert", u: "Unrealisiert", k: "Kosten" };
   const LABEL = {
-    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung",
+    rEbitda: "EBITDA", rMult: "Multiple", rDelev: "Entschuldung", rRest: "Übriges",
+    rExit: "Exit gegen letzte Bewertung",
     recaps: "Kapital­rückführungen",
-    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung",
+    uEbitda: "EBITDA", uMult: "Multiple", uDelev: "Entschuldung", uRest: "Übriges",
     fees: "Management Fee", txCost: "Transaktions­kosten", carry: "Carry",
   };
   const groups = FUND_BRIDGE_GROUPS.map((g) => ({
     key: g.key, head: HEAD[g.key],
-    // Carry ist bis weit in die Partie hinein null und bekommt dann keine Zeile
-    rows: g.parts.filter((k) => k !== "carry" || has("carry")).map((k) => ({ l: LABEL[k], k })),
+    /* Carry ist bis weit in die Partie hinein null, und "Übriges" bleibt in
+       den meisten Partien klein. Beide bekommen nur eine Zeile, wenn sie in
+       einer der Spalten etwas erklären — wie in der Beteiligungsansicht. */
+    rows: g.parts.filter((k) => !["carry", "rRest", "uRest"].includes(k) || has(k))
+      .map((k) => ({ l: LABEL[k], k })),
   }));
   // Summe einer Gruppe je Spalte — die Kopfzeile trägt sie, damit die
   // Aufstellung auch zugeklappt vollständig bleibt.
@@ -1922,7 +1926,11 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
           <br /><br />
           <b>Realisiert</b> ist, was die verkauften Beteiligungen erwirtschaftet haben.
           <b>Unrealisiert</b> ist derselbe Schnitt für die, die du noch hältst — auf dem Papier, nicht auf
-          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Beide sind in
+          dem Konto; beim Laufzeitende ist die Gruppe null, weil dann alles verwertet ist. Ein Abgang
+          verschiebt zwischen den beiden Gruppen, er erzeugt nichts: Was eine Beteiligung erwirtschaftet
+          hat, stand Periode für Periode unter Unrealisiert und steht danach unverändert unter Realisiert.
+          Neu ist dabei nur der <b>Exit gegen letzte Bewertung</b> — der Unterschied zwischen dem Erlös und
+          dem Wert, mit dem die Beteiligung zuletzt in den Büchern stand. Beide Gruppen sind in
           dieselben drei Treiber zerlegt, damit sie vergleichbar sind: <b>EBITDA</b> ist das, was die
           Unternehmen operativ mehr verdienen als beim Einstieg — deine Portfolioarbeit. <b>Multiple</b> ist
           Bewertungsveränderung am Markt: dieselbe Substanz wird höher oder niedriger bewertet, dafür kannst
@@ -2559,8 +2567,15 @@ export function EquityInjection({ c, investable, confirm, close }) {
   const cov = c.covLimit ?? COV_DEFAULT;
   const lev = c.netDebt / Math.max(0.5, eb);
   const toCov = Math.max(0, c.netDebt - cov * eb);
-  const max = Math.max(0, Math.min(investable, Math.max(0, c.netDebt)));
+  /* Der Regler steht auf dem Betrag, der BEI DER BETEILIGUNG ankommt. Hält der
+     Fonds nach einem Teilexit nur noch einen Teil, tragen die
+     Mitgesellschafter ihren Anteil der Kapitalerhöhung mit — gedeckelt ist
+     deshalb der Fondsanteil, nicht die Kapitalerhöhung (siehe
+     fundEquityIn).                                                         */
+  const st = c.st ?? 1;
+  const max = Math.max(0, Math.min(investable / Math.max(0.01, st), Math.max(0, c.netDebt)));
   const [amt, setAmt] = useState(() => Math.min(max, Math.max(0, toCov)));
+  const ausFonds = amt * st;
   const levAfter = (c.netDebt - amt) / Math.max(0.5, eb);
   const cost = (c.costLeft ?? c.entryEquity) || 0;
   return (
@@ -2578,13 +2593,19 @@ export function EquityInjection({ c, investable, confirm, close }) {
               style={{ width: "100%", accentColor: "var(--gold)" }} />
           </div>
           <table className="ledger fix"><tbody>
-            <tr><td className="lab">Betrag</td><td>{eur(amt)}</td></tr>
+            <tr><td className="lab">Betrag</td><td>{eur(amt)}
+              {st < 0.999 && (
+                <span className="ctl">
+                  Davon aus dem Fonds {eur(ausFonds)} — du hältst {Math.round(st * 100)} %,
+                  die Mitgesellschafter tragen ihren Anteil der Kapitalerhöhung mit.
+                </span>
+              )}</td></tr>
             <tr><td className="lab">Investierbar</td><td>{eur(investable)}</td></tr>
             <tr><td className="lab">Leverage danach</td>
               <td style={{ color: levAfter > cov ? "var(--ox)" : "var(--teal)", fontWeight: 600 }}>
                 {x(Math.max(0, levAfter))} gegen Covenant {x(cov)}</td></tr>
             <tr><td className="lab">Kostenbasis danach</td>
-              <td>{eur(cost + amt)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>statt {eur(cost)}</span></td></tr>
+              <td>{eur(cost + ausFonds)} <span style={{ fontSize: 11, color: "var(--ink2)" }}>statt {eur(cost)}</span></td></tr>
           </tbody></table>
           <p className="hint" style={{ padding: "0 15px 12px" }}>
             {toCov > 0
