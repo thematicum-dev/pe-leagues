@@ -46,8 +46,10 @@ Parameter der Route:
 
 | Parameter | Wirkung |
 |---|---|
-| `hy=N` | Halbjahr, in dem die Partie steht (1–20). Ab 16 greift die Tail-End-Vorschau. |
+| `hy=N` | Halbjahr, in dem die Partie steht (1–20). Ab 16 greift die Tail-End-Vorschau. Ausgewertet sind N−1 Halbjahre — über das N-te wird gerade entschieden. |
 | `hold=1` | Nichts verkaufen. Ohne das steht das Portfolio spät in der Laufzeit leer. |
+| `breach=1` | Eine Partie, in der Platz 0 in Halbjahr 13 eine Beteiligung im Covenant Breach verliert. Für alles, was ein Totalverlust auslöst. |
+| `seed=N` | Anderer Startwert derselben Mechanik. Der Weg zu jedem Zustand, den die Standardpartie nicht hergibt — suchen lässt er sich mit einem kurzen Vitest-Lauf über `runQuarter`, statt ihn im Browser zu erwürfeln. |
 
 Gefahren im Browser dann mit `node .claude/skills/live/drive.mjs` als
 Vorlage — dort stecken die Helfer, die sonst jedes Mal neu erfunden werden

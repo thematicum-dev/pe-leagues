@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function LivePage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const hy = Math.min(20, Math.max(1, Number(sp.hy) || 8));
-  const { state, history } = buildFixture(hy, sp.hold === "1");
+  const { state, history } = buildFixture(hy, sp.hold === "1", sp.breach === "1", Number(sp.seed) || undefined);
   return (
     <MultiplayerGame
       seasonId="00000000-0000-0000-0000-000000000000"
