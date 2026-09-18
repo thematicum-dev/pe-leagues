@@ -601,4 +601,39 @@ describe("Value Bridge des Fonds", () => {
     expect(d.netDebt).toBeCloseTo(70, 9);
     expect(d.costTotal).toBeCloseTo(40, 9);
   });
+
+  /* Und die Probe über eine ganze Partie: Der Restposten heißt
+     "Transaktionskosten" und ist auch nur das — die Einstiegsgebühren der
+     gekauften Beteiligungen. Diese Partie beauftragt keine Due Diligence, es
+     bleibt also nichts anderes übrig.
+
+     Im letzten Halbjahr wird nicht mehr gekauft. Sonst könnte eine Beteiligung
+     im selben Durchlauf erworben und von der Tail-End-Verwertung mitgenommen
+     werden; sie stünde dann zu keinem Periodenschluss im Portfolio, und die
+     Zählung der Gebühren liefe an ihr vorbei. Genau daran ist eine frühere
+     Fassung dieser Probe gescheitert — sie meldete 1,22 Mio. € unerklärten
+     Rest, und das war ihre eigene Lücke, nicht die der Aufstellung. */
+  it("führt im Restposten nur die Einstiegsgebühren", () => {
+    for (const seed of SEEDS) {
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      let gebuehren = 0;
+      const gesehen = new Set<string>();
+      for (let hy = 1; hy <= PERIODS; hy++) {
+        const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+        if (hy === PERIODS) delete decisions.bids;
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
+        for (const c of state.funds[HUMAN_SLOT].holdings as Any[]) {
+          if (gesehen.has(c.uid)) continue;
+          gesehen.add(c.uid);
+          gebuehren += c.entryFees || 0;
+        }
+      }
+      const b = fundBridge(state.funds[HUMAN_SLOT] as Any, state.market, PERIODS);
+      expect(gesehen.size, `Seed ${seed}: Testaufbau, es muss gekauft worden sein`).toBeGreaterThan(2);
+      expect(b.txCost, `Seed ${seed}: Restposten sind die Einstiegsgebühren`).toBeCloseTo(-gebuehren, 6);
+    }
+  });
 });

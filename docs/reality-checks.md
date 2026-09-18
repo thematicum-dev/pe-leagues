@@ -698,12 +698,21 @@ Partien kennen das Feld nicht; dort bleibt es beim alten Ansatz.
 Nachgemessen: Restposten 0,00 über alle Kombinationen aus Teilexit-Art
 (keiner / Continuation Vehicle / Börsengang) und Nachschuss.
 
-**Offen.** In einer von vier gemessenen Partien bleibt am Laufzeitende ein
-Restposten von 1,22 Mio. €, der nicht aus der Kapitalzuführung stammt — er
-tritt auch ohne jeden Nachschuss auf und entsteht erst bei der
-Tail-End-Verwertung eines zuvor teilverkauften Portfolios. Einzeln nachgebaut
-(Teilexit, dann Tail-End) geht die Aufstellung auf; die Ursache liegt in einer
-Kombination, die sich so noch nicht reproduzieren ließ.
+**Der Rest von 1,22 Mio. €** — in einer der vier Partien blieb am Laufzeitende
+eine Lücke, die zunächst nach einem dritten Fehler aussah. Sie war keiner.
+Jede einzelne Beteiligung ging auf die dritte Nachkommastelle auf, und auf
+Fondsebene stimmte `investedTotal` minus die Einstiegsbewertungen exakt mit
+dem Restposten überein: 13,834 Mio. €. Die Gebühren der fünf Unternehmen
+summierten sich auf genau diese Zahl — 1,308 + 2,647 + 7,111 + 1,549 + 1,219.
+
+Die 1,219 gehörten zu einem Unternehmen, das im letzten Halbjahr gekauft und
+im selben Durchlauf von der Tail-End-Verwertung mitgenommen wurde. Es stand zu
+keinem Periodenschluss im Portfolio, und die Probe zählte seine Gebühr
+deshalb nicht mit. Die Lücke lag in der Messung, nicht in der Aufstellung.
+
+Der Test kauft im letzten Halbjahr deshalb nicht mehr und prüft seitdem exakt:
+Der Restposten ist die Summe der Einstiegsgebühren, über vier Partien, ohne
+Toleranz.
 
 ---
 
