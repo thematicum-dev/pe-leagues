@@ -7,7 +7,7 @@ import { Search, Briefcase, Trophy } from "lucide-react";
 import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
-  ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
+  ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_FEE, BOOK, CAPITAL,
   CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
   ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
@@ -16,7 +16,7 @@ import {
   SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
-  dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
+  dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
   evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
@@ -977,6 +977,16 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   const canNow = ripe && !inProc;                   // Bilateral und CV: jedes Halbjahr erneut
   const ipoOpen = canNow && st === 1 && market[c.sector] >= SECTORS[c.sector].m * 1.05 && eb >= IPO_EBITDA;
 
+  /* Werkbänke. Diese Beteiligung hat genau zwei — Performance und Growth —,
+     und wie viele davon belegbar sind, entscheidet zusätzlich die
+     Operating-Kapazität des Portfolios (`freeSlots`). Die Beschriftung nennt
+     die kleinere der beiden Zahlen und sagt, welche gerade bindet. */
+  const benchHere = 2 - initsOf(c).length;
+  const benchFree = Math.min(benchHere, freeSlots);
+  const benchLabel = benchFree > 0
+    ? `${benchFree} von 2 Werkbänken frei`
+    : benchHere <= 0 ? "Beide Werkbänke belegt" : "Portfolio-Kapazität belegt";
+
   /* Eine Beteiligung im Prozess ist die seltenste Karte des Portfolios — ihr
      Wert steht zur Abstimmung. Sie bekommt deshalb denselben goldenen Rahmen
      wie ein Trophy Asset im Dealflow. */
@@ -1152,7 +1162,15 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         </p>
       </Section>
 
-      <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
+      {/* Zwei Werkbänke hat jede Beteiligung — Performance und Growth, mehr
+          Knöpfe stehen hier gar nicht. `freeSlots` zählt aber die freie
+          Operating-Kapazität des GANZEN Portfolios (INIT_SLOTS plus
+          Value-Creation-Bonus). Bis zum 18.09.2026 stand diese Zahl roh über
+          den zwei Knöpfen: "4 Werkbänke frei" über einer Karte, die zwei
+          kennt. Jetzt steht hier, was auf DIESER Beteiligung frei ist, und
+          die Kapazität des Portfolios daneben — sie ist die eigentliche
+          Grenze, sobald mehrere Beteiligungen gleichzeitig arbeiten. */}
+      <Section title="Wertsteigerung" right={benchLabel}>
         <div className="bactgrid">
           <button className={sp("plat").trim()} disabled={!!c.initP || freeSlots <= 0} onClick={() => act.init("plat")}>
             🏗 Performance
@@ -1176,10 +1194,21 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
                   + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind abgerufen.` : "")
                 : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
-              + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
+              + (initsOf(c).length === 1
+                ? freeSlots > 0 ? " Die zweite Werkbank ist frei."
+                  : " Die zweite Werkbank wäre frei — die Operating-Kapazität des Portfolios ist aber ausgeschöpft."
+                : "")
             : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
             : `Performance und Growth laufen parallel. Maßnahmen lassen sich wiederholen — jede weitere Auflage bringt weniger und dauert länger, und ob überhaupt noch etwas zu holen ist, steht als Eignung im Katalog.${(c.done || []).length ? ` Bisher ${(c.done || []).length} Programme abgeschlossen.` : ""}`}
-        </div>
+          {/* Die zweite Grenze, und die einzige, die nicht auf dieser Karte
+              steht: Wie viele Maßnahmen im ganzen Portfolio noch gleichzeitig
+              laufen dürfen. Sie gehört neben die zwei Werkbänke, sonst wirkt
+              eine gesperrte Schaltfläche wie ein Fehler. */}
+          {/* Im Übungsmodus gibt es genau eine Beteiligung, dort IST die
+              Kapazität des Portfolios die der Karte (PRAC_SLOTS = 2). */}
+          {!practice && freeSlots > 0 && (
+            <> Im Portfolio sind noch {freeSlots} {freeSlots === 1 ? "Maßnahme" : "Maßnahmen"} gleichzeitig möglich.</>
+          )}</div>
         {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
             Karte bisher nicht zu beantworten: `done` zählt nur Kennungen mit,
             und der Umsatzsprung einer Integration steht ohne Erklärung im
@@ -1502,7 +1531,11 @@ function bsRows(st): FinRow[] {
 
 function cfRows(st): FinRow[] {
   const anyAcq = st.periods.some((p) => Math.abs(p.acquisitions) > 0.05);
-  const anyDist = st.periods.some((p) => Math.abs(p.distributions) > 0.05);
+  /* Der Kapitalverkehr mit dem Fonds, in beide Richtungen getrennt. Beide
+     Zeilen erscheinen gemeinsam, sobald eine Richtung bewegt wurde: Eine
+     Einlage neben einer leeren Ausschüttungszeile sagt, dass hier zwei
+     verschiedene Vorgänge stehen und nicht einer mit Vorzeichen. */
+  const anyFin = st.periods.some((p) => Math.abs(p.distPaid) > 0.05 || Math.abs(p.equityIn) > 0.05);
   const rows: FinRow[] = [
     { k: "adj", l: "Adjusted EBITDA", v: (p) => (p.opening ? null : p.adjEbitda) },
     { k: "off", l: "Einmalaufwendungen", v: (p) => (p.opening ? null : -p.oneOff) },
@@ -1522,11 +1555,25 @@ function cfRows(st): FinRow[] {
   if (st.levered) rows.push({ k: "int", l: "Zinsen", v: (p) => (p.opening ? null : -p.interest) });
   rows.push({ k: "ncf", l: "Netto-Cashflow", v: (p) => (p.opening ? null : p.netCashFlow), sum: true });
   if (st.levered) {
-    if (anyDist) rows.push({ k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distributions) });
+    /* Der Kapitalverkehr mit dem Fonds. Er stand bis zum 18.09.2026 als eine
+       einzige Zeile "Ausschüttung an den Fonds" da, und zwar nur, wenn der
+       Saldo von null abwich — frisches Eigenkapital erschien dort als
+       negative Ausschüttung oder, wenn im selben Halbjahr auch ausgeschüttet
+       wurde, gar nicht. Wer wissen wollte, wo die Einlage geblieben ist, fand
+       sie nirgends.                                                        */
+    if (anyFin) rows.push(
+      { k: "eqin", l: "Einlage des Fonds (Eigenkapital)", v: (p) => (p.opening ? null : p.equityIn) },
+      { k: "dist", l: "Ausschüttung an den Fonds", v: (p) => (p.opening ? null : -p.distPaid) },
+    );
     rows.push(
       { k: "h", head: true, l: "Überleitung Nettoverschuldung" },
       { k: "nd0", l: "Nettoverschuldung Anfang", v: (p) => (p.opening ? null : p.netDebtOpen) },
-      { k: "dnd", l: "Veränderung", v: (p) => (p.opening ? null : p.dNetDebt) },
+      /* Dieselbe Zahl wie vorher, nur benannt: Die Veränderung der
+         Nettoverschuldung IST die Netto-Neuverschuldung der Periode. Das
+         Modell führt keine Kasse neben der Nettoverschuldung — jeder
+         Mittelbedarf wird gezogen, jeder Überschuss tilgt. Eine eigene Zeile
+         "Aufnahme Fremdkapital" gäbe es nur doppelt. */
+      { k: "dnd", l: "Fremdkapital: Aufnahme (+) / Tilgung (−)", v: (p) => (p.opening ? null : p.dNetDebt) },
       { k: "nd1", l: "Nettoverschuldung Ende", v: (p) => p.netDebt, sum: true },
     );
   }
@@ -1646,6 +1693,7 @@ function StatementsSheet({ st, hidden, close }) {
    Abschreibung, deren Höhe niemand nachvollziehen kann, und eine Steuer, die
    auf einem anderen Ergebnis bemessen ist als dem darüber. */
 function StatementNotes({ st, view, hidden }) {
+  const anyAcq = st.periods.some((p) => Math.abs(p.acquisitions) > 0.05);
   if (hidden) {
     return (
       <p className="finnote ox" style={{ color: "var(--ox)" }}>
@@ -1688,8 +1736,15 @@ function StatementNotes({ st, view, hidden }) {
       {view === "cf" && st.levered && (
         <p className="finnote">
           <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Netto-Cashflow zuzüglich
-          Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
-          Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
+          Ausschüttungen abzüglich Einlagen ergibt exakt den Stand am Periodenende — dieselbe
+          Zahl, mit der die Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
+          {" "}<b>Neues Fremd- und Eigenkapital.</b> Frisches Eigenkapital des Fonds steht in
+          der <i>Einlage</i>; es fließt an den Verkäufer eines Zukaufs oder in die Beteiligung
+          und mindert dort die Schuld. Neues Fremdkapital hat keine eigene Mittelzuflusszeile,
+          weil das Modell neben der Nettoverschuldung keine Kasse führt: Was der Netto-Cashflow
+          nach Einlagen und Ausschüttungen offen lässt, wird gezogen, ein Überschuss tilgt.
+          Genau das steht in der Zeile <i>Fremdkapital: Aufnahme / Tilgung</i>.
+          {anyAcq ? " Der Kaufpreis eines Zukaufs steht in voller Höhe in den Akquisitionen — auch der Teil, den der Fonds als Einlage beisteuert." : ""}
         </p>
       )}
       {st.kind === "deal" && (

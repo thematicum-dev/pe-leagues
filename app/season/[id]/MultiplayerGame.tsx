@@ -34,13 +34,13 @@ import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
 import {
-  BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
+  BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA, exitMultiples,
   INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
+  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
   eur, exitNetOf, fairOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
+  navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -739,24 +739,30 @@ export default function MultiplayerGame({
   function previewExit(c: Any, ch: "bil" | "cv" | "ipo" | "proc") {
     const st = c.st ?? 1;
     const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, state.market);
-    const dMult = dealMultiple(c, state.market, NEG, quarter);
+    /* Eine Quelle für alle Multiples dieses Dialogs: exitMultiples() zerlegt
+       dieselbe Kette, mit der runQuarter den gewählten Weg abrechnet. */
+    const M = exitMultiples(c, state.market, NEG, quarter, ch);
+    const mMult = M.mark;
 
-    let exMult = dMult, eqDisc = 1, share = st, feeRate = 0, costBasis = c.entryEquity, note = "";
+    const exMult = M.exit;
+    let eqDisc = 1, share = st, feeRate = 0, costBasis = c.entryEquity, note = "";
     const recap = c.recapOut || 0;
+    /* Jeder Schritt der Kette trägt seine eigene Zeile; maßgeblich ist die
+       Zeile mit "=" davor. Warum das nötig war: siehe exitMultiples(). */
     const rows: [string, string][] = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
+    if (M.negUsed > 0) rows.push([`Verhandlungsprämie +${M.negUsed * 2} %`, x(M.negMult)]);
+    if (M.press > 0.005) rows.push(["Endfälligkeitsdruck", `−${M.press.toFixed(1).replace(".", ",")}× EBITDA`]);
+    if (M.bilDisc > 0) rows.push(["Abschlag bilateral", `−${M.bilDisc.toFixed(1).replace(".", ",")}× EBITDA`]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC; feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
+      feeRate = BIL_FEE;
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
       eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE; costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult; eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE; costBasis = c.entryEquity * IPO_PLACE;
-      note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
+      eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE; costBasis = c.entryEquity * IPO_PLACE;
+      note = "Am Kapitalmarkt zählt kein Verhandlungsgeschick. Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
     } else {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
@@ -767,7 +773,7 @@ export default function MultiplayerGame({
     // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
+    rows.push(["= Exit-Multiple (maßgeblich)", x(exMult)], ["Enterprise Value", eur(ev)],
       ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
     if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag", `−${Math.round((1 - eqDisc) * 100)} %`]);

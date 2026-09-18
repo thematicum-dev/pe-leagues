@@ -234,6 +234,18 @@ export interface FinPeriod {
   dNwc: number;            // Mittelbindung positiv
   capex: number;
   acquisitions: number;
+  /* Der Kapitalverkehr mit dem Fonds, in beide Richtungen getrennt. Er stand
+     bis zum 18.09.2026 nur als Saldo in `distributions`, und der trug das
+     Etikett der einen Richtung: Eine Einlage des Fonds — frisches
+     Eigenkapital, etwa für einen Zukauf oder gegen einen drohenden Covenant
+     Breach — erschien als negative "Ausschüttung an den Fonds". Zwei
+     entgegengesetzte Vorgänge in einer Zeile mit dem Namen des einen.
+
+     `distPaid` ist, was an den Fonds geht, `equityIn`, was von ihm kommt;
+     beide sind nicht negativ. Der Saldo `distributions` bleibt unverändert
+     die Größe der Überleitung (= distPaid − equityIn).                    */
+  distPaid: number;
+  equityIn: number;
   distributions: number;
   /* Free Cashflow vor Steuern und Finanzierung: was das Geschäft selbst
      erwirtschaftet, bevor Fiskus und Bank bedient sind.                    */
@@ -269,9 +281,11 @@ function makePeriod(base: {
   key: string; label: string; sub: string; months: number;
   opening?: boolean; estimated?: boolean; levered?: boolean;
   revenue: number; adjEbitda: number; oneOff: number; da: number; interest: number; tax: number;
-  dNwc: number; capex: number; acquisitions: number; distributions: number;
+  dNwc: number; capex: number; acquisitions: number;
+  distPaid?: number; equityIn?: number;
   ppe: number; goodwill: number; nwc: number; netDebt: number; equity: number; netDebtOpen: number;
 }): FinPeriod {
+  const distPaid = base.distPaid || 0, equityIn = base.equityIn || 0;
   const repEbitda = base.adjEbitda - base.oneOff;
   const ebit = repEbitda - base.da;
   const ebt = ebit - base.interest;
@@ -298,7 +312,7 @@ function makePeriod(base: {
     assets: base.ppe + base.goodwill + base.nwc + cash,
     debt, netDebt: base.netDebt, equity: base.equity,
     dNwc: base.dNwc, capex: base.capex, acquisitions: base.acquisitions,
-    distributions: base.distributions, fcfPreTax, netCashFlow,
+    distPaid, equityIn, distributions: distPaid - equityIn, fcfPreTax, netCashFlow,
     netDebtOpen: base.netDebtOpen, dNetDebt: base.netDebt - base.netDebtOpen,
   };
 }
@@ -361,7 +375,7 @@ export function dealStatements(d: Any, opts: { years?: number } = {}): Statement
       sub: back === 0 ? "LTM · 12M" : "12M", months: 12,
       levered: false,
       revenue, adjEbitda, oneOff, da: capex, interest: 0, tax,
-      dNwc: (nwPct / 100) * (revenue - revPrev), capex, acquisitions: 0, distributions: 0,
+      dNwc: (nwPct / 100) * (revenue - revPrev), capex, acquisitions: 0,
       ppe: PPE_YEARS * capex, goodwill: 0, nwc, netDebt: 0,
       equity: PPE_YEARS * capex + nwc, netDebtOpen: 0,
     }));
@@ -414,7 +428,7 @@ export function holdingStatements(c: Any): Statements | null {
     key: "entry", label: "Einstieg", sub: "LTM bei Vollzug", months: 12, opening: true, levered: true,
     revenue: h[0].rev, adjEbitda: h[0].eb, oneOff: 0, da: entryCapex, interest: 0,
     tax: TAX_RATE * Math.max(0, h[0].eb - entryCapex),
-    dNwc: 0, capex: entryCapex, acquisitions: 0, distributions: 0,
+    dNwc: 0, capex: entryCapex, acquisitions: 0,
     ppe, goodwill, nwc, netDebt, equity, netDebtOpen: netDebt,
   });
 
@@ -482,10 +496,11 @@ export function holdingStatements(c: Any): Statements | null {
       key: "h" + i, label: "HJ " + i, sub: "6M", months: 6, estimated, levered: true,
       revenue: revH, adjEbitda: ebH, oneOff, da: capex, interest, tax,
       dNwc: dNwc + off.nwcRel, capex: capex + off.capexOff, acquisitions: off.addon,
-      /* Ausschüttung und Einlage stehen in einer Zeile, netto: Der Fonds
-         bewegt Kapital in beide Richtungen, und ein negativer Betrag ist
-         genau die Einlage. */
-      distributions: off.dist + off.inj,
+      /* Der Fonds bewegt Kapital in beide Richtungen, und die Engine bucht
+         beide gegen dieselbe Nettoverschuldung: die Ausschüttung positiv
+         (`dist`), die Einlage negativ (`inj`, siehe fundEquityIn). Der
+         Bericht zeigt sie getrennt — der Saldo bleibt derselbe.          */
+      distPaid: off.dist, equityIn: -off.inj,
       ppe, goodwill, nwc, netDebt, equity, netDebtOpen: prev.nd,
     }));
   }
@@ -545,7 +560,8 @@ function mergeHalves(a: FinPeriod, b: FinPeriod, key: string, label: string,
     dNwc: a.dNwc + b.dNwc,
     capex: a.capex + b.capex,
     acquisitions: a.acquisitions + b.acquisitions,
-    distributions: a.distributions + b.distributions,
+    distPaid: a.distPaid + b.distPaid,
+    equityIn: a.equityIn + b.equityIn,
     ppe: b.ppe, goodwill: b.goodwill, nwc: b.nwc,
     netDebt: b.netDebt, equity: b.equity, netDebtOpen: a.netDebtOpen,
   });

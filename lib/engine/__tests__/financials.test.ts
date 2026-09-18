@@ -430,3 +430,98 @@ describe("Finanzberichte eines Zielunternehmens", () => {
     });
   });
 });
+
+/* ---------------------------------------------------------------- */
+
+/* Der Kapitalverkehr mit dem Fonds geht in beide Richtungen, und bis zum
+   18.09.2026 stand er als ein einziger Saldo in der Kapitalflussrechnung —
+   unter dem Etikett der einen Richtung ("Ausschüttung an den Fonds"). Frisches
+   Eigenkapital erschien dort als negative Ausschüttung, und wenn im selben
+   Halbjahr auch ausgeschüttet wurde, verschwand es ganz. Wer im Bericht nach
+   dem neuen Eigenkapital suchte, fand es nirgends.
+
+   Jetzt tragen beide Richtungen eine eigene Größe. Der Saldo bleibt, was er
+   war — die Überleitung auf die Nettoverschuldung der Engine darf sich davon
+   nicht bewegen.                                                          */
+describe("Kapitalverkehr mit dem Fonds in der Kapitalflussrechnung", () => {
+  /* Eine Partie, in der jeder Zukauf mit Fondskapital unterlegt wird: Das
+     Mandat schießt Eigenkapital nach, und genau das muss der Bericht zeigen. */
+  function partieMitEinlagen(seed: number, periods = 14) {
+    const rng = createRng(seed);
+    let state = initialState();
+    const boot: unknown[] = [];
+    for (let i = 0; i < 4; i++) boot.push(newDeal(rng, "process", state.market));
+    state.deals = boot;
+    for (let hy = 1; hy <= periods; hy++) {
+      const decisions: TurnDecisions = {};
+      const me = state.funds[0];
+      const holdings = me.holdings as Any[];
+      if (holdings.length < 3 && state.deals.length) {
+        const d = state.deals[0] as Any;
+        decisions.bids = [{ dealId: d.id, multiple: d.askMult * 0.99, leverage: Math.min(d.levCap, 3.4) }];
+        decisions.dueDiligence = [d.id];
+      }
+      const freiA = holdings.find((h) => !h.initA);
+      if (freiA) {
+        const addEb = ebitdaOf(freiA) * 0.25;
+        decisions.initiatives = [{
+          holdingUid: freiA.uid, dim: "acc", id: "ma",
+          // Der halbe Kaufpreis aus dem Fonds — eine Einlage, die im Bericht stehen muss
+          addEb, equity: addEb * 4,
+        } as Any];
+      }
+      state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [me.slot]: decisions }, rng }).state;
+    }
+    return state.funds[0].holdings as Any[];
+  }
+
+  const mitEinlagen = partieMitEinlagen(20260918);
+
+  it("weist die Einlage des Fonds überhaupt aus", () => {
+    const summe = mitEinlagen.reduce((s, c) => {
+      const st = holdingStatements(c);
+      return s + (st ? st.periods.reduce((t, p) => t + p.equityIn, 0) : 0);
+    }, 0);
+    expect(summe, "keine Einlage im Bericht — Testaufbau oder Bericht").toBeGreaterThan(0.05);
+  });
+
+  it("hält Einlage und Ausschüttung auseinander und beide nicht negativ", () => {
+    mitEinlagen.forEach((c) => {
+      const st = holdingStatements(c)!;
+      st.periods.forEach((p) => {
+        expect(p.equityIn, `${c.name} ${p.label}: Einlage negativ`).toBeGreaterThanOrEqual(0);
+        expect(p.distPaid, `${c.name} ${p.label}: Ausschüttung negativ`).toBeGreaterThanOrEqual(0);
+        // Der Saldo der Überleitung bleibt die Differenz der beiden
+        expect(p.distributions).toBeCloseTo(p.distPaid - p.equityIn, 9);
+      });
+    });
+  });
+
+  it("läuft auch mit Einlagen exakt auf die Nettoverschuldung der Engine zu", () => {
+    mitEinlagen.forEach((c) => {
+      const st = holdingStatements(c)!;
+      st.periods.forEach((p) => {
+        if (p.opening) return;
+        const closing = p.netDebtOpen - p.netCashFlow + p.distPaid - p.equityIn;
+        expect(Math.abs(closing - p.netDebt),
+          `${c.name} ${p.label}: abgeleitet ${closing} vs. Engine ${p.netDebt}`).toBeLessThan(1e-6);
+      });
+      expect(Math.abs(st.periods[st.periods.length - 1].netDebt - c.netDebt)).toBeLessThan(1e-6);
+    });
+  });
+
+  /* Die Veränderung der Nettoverschuldung ist die Zeile, die im Bericht
+     "Fremdkapital: Aufnahme (+) / Tilgung (−)" heißt. Das Modell führt neben
+     der Nettoverschuldung keine Kasse — was der Netto-Cashflow nach Einlagen
+     und Ausschüttungen offen lässt, wird gezogen. Genau diese Identität trägt
+     die Zeile, und sie muss halten.                                        */
+  it("gibt die Netto-Neuverschuldung als Veränderung der Nettoverschuldung", () => {
+    mitEinlagen.forEach((c) => {
+      const st = holdingStatements(c)!;
+      st.periods.forEach((p) => {
+        if (p.opening) return;
+        expect(p.dNetDebt).toBeCloseTo(-p.netCashFlow + p.distPaid - p.equityIn, 9);
+      });
+    });
+  });
+});

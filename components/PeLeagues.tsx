@@ -12,13 +12,13 @@ import Link from "next/link";
 import { createRng } from "@/lib/engine";
 import type { AddonOpts, Rng } from "@/lib/engine";
 import {
-  ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, CAPITAL, COV_DEFAULT, COV_FLOOR,
+  ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_FEE, CAPITAL, COV_DEFAULT, COV_FLOOR,
   COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P,
-  END_PRESSURE_FROM, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL,
+  END_PRESSURE_FROM, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, exitMultiples,
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
   exitNetOf, mepCut, fundEquityIn, liquidateHoldings,
   RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
-  addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
+  addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
@@ -730,8 +730,8 @@ function finalize(c, gross, buyer, feeRate, extra) {
   }
 
   function sellBilateral(c) {
-    const mult = dealMultiple(c, market, NEG, quarter) - BIL_DISC;
-    const gross = Math.max(0, eqvOf(c, mult));
+    // Dasselbe Multiple, das previewExit() gezeigt hat — eine Quelle für beide.
+    const gross = Math.max(0, eqvOf(c, exitMultiples(c, market, NEG, quarter, "bil").exit));
     finalize(c, gross, "Off-Market-Erwerber", BIL_FEE);
   }
 
@@ -788,32 +788,35 @@ function finalize(c, gross, buyer, feeRate, extra) {
   function previewExit(c, ch) {
     const st = c.st ?? 1;
     const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, market);
-    const dMult = dealMultiple(c, market, NEG, quarter);
+    /* Eine Quelle für alle Multiples dieses Dialogs: exitMultiples() zerlegt
+       dieselbe Kette, mit der runQuarter den gewählten Weg abrechnet. */
+    const M = exitMultiples(c, market, NEG, quarter, ch);
+    const mMult = M.mark;
 
-    let exMult = dMult;        // Multiple, das den Enterprise Value bestimmt
+    const exMult = M.exit;     // Multiple, das den Enterprise Value bestimmt
     let eqDisc = 1;            // prozentualer Abschlag auf Equity-Ebene
     let share = st;            // verkaufter Anteil
     let feeRate = 0, costBasis = c.entryEquity, note = "";
 
     const recap = c.recapOut || 0;
+    /* Jeder Schritt der Kette trägt seine eigene Zeile; maßgeblich ist die
+       Zeile mit "=" davor. Warum das nötig war: siehe exitMultiples(). */
     const rows = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
+    if (M.negUsed > 0) rows.push([`Verhandlungsprämie +${M.negUsed * 2} %`, x(M.negMult)]);
+    if (M.press > 0.005) rows.push(["Endfälligkeitsdruck", `−${M.press.toFixed(1).replace(".", ",")}× EBITDA`]);
+    if (M.bilDisc > 0) rows.push(["Abschlag bilateral", `−${M.bilDisc.toFixed(1).replace(".", ",")}× EBITDA`]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC;
       feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
       eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE;
       costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult;          // am Kapitalmarkt zählt kein Verhandlungsgeschick
       eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE;
       costBasis = c.entryEquity * IPO_PLACE;
-      note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
+      note = "Am Kapitalmarkt zählt kein Verhandlungsgeschick. Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
     } else {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
@@ -823,7 +826,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     const gross = Math.max(0, eqv100 * share * eqDisc);
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
+    rows.push(["= Exit-Multiple (maßgeblich)", x(exMult)], ["Enterprise Value", eur(ev)],
       ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
     if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",

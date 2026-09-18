@@ -302,7 +302,21 @@ function applyImmediateDecisions(
       equity: Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)),
     } : {};
     const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, mandate);
-    if (!B || B.blocked) return;
+    if (!B) return;
+    /* Ein Zukauf, den die Banken nicht finanzieren, verschwand bis zum
+       18.09.2026 hier lautlos: Die Abgabe enthielt das Mandat, die Auswertung
+       verwarf es, und im Feed stand kein Wort davon. Der Spieler sah nur, dass
+       nichts passiert war — nicht, dass die Pro-forma-Verschuldung die
+       Finanzierungsgrenze gerissen hatte. Der Übungsmodus meldete es seit
+       jeher (siehe PeLeagues/ExplainMode); jetzt meldet es die Partie auch. */
+    if (B.blocked) {
+      pushFeed(news, quarter, "🏦", "neg",
+        `${c.name}: Der Zukauf scheitert an der Finanzierung. Pro forma `
+        + `${x(B.blocked.lev)} Leverage gegen eine Finanzierungsgrenze von `
+        + `${x(B.blocked.limit)} — die Banken steigen aus. Kleinere Zielgröße `
+        + `oder mehr Eigenkapital aus dem Fonds.`, f.slot);
+      return;
+    }
     const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
     // Das Eigenkapital fließt unmittelbar an den Verkäufer weiter (toDebt:
     // false) — es senkt die Nettoverschuldung der Plattform nicht, sondern
@@ -563,7 +577,11 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
     /* Jedem menschlichen Bieter sagen, woran es lag — auch wenn die Auktion
        ganz ohne Zuschlag endet. `winner` bleibt dann null. */
-    const tellBidders = (winner: RuntimeFund | null, winMult: number) => {
+    /* `winBid` ist das GEBOT des Gewinners, `winMult` der Preis, der nach
+       seiner Verhandlung im Vertrag steht. Beides auseinanderzuhalten ist
+       keine Feinheit: Der Zuschlag entscheidet sich am Gebot, der Rabatt
+       kommt erst danach. */
+    const tellBidders = (winner: RuntimeFund | null, winBid: number, winMult: number) => {
       humanBids.forEach((b) => {
         if (winner && b.f.slot === winner.slot) return;
         if (b.reason === "kapital") {
@@ -576,21 +594,35 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         } else if (b.mult < reserve) {
           pushFeed(news, q, "🥈", "neg",
             `${d.name}: Dein Gebot von ${x(b.mult)} lag unter dem Reservationspreis des Verkäufers — `
-            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal bei ${x(winMult)}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
+            + `kein Zuschlag.${winner ? ` ${winner.name} bietet ${x(winBid)} und bekommt den Deal.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
             b.f.slot);
         } else if (winner) {
+          /* Bis zum 18.09.2026 stand hier der Vertragspreis des Gewinners
+             gegen das Gebot des Unterlegenen — zwei verschiedene Größen in
+             einem Satz. Verhandelt der Gewinner den Preis unter das eigene
+             Gebot (1 % je Punkt Verhandlungsgeschick), las sich die Meldung
+             als "das niedrigere Gebot gewinnt": ein Fehler, wo keiner war.
+             Jetzt steht beides da, und der Rabatt wird benannt.           */
+          const rabatt = winBid - winMult > 0.05;
           pushFeed(news, q, "🥈", "neg",
-            `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag bei ${x(winMult)}, dein Gebot lag bei ${x(b.mult)}.`,
+            `Überboten bei ${d.name}: ${winner.name} bietet ${x(winBid)}, dein Gebot lag bei ${x(b.mult)}.`
+            + (rabatt
+              ? ` Im Vertrag stehen am Ende ${x(winMult)} — der Zuschlag entscheidet sich am Gebot,`
+                + ` den Abschlag holt sich der Käufer erst danach am Verhandlungstisch.`
+              : ""),
             b.f.slot);
         }
       });
     };
     const valid = entries.filter((e) => e.mult >= reserve);
-    if (!valid.length) { tellBidders(null, 0); return; }
+    if (!valid.length) { tellBidders(null, 0, 0); return; }
     valid.sort((p, r) => r.mult - p.mult || F[r.f].attrs.negotiation - F[p.f].attrs.negotiation);
     const w = valid[0];
     const f = F[w.f];
     const eb = ebitdaOf(d);
+    /* Das Gebot, mit dem der Zuschlag gewonnen wurde — festgehalten, bevor
+       das Verhandlungsgeschick den Preis drückt (siehe tellBidders). */
+    const winBid = w.mult;
     w.mult = w.mult * (1 - 0.010 * f.attrs.negotiation);
     let hit = 0;
     if (d.type === "prop" && !f.isAi && !ddBySlot[f.slot]?.has(d.id)) {
@@ -636,13 +668,19 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
     f.holdings = [...(f.holdings as Any[]), c];
     if (!f.isAi) {
+      /* Auch dem Gewinner gehört der Unterschied gesagt: Geboten hat er
+         `winBid`, gezahlt wird `w.mult`. Ohne diese Zeile stand im Feed ein
+         Kaufpreis, der unter dem eigenen Gebot lag, und nichts erklärte ihn. */
       pushFeed(news, q, d.type === "landmark" ? "🏛️" : "🏆", "pos",
-        `${d.type === "landmark" ? "Trophy Asset gewonnen" : "Zuschlag"}: ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
+        `${d.type === "landmark" ? "Trophy Asset gewonnen" : "Zuschlag"}: ${marketLine(d.name, d.sector, eb, w.mult)}.`
+        + (winBid - w.mult > 0.05
+          ? ` Geboten hattest du ${x(winBid)} — dein Verhandlungsgeschick drückt den Preis auf ${x(w.mult)}.` : ""),
+        f.slot);
       if (hit) pushFeed(news, q, "⚠️", "neg", `Nach Closing bei ${d.name}: Die Marge liegt unter den Angaben im Information Memorandum.`, f.slot);
     }
     // Marktbericht: jeder Zuschlag, von wem auch immer
     pushMarket(news, q, "🤝", `${f.name} kauft ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
-    tellBidders(f, w.mult);
+    tellBidders(f, winBid, w.mult);
   });
 
   /* 2 — KI-Fonds entwickeln ihre Beteiligungen */
@@ -724,7 +762,24 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   /* 3y — People */
   const newShortlists: { uid: string; name: string; seat: string; cands: Any[] }[] = [];
   F.forEach((f) => {
-    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists, compat));
+    /* maturePeople() stammt aus dem Übungsmodus und schreibt seine Meldungen
+       in dessen Kurzform ({q, e, tone, t}). Der gemeinsame Feed einer Partie
+       führt sprechende Felder — und vor allem den Fondsplatz, der entscheidet,
+       wer eine Meldung überhaupt sieht (RuntimeFeedEntry).
+
+       Bis zum 18.09.2026 landeten die Kurzform-Einträge unverändert im
+       gemeinsamen Feed. Ohne `halfYear` fiel jeder von ihnen durch beide
+       Filter der Ansicht — weder der Feed des laufenden Halbjahres noch das
+       Archiv zeigte sie. Unsichtbar war damit genau das, was eine Periode
+       ausmacht: Abschluss und Fehlschlag jeder Maßnahme, die gescheiterte
+       Integration eines Zukaufs, der Rückzug eines Gründer-CEO, eine
+       Abwerbung. Ohne `slot` wären sie außerdem an jeden Platz gegangen.
+
+       Hier werden sie deshalb übersetzt und dem Fonds zugeordnet, in dessen
+       Portfolio sie entstanden sind.                                       */
+    const own: Any[] = [];
+    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, own, newShortlists, compat));
+    own.forEach((m) => pushFeed(news, m.q ?? q, m.e, m.tone, m.t, f.slot));
   });
   newShortlists.forEach((sl) => {
     const owner = F.find((f) => (f.holdings as Any[]).some((h) => h.uid === sl.uid));
