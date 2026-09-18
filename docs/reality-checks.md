@@ -698,6 +698,34 @@ Partien kennen das Feld nicht; dort bleibt es beim alten Ansatz.
 Nachgemessen: Restposten 0,00 über alle Kombinationen aus Teilexit-Art
 (keiner / Continuation Vehicle / Börsengang) und Nachschuss.
 
+**Nachgetragen am 18.09.2026.** Aus einer Testpartie gemeldet: ein Unternehmen
+in Halbjahr 1 gekauft, Add-on M&A, dann Covenant Breach. Danach steht kein
+Asset mehr im Portfolio — und die Halbjahresspalte weist trotzdem
+"Unrealisiert +14,9" aus. Die Spalte "seit Auflage" war da bereits korrekt bei
+null.
+
+Es war die Bewegung der Beteiligung in ihrem **letzten** Halbjahr. Sie läuft
+noch durch `stepCompany()`, bevor das Enforcement sie aus dem Portfolio nimmt,
+und diese Bewegung blieb im unrealisierten Block stehen. Sie ist aber mit der
+Beteiligung realisiert worden. Über mehrere Startwerte gemessen reichte der
+Posten von −6 bis +126 Mio. €.
+
+Ursache war der Bezugspunkt der Umgliederung: Herausgerechnet wurde der Stand
+im **Moment des Abgangs** statt der Stand, mit dem die Beteiligung in das
+Halbjahr gegangen war. Die Beteiligung hält diesen Stand jetzt als `uClose`
+fest, festgehalten am **Anfang** der Periode — nicht am Periodenschluss, denn
+Abgänge verteilen sich über den ganzen Durchlauf: Der Covenant Breach kommt
+vor dem Periodenschluss, die Tail-End-Verwertung und das Auslaufen einer
+Lock-up danach. Am Ende festgehalten wäre der Wert für die einen der Anfangs-
+und für die anderen der Endstand; genau daran ist der erste Anlauf gescheitert
+(Tail-End: 24,1 Mio. € blieben stehen).
+
+Nachgemessen, dieselben Abläufe: unrealisiert 0,00 in der Halbjahresspalte,
+sobald das Portfolio leer wird, bei unverändertem Gewinn. Ein Test hält die
+Aussage in ihrer schärfsten Form fest — geht das Portfolio in einem Halbjahr
+auf null, ist im unrealisierten Block dieses Halbjahres nichts mehr zu
+erklären.
+
 **Der Rest von 1,22 Mio. €** — in einer der vier Partien blieb am Laufzeitende
 eine Lücke, die zunächst nach einem dritten Fehler aussah. Sie war keiner.
 Jede einzelne Beteiligung ging auf die dritte Nachkommastelle auf, und auf

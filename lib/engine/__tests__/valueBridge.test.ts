@@ -636,4 +636,55 @@ describe("Value Bridge des Fonds", () => {
       expect(b.txCost, `Seed ${seed}: Restposten sind die Einstiegsgebühren`).toBeCloseTo(-gebuehren, 6);
     }
   });
+
+  /* Der gemeldete Fall aus einer Testpartie: In Halbjahr 1 ein Unternehmen
+     gekauft, Add-on M&A, dann Covenant Breach. Danach steht kein Asset mehr im
+     Portfolio — und trotzdem wies die Halbjahresspalte "Unrealisiert +14,9"
+     aus.
+
+     Es war die Bewegung der Beteiligung in ihrem LETZTEN Halbjahr: Sie lief
+     noch durch stepCompany, bevor das Enforcement sie aus dem Portfolio nahm,
+     und diese Bewegung blieb im unrealisierten Block stehen. Sie ist aber mit
+     der Beteiligung realisiert worden. Über mehrere Startwerte gemessen reichte
+     der Posten von −6 bis +126 Mio. €.
+
+     Geprüft wird die Aussage in ihrer schärfsten Form: Geht das Portfolio in
+     einem Halbjahr auf null, ist im unrealisierten Block dieses Halbjahres
+     nichts mehr zu erklären. */
+  it("lässt nichts Unrealisiertes stehen, wenn das Portfolio leer wird", () => {
+    let geprueft = 0;
+    for (const seed of [7, 99, 31337, 555, 4242, 2026]) {
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      for (let hy = 1; hy <= PERIODS; hy++) {
+        const me = state.funds[HUMAN_SLOT] as Any;
+        const h = me.holdings as Any[];
+        const d: TurnDecisions = {};
+        // Genau ein Unternehmen, voll gehebelt, danach nur Zukäufe
+        if (!h.length && !(me.realized as Any[]).length && (state.deals as Any[]).length) {
+          const x2 = (state.deals as Any[])[0];
+          d.bids = [{ dealId: x2.id, multiple: x2.askMult * 1.05, leverage: x2.levCap }];
+        }
+        if (h.length && !h[0].initA) d.initiatives = [{ holdingUid: h[0].uid, dim: "acc", id: "ma" } as Any];
+        const bWas = me.drawn > 0 ? fundBridge(me, state.market, hy - 1) : null;
+        const vorhanden = h.length;
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: d }, rng }).state;
+        const f = state.funds[HUMAN_SLOT] as Any;
+        if (!bWas || !vorhanden || (f.holdings as Any[]).length) continue;
+        // Das Portfolio ist in diesem Halbjahr leer geworden
+        const step = fundBridgeStep(fundBridge(f, state.market, hy), bWas)!;
+        const u = step.uEbitda + step.uMult + step.uDelev + step.uRest;
+        expect(Math.abs(u), `Seed ${seed}/HJ${hy}: unrealisiert bei leerem Portfolio`)
+          .toBeLessThan(0.01);
+        // Und die Spalte erklärt den Gewinn des Halbjahres weiterhin vollständig
+        expect(FUND_BRIDGE_PARTS.reduce((a: number, k: string) => a + (step[k] || 0), 0),
+          `Seed ${seed}/HJ${hy}: Summe der Posten`).toBeCloseTo(step.gain, 6);
+        geprueft++;
+        break;
+      }
+    }
+    expect(geprueft, "kein leer gewordenes Portfolio getroffen").toBeGreaterThan(2);
+  });
 });
