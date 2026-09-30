@@ -12,7 +12,7 @@ import {
   ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
-  RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
+  RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RETAINER_PCT, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
@@ -1148,7 +1148,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           })}
         </div>
         <p className="hint" style={{ padding: "9px 15px 0" }}>
-          Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · Shortlist in {hj(2)}
+          Tippen startet ein Search-Mandat · Retainer {pct(RETAINER_PCT * 100)} eines Jahresgehalts · Shortlist in {hj(2)}
         </p>
       </Section>
 
