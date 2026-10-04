@@ -20,10 +20,10 @@ import {
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
   exitNetOf, mepCut,
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
-  CV_FEE, IPO_FEE,
+  BIL_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
   TVPI_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
-  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, growthPrem,
+  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
   retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x,
@@ -191,12 +191,9 @@ function Briefing({ dark, setDark, onStart }) {
         <div className="secthead"><span className="eyebrow">3 · Exit</span>
           <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>Verkaufen</span></div>
         <div className="card">
-          <Def t="Vier Wege hinaus">
+          <Def t="Zwei Wege hinaus">
             <b>Auktion</b> — ein Jahr Vorlauf, dann drei Gebote. Höchster Preis, aber der Markt kann sich in der
             Zwischenzeit drehen. <b>Bilateral</b> — sofort, dafür ein halber Multiple-Punkt Abschlag, kein Risiko.
-            <b> GP-led Secondary</b> — 60 % der Beteiligung mit 5 % Abschlag verkaufen und den Rest behalten,
-            jedes Halbjahr wiederholbar. <b>IPO</b> — nur bei offenem Börsenfenster, 40 % werden platziert,
-            der Rest bleibt ein Jahr gesperrt.
           </Def>
           <Def t="Verhandeln">
             Liegt ein Gebot vor, kannst du annehmen, nachverhandeln oder abbrechen. Nachverhandeln bringt
@@ -266,7 +263,7 @@ function Briefing({ dark, setDark, onStart }) {
             <tr><td className="lab">Commitment</td><td style={{ textAlign: "left" }}>{eur(CAPITAL)}, abgerufen bei Bedarf, max. {MAX_SLOTS} Beteiligungen</td></tr>
             <tr><td className="lab">Gebührenreserve</td><td style={{ textAlign: "left" }}>{eur(RESERVE_AT_START)} bei Auflage, vom Dry Powder abgezogen</td></tr>
             <tr><td className="lab">Management Fee</td><td style={{ textAlign: "left" }}>{pct(MGMT_FEE * 100)} p.a., ab Jahr 6 auf Anschaffungswerte, innerhalb des Commitments</td></tr>
-            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(CV_FEE * 100)}–{pct(IPO_FEE * 100)} beim Verkauf je nach Weg</td></tr>
+            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(BIL_FEE * 100)}–{pct(PROC_FEE * 100)} beim Verkauf je nach Weg</td></tr>
             <tr><td className="lab">Carried Interest</td><td style={{ textAlign: "left" }}>20 % über 8 % Hurdle auf die Abrufe</td></tr>
             <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Halbjahr {PERIODS - END_PRESSURE_FROM + 1} sinkt der erzielbare Preis, bis zu −{x(LIQ_DISC)} am Laufzeitende</td></tr>
             <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar bis Jahr 5, kumuliert max. 100 % des Commitments</td></tr>
@@ -704,9 +701,10 @@ function GuidedRun({ dark, setDark, back }) {
        den auch der bilaterale Weg ergäbe — der Unterschied liegt im Wettbewerb
        unter den Käufern, der in der Partie über makeOffers abgebildet ist.   */
     if (proc && nq >= proc.resolveQ && (n.breach || 0) < 2) {
-      const g2 = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
+      const m2 = dealMultiple(n, market, PRAC_ATTRS.negotiation);
+      const g2 = Math.max(0, eqvOf(n, m2));
       const n2 = exitNetOf(n, g2, PROC_FEE);
-      setOffer({ gross: g2, net: n2, moic: dealMoic(n, n2) });
+      setOffer({ gross: g2, net: n2, moic: dealMoic(n, n2), ev: evOf(n, m2), eb: ebitdaOf(n), nd: n.netDebt });
       news.push({ q: nq, e: "📨", tone: "neu",
         t: `Gebote für <b>${n.name}</b> liegen vor: ${eur(n2)} netto, ${dealMoic(n, n2).toFixed(2)}× auf das eingesetzte Eigenkapital. Der Wettbewerb im Prozess hat den Preis über das getrieben, was ein bilateraler Zuruf gebracht hätte.` });
     }
@@ -895,7 +893,7 @@ function GuidedRun({ dark, setDark, back }) {
     setSheet({ kind: "bridge", c: n, price: net, buyer: "Strategischer Käufer", bridge });
     setFeed((p) => [{
       q: nq, e: "🎓", tone: "tip",
-      t: `<b>Fazit.</b> ${moic.toFixed(2)}× nach ${hj(nq)} — ${(pracIrr(moic, nq) * 100).toFixed(0)} % IRR, Wertung ${pracScore(moic, nq).toFixed(2)}.${held ? ` Hättest du bis zum Laufzeitende gehalten, ohne weiter einzugreifen: ${held.moic.toFixed(2)}× bei ${(held.irr * 100).toFixed(0)} % — Wertung ${held.score.toFixed(2)}. ${held.score > pracScore(moic, nq) ? "Zu früh verkauft: die verbleibende Wertsteigerung war den zusätzlichen Zeitaufwand wert." : "Richtig verkauft: der Multiple wäre zwar weiter gestiegen, aber langsamer als dein Kapital anderswo verdient."}` : ""} ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital${(n.recapOut || 0) > 0.5 ? ` — davon ${eur(n.recapOut)} bereits während der Haltezeit ausgeschüttet, der Rest beim Exit` : ""}.${base != null ? ` Dieselbe Beteiligung unangetastet gehalten: <b>${base.toFixed(2)}×</b> — allein aus Entschuldung und Cashflow. Deine Arbeit hat ${moic >= base ? "" : "−"}${Math.abs(Math.round((moic - base) * 100))} Prozentpunkte ${moic >= base ? "hinzugefügt" : "gekostet"}. Genau diese Frage stellt das Investment Committee: Was wäre ohne dich passiert?` : ""} Lies die Value Bridge von oben nach unten: Der <b>EBITDA-Balken</b> ist deine operative Arbeit, <b>Multiple-Expansion</b> kommt hier ausschließlich aus Assetqualität und Wachstumsprämie — der Markt stand still. <b>Entschuldung</b> ist der Cashflow, den das Unternehmen selbst erwirtschaftet hat. Der Kostenbalken ist der Teil, den du nie zurückverdienst.`,
+      t: `<b>Fazit.</b> ${moic.toFixed(2)}× nach ${hj(nq)} — ${(pracIrr(moic, nq) * 100).toFixed(0)} % IRR, Wertung ${pracScore(moic, nq).toFixed(2)}.${held ? ` Hättest du bis zum Laufzeitende gehalten, ohne weiter einzugreifen: ${held.moic.toFixed(2)}× bei ${(held.irr * 100).toFixed(0)} % — Wertung ${held.score.toFixed(2)}. ${held.score > pracScore(moic, nq) ? "Zu früh verkauft: die verbleibende Wertsteigerung war den zusätzlichen Zeitaufwand wert." : "Richtig verkauft: der Multiple wäre zwar weiter gestiegen, aber langsamer als dein Kapital anderswo verdient."}` : ""} ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital${(n.recapOut || 0) > 0.5 ? ` — davon ${eur(n.recapOut)} bereits während der Haltezeit ausgeschüttet, der Rest beim Exit` : ""}.${base != null ? ` Dieselbe Beteiligung unangetastet gehalten: <b>${base.toFixed(2)}×</b> — allein aus Entschuldung und Cashflow. Deine Arbeit hat ${moic >= base ? "" : "−"}${Math.abs(Math.round((moic - base) * 100))} Prozentpunkte ${moic >= base ? "hinzugefügt" : "gekostet"}. Genau diese Frage stellt das Investment Committee: Was wäre ohne dich passiert?` : ""} Lies die Value Bridge von oben nach unten: Der <b>EBITDA-Balken</b> ist deine operative Arbeit, <b>Multiple-Expansion</b> kommt hier ausschließlich aus Assetqualität und Wachstumsprämie — der Markt stand still. <b>Entschuldung</b> ist der Cashflow, den das Unternehmen selbst erwirtschaftet hat.`,
     }, ...p]);
   }
 
@@ -1062,7 +1060,13 @@ function GuidedRun({ dark, setDark, back }) {
         {!over && offer && (
           <div className="card">
             <h3 className="disp">Gebot eingegangen</h3>
+            {/* Wie in der Partie: Der Käufer bietet einen Unternehmenswert, das
+                Multiple ist daraus abgeleitet. */}
             <table className="kv"><tbody>
+              <tr><td className="lab">Enterprise Value (Gebot)</td><td>{eur(offer.ev)}</td></tr>
+              <tr><td className="lab">÷ Adj. EBITDA</td><td>{eur(offer.eb)}</td></tr>
+              <tr><td className="lab">= Implizites Multiple</td><td>{x(offer.eb > 0 ? offer.ev / offer.eb : 0)}</td></tr>
+              <tr><td className="lab">Nettoverschuldung</td><td>− {eur(offer.nd)}</td></tr>
               <tr><td className="lab">Bruttoerlös</td><td>{eur(offer.gross)}</td></tr>
               <tr><td className="lab">Transaktionskosten</td><td>− {eur(offer.gross * PROC_FEE)}</td></tr>
               {c.ltip && <tr><td className="lab">Managementbeteiligung</td>
