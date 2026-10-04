@@ -23,7 +23,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation,
 } from "@/components/pel/ui";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
@@ -34,13 +34,13 @@ import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
 import {
-  BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
+  BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
   INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
-  eur, exitNetOf, fairOf,
+  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, ddCostOf, dpiOf,
+  eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
+  navValueOf, recycleRoom, scoreOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -738,39 +738,36 @@ export default function MultiplayerGame({
   /* ---- Exit-Vorschau (wie previewExit im Original) ---- */
   function previewExit(c: Any, ch: "bil" | "cv" | "ipo" | "proc") {
     const st = c.st ?? 1;
-    const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, state.market);
-    const dMult = dealMultiple(c, state.market, NEG, quarter);
+    // Multiple → EBITDA → Unternehmenswert, für jeden Exit-Weg dieselbe Rechnung
+    const { rows, eqv100 } = exitValuation(c, state.market, NEG, quarter, ch);
 
-    let exMult = dMult, eqDisc = 1, share = st, feeRate = 0, costBasis = c.entryEquity, note = "";
+    let eqDisc = 1;            // prozentualer Abschlag auf Equity-Ebene
+    let share = st;            // verkaufter Anteil
+    let feeRate = 0, costBasis = c.entryEquity, note = "";
     const recap = c.recapOut || 0;
-    const rows: [string, string][] = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC; feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
+      feeRate = BIL_FEE;
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
-      eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE; costBasis = c.entryEquity * CV_STAKE;
+      eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE;
+      costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult; eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE; costBasis = c.entryEquity * IPO_PLACE;
+      eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE;
+      costBasis = c.entryEquity * IPO_PLACE;
       note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
     } else {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
 
-    const ev = eb * exMult;
-    const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
     // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
-      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
-    if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
-    if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag", `−${Math.round((1 - eqDisc) * 100)} %`]);
+    if (ch !== "proc" && share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
+    if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
+      `−${Math.round((1 - eqDisc) * 100)} %`]);
 
     /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
        lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
@@ -786,9 +783,7 @@ export default function MultiplayerGame({
           : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
-      const fair = Math.max(0, eqv100 * st);
-      rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
-        [`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
+      rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
         ["Gebote liegen vor in", hj(PROC_Q)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
@@ -1275,6 +1270,13 @@ export default function MultiplayerGame({
                 Noch keine Beteiligungen. Im Dealflow findest du strukturierte Prozesse und proprietäre Kontakte.
               </div></div>
             )}
+            <div className="secthead">
+              <span className="eyebrow">Portfolio</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
+                {me.holdings.filter((c: Any) => healthOf(c, state.market).attention).length > 0
+                  ? `${me.holdings.filter((c: Any) => healthOf(c, state.market).attention).length} × Handlungsbedarf` : ""}
+              </span>
+            </div>
             <Shelf holdings={me.holdings} market={state.market} cash={me.cash} quarter={quarter}
               onPick={(uid: string) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c: Any) => {

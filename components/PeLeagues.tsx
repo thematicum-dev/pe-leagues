@@ -29,7 +29,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation,
 } from "@/components/pel/ui";
 
 export default function PeLeagues() {
@@ -787,30 +787,22 @@ function finalize(c, gross, buyer, feeRate, extra) {
   /* Vorschau: Bewertung und Rückflüsse, bevor der Exit freigegeben wird */
   function previewExit(c, ch) {
     const st = c.st ?? 1;
-    const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, market);
-    const dMult = dealMultiple(c, market, NEG, quarter);
+    // Multiple → EBITDA → Unternehmenswert, für jeden Exit-Weg dieselbe Rechnung
+    const { rows, eqv100 } = exitValuation(c, market, NEG, quarter, ch);
 
-    let exMult = dMult;        // Multiple, das den Enterprise Value bestimmt
     let eqDisc = 1;            // prozentualer Abschlag auf Equity-Ebene
     let share = st;            // verkaufter Anteil
     let feeRate = 0, costBasis = c.entryEquity, note = "";
-
     const recap = c.recapOut || 0;
-    const rows = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC;
       feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
       eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE;
       costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult;          // am Kapitalmarkt zählt kein Verhandlungsgeschick
       eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE;
       costBasis = c.entryEquity * IPO_PLACE;
       note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
@@ -818,14 +810,11 @@ function finalize(c, gross, buyer, feeRate, extra) {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
 
-    const ev = eb * exMult;
-    const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
+    // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
-      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
-    if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
+    if (ch !== "proc" && share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
@@ -843,9 +832,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
           : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
-      const fair = Math.max(0, eqv100 * st);
-      rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
-        [`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
+      rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
         ["Gebote liegen vor in", hj(PROC_Q)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
@@ -955,9 +942,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
           </div>
           <div style={{ padding: "0 16px" }}>
             <p style={{ fontSize: 14, color: "var(--ink2)", lineHeight: 1.55, margin: 0 }}>
-              Fünf Fonds, je {eur(CAPITAL)}, zehn Jahre. Ihr bietet auf denselben Dealflow, führt eure Beteiligungen
-              und verkauft sie wieder. Gewertet wird zur Hälfte der TVPI, zur Hälfte der IRR — was du verdienst
-              und wie lange du dafür brauchst.
+              Wähle dein Fondsprofil.
             </p>
           </div>
           <FundProfileEditor attrs={attrs} setAttrs={setAttrs} onSubmit={start} submitLabel="Fonds auflegen" />
@@ -1082,15 +1067,13 @@ function finalize(c, gross, buyer, feeRate, extra) {
                 Noch keine Beteiligungen. Im Dealflow findest du vier strukturierte Prozesse und deine proprietären Kontakte.
               </div></div>
             )}
-            {me.holdings.length > 0 && (
-              <div className="secthead">
-                <span className="eyebrow">Beteiligungen</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
-                  {me.holdings.filter((c) => healthOf(c, market).attention).length > 0
-                    ? `${me.holdings.filter((c) => healthOf(c, market).attention).length} × Handlungsbedarf` : ""}
-                </span>
-              </div>
-            )}
+            <div className="secthead">
+              <span className="eyebrow">Portfolio</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
+                {me.holdings.filter((c) => healthOf(c, market).attention).length > 0
+                  ? `${me.holdings.filter((c) => healthOf(c, market).attention).length} × Handlungsbedarf` : ""}
+              </span>
+            </div>
             <Shelf holdings={me.holdings} market={market} cash={me.cash} quarter={quarter}
               onPick={(uid) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c) => (

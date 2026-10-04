@@ -1302,6 +1302,12 @@ export const BATTLE_CSS = `
 .pel .bicons .s{display:block;font-size:8.5px;color:var(--ink2);margin-top:2px;line-height:1.3;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .bicons .s.teal{color:var(--teal);} .pel .bicons .s.ox{color:var(--ox);}
+/* Gesperrter Vergleichswert: Er existiert, liegt aber im Datenraum. Als Plakette
+   in der Farbe der Due Diligence statt als graues Fragezeichen — man soll sehen,
+   dass hier etwas fehlt und womit es sich öffnen lässt. */
+.pel .bicons .s.lock{display:inline-block;max-width:100%;margin-top:4px;padding:1px 6px;border-radius:999px;
+  font-size:9px;font-weight:650;color:var(--gold);background:color-mix(in srgb, var(--gold) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--gold) 40%, transparent);}
 /* "Cash Conv." samt Erklär-Punkt braucht rund 73 px; eine Viertelspalte hat
    auf 360 px nur 79 px abzüglich Abstand. Ab hier stehen zwei nebeneinander. */
 @media (max-width:379px){

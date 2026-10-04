@@ -9,7 +9,7 @@ import type { Rng } from "@/lib/engine";
 import {
   ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
   CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
+  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE,
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
@@ -17,12 +17,12 @@ import {
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
-  evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
+  evOf, exitNetOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
   impliedMoM, initById, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge, tailEndOf, initDurationOf,
-  PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
+  DEAL_YEARS,
   isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
   newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
   retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
@@ -786,11 +786,11 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: pct(d.growth),
           tone: bench ? (gapG >= 0 ? "teal" : "ox") : "",
-          sub: bench ? `${grow(gapG)} pp` : "Sektor ?", subTone: bench ? (gapG >= 0 ? "teal" : "ox") : "" },
+          sub: bench ? `${grow(gapG)} pp` : "🔒 Sektor", subTone: bench ? (gapG >= 0 ? "teal" : "ox") : "lock" },
         { icon: "margin", k: "Marge", v: hidden ? "—" : pct(d.margin),
           tone: hidden ? "dim" : bench ? (gapM >= 0 ? "teal" : "ox") : "",
-          sub: hidden ? "verdeckt" : bench ? `${grow(gapM)} pp` : "Bench. ?",
-          subTone: hidden || !bench ? "" : gapM >= 0 ? "teal" : "ox" },
+          sub: hidden ? "🔒 verdeckt" : bench ? `${grow(gapM)} pp` : "🔒 Bench.",
+          subTone: hidden || !bench ? "lock" : gapM >= 0 ? "teal" : "ox" },
         { icon: "cash", k: "Cash Conv.", v: hidden ? "—" : pct(conv),
           tone: hidden ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -798,6 +798,29 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           v: hidden ? <>—</> : <>{Math.round(d.quality)}<GradeChip score={d.quality} /></>,
           tone: hidden ? "dim" : "", sub: "von 100", info: <Info k="quality" /> },
       ]} />
+
+      {/* Die Due Diligence steht direkt unter den Kennzahlen, deren gesperrte
+          Vergleichswerte sie öffnet — Schloss und Schlüssel an einer Stelle,
+          wie die Branchenreferenz auf der Beteiligungskarte. */}
+      <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
+        {dd ? (
+          <p className="hint teal">🔓 Datenraum offen — Branchenreferenz und Wachstumsschätzung stehen auf der Karte.</p>
+        ) : (
+          <>
+            <button onClick={onDD} className={sp("dd").trim()}
+              disabled={investableOf(me, quarter) < ddCost || ddFull} style={{ width: "100%" }}>
+              {ddFull ? `🔍 Deal-Team ausgelastet · ${ddUsed}/${ddCap} Prozesse`
+                : `🔍 Due Diligence · ${eur(ddCost)}`}
+            </button>
+            <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 8 }}>
+              {hidden ? "🔒 Ohne Datenraum bleiben Ertrag, Cashflow und die Branchenreferenz oben verdeckt."
+                : flagHidden ? "🔒 Flagge, Branchenreferenz und erwartetes Wachstum bleiben ohne Datenraum verdeckt."
+                : ddFull ? `Höchstens ${ddCap} Datenräume gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
+                : `🔒 Öffnet die gesperrten Werte oben: Branchenreferenz und Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp), dazu kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
+            </p>
+          </>
+        )}
+      </Section>
 
       {/* Alles, was zur Beurteilung gehört, aber nicht auf den ersten Blick
           gebraucht wird. Nichts verschwindet — es liegt eine Geste entfernt.
@@ -840,26 +863,6 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           )}
         </div>
       </More>
-
-      <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
-        {dd ? (
-          <p className="hint teal">🔍 Datenraum offen — Branchenreferenz und Wachstumsschätzung stehen auf der Karte.</p>
-        ) : (
-          <>
-            <button onClick={onDD} className={sp("dd").trim()}
-              disabled={investableOf(me, quarter) < ddCost || ddFull} style={{ width: "100%" }}>
-              {ddFull ? `🔍 Deal-Team ausgelastet · ${ddUsed}/${ddCap} Prozesse`
-                : `🔍 Due Diligence · ${eur(ddCost)}`}
-            </button>
-            <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 8 }}>
-              {hidden ? "Ohne Datenraum bleiben Ertrag und Cashflow verdeckt."
-                : flagHidden ? "Flagge, Branchenreferenz und erwartetes Wachstum bleiben ohne Datenraum verdeckt."
-                : ddFull ? `Höchstens ${ddCap} Datenräume gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
-                : `Branchenreferenz, Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
-            </p>
-          </>
-        )}
-      </Section>
 
       <Section title="Underwriting" right={`max. ${x(cap)} Leverage`} />
       <div className="bfoot">
@@ -974,8 +977,17 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   const locked = !!c.lockUntil;
   const ripe = c.holdQ >= MIN_HOLD && !locked;
   const canProc = ripe && !inProc && !blocked;      // Prozess: gesperrt nach Abbruch
-  const canNow = ripe && !inProc;                   // Bilateral und CV: jedes Halbjahr erneut
-  const ipoOpen = canNow && st === 1 && market[c.sector] >= SECTORS[c.sector].m * 1.05 && eb >= IPO_EBITDA;
+  const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
+  /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
+     Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
+  const exitStatus = c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
+    : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
+    : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
+    : endPressure(quarter) > 0.05
+      ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
+    : PERIODS - quarter <= END_PRESSURE_FROM + 2
+      ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q + 1)}.`
+    : "";
 
   /* Eine Beteiligung im Prozess ist die seltenste Karte des Portfolios — ihr
      Wert steht zur Abstimmung. Sie bekommt deshalb denselben goldenen Rahmen
@@ -1041,10 +1053,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: cagr == null ? "—" : pctS(cagr),
           tone: !c.dd || cagr == null ? "" : cagrPrem(c) >= 0 ? "teal" : "ox",
-          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "Markt ?" },
+          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "🔒 Markt", subTone: c.dd ? "" : "lock" },
         { icon: "margin", k: "Marge", v: pct(c.margin),
           tone: !c.dd ? "" : c.margin >= c.benchMargin ? "teal" : "ox",
-          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "Bench. ?" },
+          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "🔒 Bench.", subTone: c.dd ? "" : "lock" },
         { icon: "cash", k: "Cash Conv.", v: conv == null ? "—" : pct(conv),
           tone: conv == null ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -1054,8 +1066,8 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       ]} />
 
       {/* Die Branchenreferenz gehört unter die Kennzahlen, nicht ans Ende der
-          Karte: Sie ist genau das, was in der Zeile darüber als "Bench. ?" und
-          "Markt ?" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
+          Karte: Sie ist genau das, was in der Zeile darüber als gesperrte "Bench." und
+          "Markt" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
           Knopf über die volle Breite — die Lücke und ihre Behebung stehen
           damit an einer Stelle. */}
       {!c.dd && act.study && (
@@ -1147,9 +1159,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             );
           })}
         </div>
-        <p className="hint" style={{ padding: "9px 15px 0" }}>
-          Tippen startet ein Search-Mandat · Retainer 30 % eines Jahresgehalts · Shortlist in {hj(2)}
-        </p>
       </Section>
 
       <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
@@ -1167,7 +1176,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             Akquisitionsschuld wird beim Closing gezogen, zusammen mit dem
             erworbenen EBITDA (maturePeople). Der Eigenkapitalanteil fließt beim
             Signing an den Verkäufer; er erhöht die Kostenbasis des Deals, nicht
-            die Verschuldung der Plattform. */}
+            die Verschuldung der Plattform.
+
+            Nur Statusmeldungen: Steht nichts an, bleibt die Zeile leer. */}
+        {(initsOf(c).length > 0 || freeSlots <= 0) && (
         <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
             ? initsOf(c).map((I) => (I.ma
@@ -1177,9 +1189,9 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
                 : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
-            : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
-            : `Performance und Growth laufen parallel. Maßnahmen lassen sich wiederholen — jede weitere Auflage bringt weniger und dauert länger, und ob überhaupt noch etwas zu holen ist, steht als Eignung im Katalog.${(c.done || []).length ? ` Bisher ${(c.done || []).length} Programme abgeschlossen.` : ""}`}
+            : "Operating-Kapazität im Portfolio ausgeschöpft."}
         </div>
+        )}
         {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
             Karte bisher nicht zu beantworten: `done` zählt nur Kennungen mit,
             und der Umsatzsprung einer Integration steht ohne Erklärung im
@@ -1204,11 +1216,11 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               onClick={() => { haptic(8); act.inject(); }}>
               💶 Eigenkapital nachschießen
             </button>
-            <p className="hint" style={{ marginTop: 6 }}>
-              {c.breach
-                ? "Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis."
-                : "Fondskapital in die Beteiligung: senkt Verschuldung und Zinslast, erhöht den Einstand."}
-            </p>
+            {!!c.breach && (
+              <p className="hint" style={{ marginTop: 6 }}>
+                Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
+              </p>
+            )}
           </>
         )}
       </Section>
@@ -1238,21 +1250,14 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             </button>
             <button disabled={!canNow} onClick={act.bil}>Bilateral</button>
           </div>
-          <div className="bactgrid" style={{ marginTop: 8 }}>
-            <button disabled title="Vorübergehend deaktiviert">🔄 GP-led Secondary</button>
-            <button disabled={!ipoOpen} onClick={act.ipo}>🔔 IPO</button>
-          </div>
+          {/* GP-led Secondary und IPO sind abgeschaltet. Engine und Server führen
+              beide Wege weiter (runQuarter.ts) — zurückholen heißt nur, die
+              Schaltflächen wieder einzublenden. */}
+          {exitStatus && (
           <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 8, lineHeight: 1.5 }}>
-            {c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
-              : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral und Continuation bleiben möglich.`
-              : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
-              : endPressure(quarter) > 0.05
-                ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
-              : PERIODS - quarter <= END_PRESSURE_FROM + 2
-                ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q + 1)}.`
-              : ipoOpen ? "Börsenfenster offen: 40 % platzieren, Rest ein Jahr im Lock-up."
-              : "Jede Option zeigt Bewertung und Rückfluss, bevor du freigibst."}
+            {exitStatus}
           </div>
+          )}
         </Section>
       )}
       <div className="bend" />
@@ -1554,12 +1559,10 @@ function StatementsSheet({ st, hidden, close }) {
      Beteiligung mit acht Jahren Historie hätte man sonst erst vier Wischer zu
      tun, bevor die Gegenwart überhaupt sichtbar wird.                       */
   const wrapRef = useRef(null);
-  const [scrolls, setScrolls] = useState(false);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     el.scrollLeft = el.scrollWidth;
-    setScrolls(el.scrollWidth > el.clientWidth + 4);
   }, [view]);
 
   return (
@@ -1629,10 +1632,7 @@ function StatementsSheet({ st, hidden, close }) {
               </tbody>
             </table>
           </div>
-          {scrolls && (
-            <p className="finnote">Die jüngste Periode steht rechts — waagerecht wischen zeigt die früheren.</p>
-          )}
-          <StatementNotes st={st} view={view} hidden={hidden} />
+          <StatementNotes st={st} hidden={hidden} />
           <div className="pad" style={{ paddingTop: 14 }}>
             <button className="solid" style={{ width: "100%" }} onClick={close}>Schließen</button>
           </div>
@@ -1642,10 +1642,11 @@ function StatementsSheet({ st, hidden, close }) {
   );
 }
 
-/* Fußnoten. Sie sind kein Beiwerk: Ohne sie stünde in der GuV eine
-   Abschreibung, deren Höhe niemand nachvollziehen kann, und eine Steuer, die
-   auf einem anderen Ergebnis bemessen ist als dem darüber. */
-function StatementNotes({ st, view, hidden }) {
+/* Fußnoten. Nur noch Statusmeldungen — was fehlt oder vorläufig ist. Die
+   Erklärungen zur Herleitung (Adjusted gegen Reported EBITDA, Abschreibung,
+   Bilanzaufbau, Überleitung) stehen nicht mehr unter den Tabellen; die
+   Zahlen tragen sich selbst. */
+function StatementNotes({ st, hidden }) {
   if (hidden) {
     return (
       <p className="finnote ox" style={{ color: "var(--ox)" }}>
@@ -1654,68 +1655,15 @@ function StatementNotes({ st, view, hidden }) {
       </p>
     );
   }
-  const common = (
-    <p className="finnote">
-      <b>Adjusted gegen Reported EBITDA.</b> Das Modell führt das operative Ergebnis frei von
-      Einmaleffekten — das ist das <b>Adjusted EBITDA</b>, und nur dieses steht auf der Karte,
-      im Multiple und im Covenant. Programmkosten, Restrukturierung und die Kosten eines
-      Managementwechsels sind Einmalaufwendungen: sie werden hier abgezogen und ergeben das
-      <b> Reported EBITDA</b>. Investitionsnachholung, Cash Release, Zukäufe und Ausschüttungen
-      sind keine Ergebnisgrößen und stehen unterhalb des EBITDA.
-    </p>
-  );
+  if (!st.anyEstimated) return null;
   return (
-    <>
-      {common}
-      {view === "pl" && (
-        <p className="finnote">
-          <b>Abschreibungen = Investitionen.</b> Die Steuerbemessungsgrundlage des Modells ist
-          EBITDA abzüglich Zins und Capex; Capex steht dort stellvertretend für die Abschreibung.
-          Der Steuersatz beträgt {Math.round(TAX_RATE * 100)} %, bemessen auf dem Ergebnis
-          <i> vor</i> Einmalaufwendungen — die sind im Modell nicht steuerwirksam.
-          {!st.levered && " Zinsen erscheinen nicht: Die Darstellung ist cash-free/debt-free, die Finanzierung des Verkäufers gehört nicht zum Kaufgegenstand."}
-        </p>
-      )}
-      {view === "bs" && (
-        <p className="finnote">
-          <b>Herleitung.</b> Net Working Capital ist der Bestand, mit dem die Engine rechnet:
-          Kapitalbindungsquote mal Umsatz. Die Sachanlagen entsprechen {PPE_YEARS} Jahren
-          Investitionsaufwand — bei linearer Abschreibung über rund {PPE_YEARS * 2} Jahre der
-          Restbuchwert im Beharrungszustand.{st.levered ? ` Das Modell führt nur die Nettoverschuldung; für die Bilanz wird sie getrennt in eine operative Kasse von ${MIN_CASH_PCT} % vom Jahresumsatz und das Bankdarlehen, das den Rest trägt. Ist die Beteiligung netto schuldenfrei, entfällt das Darlehen und die Kasse trägt den Überschuss.` : ""}
-          {st.kind === "holding" && " Die Eröffnungsbilanz steht zum Enterprise Value des Erwerbs; die Kaufpreisallokation trägt den Unterschied zum übernommenen Vermögen, die Akquisitionsfinanzierung steht als Nettoverschuldung darunter. Transaktionskosten des Erwerbs trägt der Fonds, nicht das Unternehmen."}
-        </p>
-      )}
-      {view === "cf" && st.levered && (
-        <p className="finnote">
-          <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Netto-Cashflow zuzüglich
-          Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
-          Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
-        </p>
-      )}
-      {st.kind === "deal" && (
-        <p className="finnote">
-          <b>Historie.</b> Umsatz und Marge zeigen die <b>unterliegende Entwicklung</b> und
-          schwanken mit derselben Volatilität, die das Spiel für die Zukunft unterstellt —
-          laufendes Wachstums- und Margenrauschen, dazu gedämpft die Sprünge aus dem
-          Ereigniskatalog. Was einmalig ist, steht nicht dort, sondern in den
-          Einmalaufwendungen: Restrukturierung, ein Managementwechsel, ein abgebrochenes
-          Programm drücken das berichtete Ergebnis, nicht das bereinigte. Zwei Größen bleiben
-          exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen Basis
-          liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei gezeigten
-          Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der Datenraum
-          nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
-        </p>
-      )}
-      {st.anyEstimated && (
-        <p className="finnote ox" style={{ color: "var(--ox)" }}>
-          <b>Vorläufige Spalten.</b> Für diese Perioden lag die Detailmitschrift der Engine beim
-          Laden noch nicht vor — sie sind hier mit den Formeln des Modells rekonstruiert, die
-          Nettoverschuldung am Periodenende ist aber die tatsächliche. Der Server rechnet solche
-          Perioden nach und trägt die exakten Beträge nach; nach dem nächsten Halbjahreswechsel
-          steht hier die gespielte Zahlenreihe.
-        </p>
-      )}
-    </>
+    <p className="finnote ox" style={{ color: "var(--ox)" }}>
+      <b>Vorläufige Spalten.</b> Für diese Perioden lag die Detailmitschrift der Engine beim
+      Laden noch nicht vor — sie sind hier mit den Formeln des Modells rekonstruiert, die
+      Nettoverschuldung am Periodenende ist aber die tatsächliche. Der Server rechnet solche
+      Perioden nach und trägt die exakten Beträge nach; nach dem nächsten Halbjahreswechsel
+      steht hier die gespielte Zahlenreihe.
+    </p>
   );
 }
 
@@ -2523,7 +2471,7 @@ export function UseProceeds({ item, me, quarter, settle }) {
           <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
             onChange={(e) => setKeep(+e.target.value / 100)} />
           <table className="kv" style={{ marginTop: 10 }}><tbody>
-            <tr><td className="lab">An die Investoren</td><td>{eur(dist)}</td></tr>
+            <tr><td className="lab">An die Limited Partner</td><td>{eur(dist)}</td></tr>
             <tr><td className="lab">Verfügbar für neue Deals</td><td>{eur(investAfter)}</td></tr>
             <tr><td className="lab">Recycling-Spielraum</td>
               <td>{eur(capLeft)}{quarter > INVEST_PERIOD ? " — Investitionsperiode beendet" : ""}</td></tr>
@@ -2531,7 +2479,7 @@ export function UseProceeds({ item, me, quarter, settle }) {
           <p className="hint" style={{ marginTop: 10 }}>
             Einbehalten hebt den TVPI und kostet IRR.
             <Info t="Einbehalten oder ausschütten">
-              Einbehaltenes Kapital arbeitet weiter, statt an die Investoren zurückzufließen. Das hebt den
+              Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
               Multiple, verschiebt aber den Rückfluss nach hinten und setzt den Betrag erneut dem Risiko
               aus — im IRR gewinnt der frühere Rückfluss immer.
               <br /><br />
@@ -2983,12 +2931,76 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
   );
 }
 
+/* ---------- Bewertung beim Exit ----------
+   Eine Rechnung für alle Exit-Dialoge, in der Reihenfolge, in der sie
+   entsteht: erst das Multiple, dann das EBITDA, dann der Unternehmenswert.
+
+   Das Multiple wird aufgebaut, nicht nur genannt. Jede Zeile unter dem
+   Bewertungsmultiple weist ausschließlich ihren eigenen Effekt in Turns aus —
+   Verhandlungsprämie, Druck des Laufzeitendes, Abschlag des Kanals —, und die
+   Summe ist das Exit-Multiple. Gerundet wird über die Zwischenstände, nicht
+   Zeile für Zeile: 8,14 + 0,33 − 0,5 stünde sonst als 8,1 + 0,3 − 0,5 auf dem
+   Bildschirm und darunter 8,0×.
+
+   Beim Verkaufsprozess steht statt eines Werts die erwartete Gebotsspanne,
+   ebenfalls erst in Multiples und dann in Euro. Die Gebote selbst lauten auf
+   den Anteil des Fonds am Eigenkapital (makeOffers: 0,86 bis 1,08 des
+   erzielbaren Werts); umgerechnet auf den Unternehmenswert ergibt das genau
+   das implizite Multiple, das später auf der Gebotskarte steht.            */
+export const BID_LOW = 0.86, BID_HIGH = 1.08;
+const r1 = (v) => Math.round(v * 10) / 10;
+export const turns = (v) => (v < 0 ? "−" : "+") + x(Math.abs(v));
+
+export function exitValuation(c, market, neg, quarter, ch) {
+  const st = c.st ?? 1;
+  const eb = ebitdaOf(c);
+  const mMult = markMultiple(c, market);
+  const rows: [string, string][] = [["Bewertungsmultiple", x(mMult)]];
+  let exMult = mMult;
+  if (ch !== "ipo") {                 // am Kapitalmarkt zählt kein Verhandlungsgeschick
+    const negMult = dealMultiple(c, market, neg, null);
+    exMult = dealMultiple(c, market, neg, quarter);
+    if (neg > 0) rows.push([`Verhandlungsprämie +${neg * 2} %`, turns(r1(negMult) - r1(mMult))]);
+    if (r1(exMult) !== r1(negMult)) rows.push(["Abschlag Exitfenster", turns(r1(exMult) - r1(negMult))]);
+    if (ch === "bil") {
+      exMult -= BIL_DISC;
+      rows.push(["Abschlag bilateral", turns(-BIL_DISC)]);
+    }
+  }
+  rows.push(["= Exit-Multiple", x(exMult)]);
+
+  const ev = eb * exMult;
+  const eqv100 = ev - c.netDebt;
+  if (ch === "proc") {
+    const eq = Math.max(0, eqv100);
+    const evAt = (f) => eq * f + c.netDebt;
+    rows.push(
+      ["Erwartete Gebotsspanne", `${x(eb > 0 ? evAt(BID_LOW) / eb : 0)} – ${x(eb > 0 ? evAt(BID_HIGH) / eb : 0)}`],
+      ["× Adj. EBITDA (LTM)", eur(eb)],
+      ["= Enterprise Value", `${eur(evAt(BID_LOW))} – ${eur(evAt(BID_HIGH))}`],
+      ["− Nettoverschuldung", "−" + eur(c.netDebt)],
+      ["= Equity Value (100 %)", `${eur(eq * BID_LOW)} – ${eur(eq * BID_HIGH)}`]);
+    if (st < 1) rows.push([`× Anteil ${Math.round(st * 100)} %`,
+      `${eur(eq * st * BID_LOW)} – ${eur(eq * st * BID_HIGH)}`]);
+  } else {
+    rows.push(["× Adj. EBITDA (LTM)", eur(eb)], ["= Enterprise Value", eur(ev)],
+      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
+  }
+  return { rows, exMult, ev, eqv100 };
+}
+
+/* Gebote. Ein Käufer bietet einen Unternehmenswert; das Multiple ist daraus
+   abgeleitet, nicht umgekehrt — deshalb steht der EV im Kopf jeder Karte und
+   das implizite EV/EBITDA-Multiple darunter. Vom Bruttoerlös gehen die
+   Transaktionskosten und das Sweet Equity des MEP ab, genau wie bei der
+   Abrechnung (exitNetOf).                                                   */
 export function Offers({ item, holding, market, neg, decide }) {
   const eb = holding ? ebitdaOf(holding) : 0;
   const st = holding ? (holding.st ?? 1) : 1;
   const nd = holding ? holding.netDebt : 0;
   const fair = holding ? fairOf(holding, market, neg) : 0;
   const mMult = holding ? markMultiple(holding, market) : 0;
+  const mep = !!(holding && holding.ltip);
 
   return (
     <div className="modal">
@@ -3002,29 +3014,35 @@ export function Offers({ item, holding, market, neg, decide }) {
           const eqv100 = st > 0 ? o.price / st : 0;
           const ev = eqv100 + nd;
           const impMult = eb > 0 ? ev / eb : 0;
-          const net = o.price * (1 - PROC_FEE);
-          const moic = holding ? net / holding.entryEquity : 0;
+          const afterFee = o.price * (1 - PROC_FEE);
+          const net = holding ? exitNetOf(holding, o.price, PROC_FEE) : afterFee;
+          const moic = holding ? dealMoic(holding, net) : 0;
           return (
             <div className="card" key={i} style={{ marginTop: i === 0 ? 12 : 8 }}>
               <div className="pad" style={{ paddingTop: 12, paddingBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: 15, fontWeight: 600 }}>{o.buyer}</span>
-                  <span className="mono" style={{ fontSize: 17 }}>{x(impMult)}</span>
+                  <span className="mono" style={{ fontSize: 17 }}>{eur(ev)}</span>
+                </div>
+                <div className="mono" style={{ fontSize: 11.5, color: "var(--ink2)", textAlign: "right", marginTop: 2 }}>
+                  EV · implizit {x(impMult)} EV/EBITDA
                 </div>
                 <div style={{ fontSize: 12, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>{o.note}</div>
               </div>
               <table className="ledger fix"><tbody>
-                <tr><td className="lab">Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
-                <tr><td className="lab">Gebotenes Multiple</td><td>{x(impMult)}
+                <tr><td className="lab">Enterprise Value (Gebot)</td><td>{eur(ev)}</td></tr>
+                <tr><td className="lab">÷ Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
+                <tr><td className="lab">= Implizites Multiple</td><td>{x(impMult)}
                   <span style={{ color: impMult >= mMult ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                    {" "}{impMult >= mMult ? "+" : ""}{(impMult - mMult).toFixed(1).replace(".", ",")} vs. Markt
+                    {" "}{turns(r1(impMult) - r1(mMult)).replace("×", "")} vs. Markt
                   </span></td></tr>
-                <tr><td className="lab">Enterprise Value</td><td>{eur(ev)}</td></tr>
                 <tr><td className="lab">− Nettoverschuldung</td><td>−{eur(nd)}</td></tr>
                 <tr><td className="lab">= Equity Value (100 %)</td><td>{eur(eqv100)}</td></tr>
                 {st < 1 && <tr><td className="lab">× Anteil {Math.round(st * 100)} %</td><td>{eur(o.price)}</td></tr>}
                 <tr><td className="lab">= Bruttoerlös</td><td>{eur(o.price)}</td></tr>
                 <tr><td className="lab">− Transaktionskosten {PROC_FEE * 100} %</td><td>−{eur(o.price * PROC_FEE)}</td></tr>
+                {mep && <tr><td className="lab">− Sweet Equity MEP {Math.round(LTIP_SHARE * 100)} %</td>
+                  <td>−{eur(afterFee - net)}</td></tr>}
                 <tr><td className="lab" style={{ fontWeight: 600 }}>= Nettoerlös</td>
                   <td style={{ fontWeight: 700 }}>{eur(net)}</td></tr>
                 <tr><td className="lab">MOIC (Deal)</td>
@@ -3045,7 +3063,7 @@ export function Offers({ item, holding, market, neg, decide }) {
         })}
         <div className="pad" style={{ padding: "4px 16px 8px", fontSize: 11.5, color: "var(--ink2)", lineHeight: 1.5 }}>
           Nachverhandeln: 60 % Chance auf 5–8 % mehr, 25 % Chance, dass der Bieter abspringt und nur das nächste
-          Gebot bleibt. Alle Erlöse abzüglich 3 % Transaktionskosten.
+          Gebot bleibt. Alle Erlöse abzüglich 3 % Transaktionskosten{mep ? ` und ${Math.round(LTIP_SHARE * 100)} % Sweet Equity des MEP` : ""}.
         </div>
         <div style={{ margin: "0 16px 28px" }}>
           <button className="ox" style={{ width: "100%" }} onClick={() => decide(null, "abort")}>
@@ -3158,7 +3176,7 @@ export function Sheet({ sheet, close, onConfirm }) {
               Alle Werte in Mio. € Eigenkapital. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
               Gesamtrückfluss — Nettoerlös beim Exit zuzüglich aller Rekapitalisierungen, die während der Haltezeit
               schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge" enthält Transaktionskosten beim
-              Kauf und Verkauf sowie den kanalspezifischen Abschlag — der Teil, den du nie zurückverdienst.
+              Kauf und Verkauf sowie den kanalspezifischen Abschlag.
             </p>
             <button className="solid" style={{ width: "100%", marginTop: 4 }} onClick={close}>Weiter</button>
           </div>
