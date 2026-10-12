@@ -40,6 +40,7 @@ Dateinamen-Reihenfolge angewendet:
 35. `20260830100100_access_control.sql` – Zugangskontrolle: `profiles.access_status`, `profile_universes`, `request_access()`, `my_access()`
 36. `20260830100200_universe_seasons.sql` – `seasons.universe_id` + universumsweite Sichtbarkeit, `join_season`/`create_and_join_season`/`global_leaderboard` je Universum
 37. `20260830100300_access_admin_functions.sql` – Admin-Funktionen für Freigaben und Universen
+38. `20261012090000_fund_profile_on_join.sql` – Fondsprofil schon beim Beitritt: `join_season`/`create_and_join_season` nehmen optional `p_attrs` an, damit auch der fünfte Spieler, dessen Beitritt die Partie startet, mit seinem Profil spielt
 
 ## Zugangskontrolle und Universen
 

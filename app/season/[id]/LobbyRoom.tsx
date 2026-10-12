@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_HUMAN_ATTRS, type Attrs } from "@/lib/engine/constants";
-import { ATTR_FIELDS, FUND_PROFILE_POINTS } from "@/components/pel/ui";
+import { FUND_PROFILE_POINTS } from "@/components/pel/ui";
+import FundProfileFields from "@/components/FundProfileFields";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -261,46 +262,11 @@ export default function LobbyRoom({
             Verteile {FUND_PROFILE_POINTS} Punkte auf die Fähigkeiten deines Fonds. Die Entscheidung gilt
             für die gesamte Fondslaufzeit und lässt sich nach dem Start nicht mehr ändern.
           </p>
-          {ATTR_FIELDS.map(([k, n, d]) => (
-            <div className="fprow" key={k}>
-              <div className="fplabel">
-                <span className="fpname">{n}</span>
-                <span className="fpdesc">{d}</span>
-              </div>
-              <div className="fpdots" role="group" aria-label={n}>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    aria-label={`${n} auf ${i}`}
-                    aria-pressed={attrs[k as keyof Attrs] >= i}
-                    className={"fpdot" + (attrs[k as keyof Attrs] >= i ? " on" : "")}
-                    onClick={() => setAttrs((a) => {
-                      const key = k as keyof Attrs;
-                      const v = a[key] === i ? i - 1 : i;
-                      const nu = usedPoints - a[key] + v;
-                      return nu <= FUND_PROFILE_POINTS ? { ...a, [key]: v } : a;
-                    })}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-          {/* Statuszeile statt Schaltflächenzeile: Die Punktezahl sagt, wo man
-              steht, die Schaltfläche darunter, was als Nächstes zu tun ist.
-              Vorher standen beide nebeneinander — die wichtigste Aktion der
-              Karte war damit halb so breit wie jede andere und saß rechts in
-              einer Zeile, die wie eine Beschriftung aussieht. */}
-          <div className="fpfoot">
-            <span className={"fppoints" + (pointsComplete ? " ok" : "")}>
-              {usedPoints} / {FUND_PROFILE_POINTS} Punkte
-            </span>
-            <span className="fpstate">
-              {!pointsComplete
-                ? `noch ${pointsLeft} zu verteilen`
-                : profileSaved ? "gespeichert" : "noch nicht gespeichert"}
-            </span>
-          </div>
+          <FundProfileFields
+            attrs={attrs}
+            onChange={(next) => setAttrs(() => next)}
+            state={profileSaved ? "gespeichert" : "noch nicht gespeichert"}
+          />
           {profileSaved ? (
             <p className="fpdone">Fondsprofil gespeichert — bis zum Start jederzeit änderbar.</p>
           ) : (
