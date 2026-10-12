@@ -559,6 +559,27 @@ export const CSS = `
 .pel .tabs button .badge{position:absolute;top:2px;margin-left:16px;background:var(--ox);color:#fff;
   font-size:9px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;
   justify-content:center;padding:0 3px;box-shadow:0 0 0 2px var(--panel);}
+
+/* Wasserfall (Value Bridge, Exit-Gebot) */
+.pel .wf{display:flex;flex-direction:column;gap:2px;}
+.pel .wfr{padding:5px 0;}
+.pel .wfr.total{border-top:1px solid var(--rule);margin-top:4px;padding-top:9px;}
+.pel .wfh{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12.5px;line-height:1.35;}
+.pel .wfl{color:var(--ink2);}
+.pel .wfr.total .wfl{color:var(--ink);font-weight:600;}
+.pel .wfv{white-space:nowrap;font-size:12.5px;color:var(--ink);}
+.pel .wfv.pos{color:var(--teal);} .pel .wfv.neg{color:var(--ox);}
+.pel .wfr.total .wfv{font-weight:600;}
+.pel .wft{position:relative;height:9px;margin-top:4px;background:var(--shade);border-radius:2px;overflow:hidden;}
+.pel .wft i{position:absolute;top:0;bottom:0;border-radius:2px;transition:left .4s ease,width .4s ease;}
+.pel .wft i.base{background:var(--ink);} .pel .wft i.pos{background:var(--teal);}
+.pel .wft i.neg{background:var(--ox);} .pel .wft i.gold{background:var(--gold);}
+.pel .kpit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);margin-top:12px;}
+.pel .kpit>div{background:var(--card);padding:9px 10px;min-width:0;}
+.pel .kpil{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);}
+.pel .kpiv{font-size:16px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pel .kpiv.teal{color:var(--teal);} .pel .kpiv.ox{color:var(--ox);}
 ` + BATTLE_CSS + BRIEFING_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
@@ -816,7 +837,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           wie die Branchenreferenz auf der Beteiligungskarte. */}
       <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
         {dd ? (
-          <p className="hint teal">🔓 Datenraum offen — Branchenreferenz und Wachstumsschätzung stehen auf der Karte.</p>
+          <p className="hint teal">✅ Due Diligence durchgeführt — Sektor-Benchmarks und Wachstumsschätzung aus der Analyse stehen auf der Karte.</p>
         ) : (
           <>
             <button onClick={onDD} className={sp("dd").trim()}
@@ -825,10 +846,10 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
                 : `🔍 Due Diligence · ${eur(ddCost)}`}
             </button>
             <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 8 }}>
-              {hidden ? "🔒 Ohne Datenraum bleiben Ertrag, Cashflow und die Branchenreferenz oben verdeckt."
-                : flagHidden ? "🔒 Flagge, Branchenreferenz und erwartetes Wachstum bleiben ohne Datenraum verdeckt."
-                : ddFull ? `Höchstens ${ddCap} Datenräume gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
-                : `🔒 Öffnet die gesperrten Werte oben: Branchenreferenz und Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp), dazu kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
+              {hidden ? "🔒 Ohne Due Diligence bleiben Ertrag, Cashflow und die Sektor-Benchmarks oben verdeckt."
+                : flagHidden ? "🔒 Flagge, Sektor-Benchmarks und erwartetes Wachstum bleiben ohne Due Diligence verdeckt."
+                : ddFull ? `Höchstens ${ddCap} Due-Diligence-Prozesse gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
+                : `🔒 Die Due Diligence liefert die gesperrten Werte oben: Sektor-Benchmarks und Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp), dazu kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
             </p>
           </>
         )}
@@ -847,7 +868,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           <StatTile label="Erw. Wachstum vs. Sektor" info={<Info k="drift" />}
             value={dd ? grow(dEst) : "—"}
             tone={dd ? (dEst >= 0 ? "teal" : "ox") : "dim"}
-            sub={dd ? `± ${dBand.toFixed(1).replace(".", ",")} pp p. a.` : "nur mit Datenraum"} />
+            sub={dd ? `± ${dBand.toFixed(1).replace(".", ",")} pp p. a.` : "nur mit Due Diligence"} />
           <StatTile label="Adj. EBITDA − Capex"
             value={hidden ? "—" : eur(eb - capexA)} tone={hidden ? "dim" : ""}
             sub={hidden ? "verdeckt" : `Capex ${pct(d.capexPct)} vom Umsatz`} />
@@ -856,7 +877,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         </div>
         <div className="bprofile">
           <StatRadar color={id.own} redacted={hidden}
-            note={hidden ? "Datenraum erforderlich" : "relativ zu Investmentuniversum"}
+            note={hidden ? "Due Diligence erforderlich" : "relativ zu Investmentuniversum"}
             axes={[
               { k: "Marge", v: AX.margin(d.margin) },
               { k: "Wachstum", v: AX.growth(d.growth) },
@@ -870,7 +891,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             label={`📑 Financial Statements · ${DEAL_YEARS} Jahre`} />
           {hidden && (
             <p className="hint" style={{ marginTop: 6 }}>
-              Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
+              Ohne Due Diligence nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
             </p>
           )}
         </div>
@@ -956,7 +977,7 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
       <Section title="Investment Thesis">
         <p className="bthesis">{rest || lead}</p>
         <p className="hint" style={{ marginTop: 8 }}>
-          Ertrag, Marge und Qualität erst mit dem Datenraum.
+          Ertrag, Marge und Qualität erst mit der Due Diligence.
         </p>
       </Section>
       {note && <div className="bnote gold">{note}</div>}
@@ -1668,8 +1689,8 @@ function StatementNotes({ st, hidden }) {
   if (hidden) {
     return (
       <p className="finnote ox" style={{ color: "var(--ox)" }}>
-        Ohne Datenraum liegt nur die Umsatzreihe vor. Alles darunter — Ertrag, Kapitalbindung,
-        Cashflow — steht erst mit der Due Diligence zur Verfügung.
+        Ohne Due Diligence liegt nur die Umsatzreihe vor. Alles darunter — Ertrag, Kapitalbindung,
+        Cashflow — steht erst nach ihrer Durchführung zur Verfügung.
       </p>
     );
   }
@@ -2226,12 +2247,12 @@ export const GLOSSARY = {
     d: <>Wächst dieses Unternehmen dauerhaft <b>schneller oder langsamer als sein Sektor</b> — gewinnt es
       also Marktanteile oder verliert es welche? Angegeben in Prozentpunkten Umsatzwachstum pro Jahr
       gegenüber dem Sektorschnitt. <b>+2,0</b> heißt: rund zwei Punkte mehr Wachstum als der Markt, Jahr für
-      Jahr. Die Zahl ist eine <b>Schätzung aus dem Datenraum</b>, keine Tatsache; das <b>±-Band</b> dahinter
+      Jahr. Die Zahl ist eine <b>Schätzung aus der Due Diligence</b>, keine Tatsache; das <b>±-Band</b> dahinter
       ist die Unschärfe. Eine höhere Due-Diligence-Fähigkeit verkleinert das Band, schließt es aber nie.</>,
   },
   quality: {
     t: "Assetqualität",
-    d: <>Ein Sammelwert zwischen 10 und 97 beim Einstieg für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
+    d: <>Ein Score zwischen 0 und 100 für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
       Marge zu stehen: <b>Kundenbindung, Marktposition, Preissetzungsmacht, Abhängigkeiten</b>. Er wirkt
       direkt auf das Bewertungsmultiple — je höher, desto mehr zahlt ein Käufer je Euro EBITDA. Value
       Creation kann ihn heben, ein Abschwung oder überzogener Leverage drückt ihn.</>,
@@ -2965,6 +2986,59 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
    den Anteil des Fonds am Eigenkapital (makeOffers: 0,86 bis 1,08 des
    erzielbaren Werts); umgerechnet auf den Unternehmenswert ergibt das genau
    das implizite Multiple, das später auf der Gebotskarte steht.            */
+/* ---------- Wasserfall ----------
+   Eine Brücke von einem Ausgangswert über Zu- und Abschläge zu einem Ergebnis,
+   eine Zeile je Schritt: oben Beschriftung und Betrag, darunter der Balken über
+   die volle Breite. Vorher stand die Value Bridge als SVG mit Beschriftung,
+   Balken und Zahl in einer Zeile — lange Beschriftungen liefen in die Balken,
+   und weil der Maßstab nur den Endwert kannte, liefen Zwischenstände über den
+   Endwert hinaus in die Zahlenspalte und negative Schritte ganz aus dem Bild.
+   Jetzt reicht der Maßstab vom kleinsten bis zum größten Zwischenstand.
+
+   kind: "start" setzt den Lauf, "step" verschiebt ihn, "total" ist eine
+   Zwischen- oder Endsumme und beginnt wieder bei null. */
+export function Waterfall({ rows, fmt = eur }: {
+  rows: { l: string; v: number; kind: "start" | "step" | "total"; tone?: "base" | "gold" }[];
+  fmt?: (v: number) => string;
+}) {
+  // Laufender Stand nach jeder Zeile; daraus Anfang und Ende jedes Balkens
+  const levels = rows.reduce<number[]>((acc, r) => [...acc, r.kind === "step" ? (acc[acc.length - 1] ?? 0) + r.v : r.v], []);
+  const spans = rows.map((r, i) => {
+    const from = r.kind === "step" ? (levels[i - 1] ?? 0) : 0;
+    return [Math.min(from, levels[i]), Math.max(from, levels[i])];
+  });
+  const lo = Math.min(0, ...spans.map((sp) => sp[0]));
+  const hi = Math.max(1e-9, ...spans.map((sp) => sp[1]));
+  const at = (v: number) => ((v - lo) / (hi - lo)) * 100;
+  return (
+    <div className="wf">
+      {rows.map((r, i) => {
+        const [a, b] = spans[i];
+        const cls = r.kind === "step" ? (r.v >= 0 ? "pos" : "neg") : (r.tone || (r.kind === "total" ? "gold" : "base"));
+        const val = r.kind === "step" ? `${r.v >= 0 ? "+" : "−"} ${fmt(Math.abs(r.v))}` : fmt(r.v);
+        return (
+          <div className={"wfr " + r.kind} key={i}>
+            <div className="wfh"><span className="wfl">{r.l}</span><span className={"wfv mono " + cls}>{val}</span></div>
+            <div className="wft"><i className={cls} style={{ left: `${at(a)}%`, width: `${Math.max(0.8, at(b) - at(a))}%` }} /></div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Kennzahlen in Kacheln — drei nebeneinander, statt sie in eine Tabellenzeile
+   zu drängen, aus der sie bei 390 px herausliefen. */
+export function KpiTiles({ items }: { items: { l: string; v: string; tone?: string }[] }) {
+  return (
+    <div className="kpit">
+      {items.map((k) => (
+        <div key={k.l}><div className="kpil">{k.l}</div><div className={"kpiv mono " + (k.tone || "")}>{k.v}</div></div>
+      ))}
+    </div>
+  );
+}
+
 export const BID_LOW = 0.86, BID_HIGH = 1.08;
 const r1 = (v) => Math.round(v * 10) / 10;
 export const turns = (v) => (v < 0 ? "−" : "+") + x(Math.abs(v));
@@ -3144,11 +3218,7 @@ export function Sheet({ sheet, close, onConfirm }) {
     { l: "Transaktionskosten & Abschläge", v: b.cost },
   ];
   if ((b.dist || 0) > 0.05) steps.push({ l: "Rekapitalisierungen während der Haltezeit", v: b.dist });
-  const N = steps.length;
   const totalOut = sheet.price + (b.dist || 0);
-  const total = Math.max(b.entry, totalOut, 1);
-  let run = 0;
-  const H = 26;
 
   return (
     <div className="modal" onClick={close}>
@@ -3166,32 +3236,12 @@ export function Sheet({ sheet, close, onConfirm }) {
         <div className="card">
           <h3 className="disp">Value Bridge</h3>
           <div className="pad">
-            <svg viewBox={`0 0 300 ${H * (N + 1) + 16}`} style={{ width: "100%" }}>
-              {steps.map((s, i) => {
-                const w = (Math.abs(s.v) / total) * 190;
-                const start = i === 0 ? 0 : (run / total) * 190;
-                if (i > 0) run += s.v; else run = s.v;
-                const xx = s.v >= 0 ? start : start + (s.v / total) * 190;
-                return (
-                  <g key={i}>
-                    <text x="0" y={i * H + 12} fontSize="9" style={{ fill: "var(--ink2)" }} fontFamily="Inter">{s.l}</text>
-                    <rect x={100 + Math.max(0, xx)} y={i * H + 4} width={Math.max(1.5, w)} height="12"
-                      style={{ fill: i === 0 ? "var(--ink)" : s.v >= 0 ? "var(--teal)" : "var(--ox)" }} />
-                    <text x="298" y={i * H + 14} fontSize="9" textAnchor="end" style={{ fill: "var(--ink)" }} fontFamily="JetBrains Mono">
-                      {(s.v >= 0 && i > 0 ? "+" : "") + Math.round(s.v)}
-                    </text>
-                  </g>
-                );
-              })}
-              <line x1="100" y1={N * H} x2="298" y2={N * H} style={{ stroke: "var(--rule)" }} />
-              <text x="0" y={N * H + 17} fontSize="9" style={{ fill: "var(--ink)" }} fontFamily="Inter" fontWeight="600">Gesamtrückfluss</text>
-              <rect x="100" y={N * H + 6} width={Math.max(2, (totalOut / total) * 190)} height="14" style={{ fill: "var(--gold)" }} />
-              <text x="298" y={N * H + 17} fontSize="9" textAnchor="end" style={{ fill: "var(--ink)" }} fontFamily="JetBrains Mono" fontWeight="700">
-                {Math.round(totalOut)}
-              </text>
-            </svg>
+            <Waterfall rows={[
+              ...steps.map((st, i) => ({ l: st.l, v: st.v, kind: (i === 0 ? "start" : "step") as "start" | "step" })),
+              { l: "Gesamtrückfluss", v: totalOut, kind: "total" as const },
+            ]} />
             <p style={{ fontSize: 12, color: "var(--ink2)", lineHeight: 1.5, marginTop: 10 }}>
-              Alle Werte in Mio. € Eigenkapital. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
+              Alle Werte auf Ebene des Eigenkapitals. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
               Gesamtrückfluss — Nettoerlös beim Exit zuzüglich aller Rekapitalisierungen, die während der Haltezeit
               schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge" enthält Transaktionskosten beim
               Kauf und Verkauf sowie den kanalspezifischen Abschlag.

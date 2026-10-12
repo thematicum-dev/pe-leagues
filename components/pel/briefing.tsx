@@ -124,7 +124,8 @@ export function briefMood(items: BriefItem[], perf: BriefPerf, prev: BriefPerf |
   return s > 0 ? "pos" : s < 0 ? "neg" : "neu";
 }
 
-const de = (v: number, dg: number) => v.toFixed(dg).replace(".", ",");
+// Deutsches Komma und ein echtes Minuszeichen statt des Bindestrichs
+const de = (v: number, dg: number) => v.toFixed(dg).replace(".", ",").replace("-", "−");
 
 function lede(perf: BriefPerf, prev: BriefPerf | null): string {
   if (!prev) return `Wertung ${de(perf.score, 2)} · Platz ${perf.rank} von ${perf.funds}.`;
@@ -200,8 +201,10 @@ export function HalfYearBriefing({
       <div className="sheet brief" role="dialog" aria-modal="true" aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}>
         <div className={"brhead " + mood}>
-          <div className="sub">Halbjahresbericht · HJ {quarter}</div>
-          <h2 id={titleId} className="disp">{nextLabel ?? `Willkommen in Halbjahr ${quarter + 1}`}</h2>
+          {/* Der Bericht ist der Inhalt, die Begrüßung nur der Anlass — deshalb
+              steht er groß und sie klein darüber. */}
+          <div className="sub">{nextLabel ?? `Willkommen im neuen Halbjahr · HJ ${quarter + 1}`}</div>
+          <h2 id={titleId} className="disp">Halbjahresbericht HJ {quarter}</h2>
           <p className="brlede">{lede(perf, prev)}</p>
           {chips.length > 0 && (
             <div className="brchips">
