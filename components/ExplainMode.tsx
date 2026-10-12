@@ -31,7 +31,7 @@ import {
 
 import {
   CSS, haptic, AnimatedNumber, News, Coach, CoachCtx, Kpi, DealCard, Holding, Def, InitPicker,
-  Shortlist, Sheet,
+  Shortlist, Sheet, Waterfall, KpiTiles,
 } from "@/components/pel/ui";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,7 +181,7 @@ function Briefing({ dark, setDark, onStart }) {
             die Finanzierung genehmigt wurde.
           </Def>
           <Def t="Assetqualität">
-            Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
+            Ein Score zwischen 0 und 100, der den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
             schneller wächst als sein Markt und die Marge stabil bleibt, und fällt bei hoher Verschuldung,
             vakanten Positionen oder überdehntem Wachstum.
           </Def>
@@ -575,7 +575,7 @@ function GuidedRun({ dark, setDark, back }) {
     setPhase("run");
     setFeed((p) => [{
       q: 0, e: "🤝", tone: "pos",
-      t: `Zuschlag für <b>${co.name}</b> bei ${x(mult)} EBITDA — Eigenkapital ${eur(co.entryEquity)}, Fremdkapital ${x(lev)}.${co.hit ? " Nach dem Closing zeigt sich, was der Datenraum verhindert hätte: die Marge liegt niedriger als im Verkaufsmemorandum." : ""} Jetzt beginnt die Halteperiode.`,
+      t: `Zuschlag für <b>${co.name}</b> bei ${x(mult)} EBITDA — Eigenkapital ${eur(co.entryEquity)}, Fremdkapital ${x(lev)}.${co.hit ? " Nach dem Closing zeigt sich, was eine Due Diligence verhindert hätte: die Marge liegt niedriger als im Verkaufsmemorandum." : ""} Jetzt beginnt die Halteperiode.`,
     }, ...p]);
   }
 
@@ -583,7 +583,7 @@ function GuidedRun({ dark, setDark, back }) {
     haptic(8);
     setDd((p) => ({ ...p, [d.id]: true }));
     setFeed((p) => [{ q: 0, e: "🔍", tone: "neu",
-      t: `Datenraum zu <b>${d.name}</b> geöffnet (${eur(ddCostOf(d))}). Branchenreferenzen und die erwartete Performance gegenüber dem Markt liegen jetzt vor — und das Post-Closing-Risiko ist ausgeschlossen.` }, ...p]);
+      t: `Due Diligence für <b>${d.name}</b> durchgeführt (${eur(ddCostOf(d))}). Sektor-Benchmarks und die erwartete Performance gegenüber dem Markt liegen jetzt vor — und das Post-Closing-Risiko ist ausgeschlossen.` }, ...p]);
   }
 
   function runStudy() {
@@ -777,10 +777,10 @@ function GuidedRun({ dark, setDark, back }) {
         <dl>
           <Kpi t="EBITDA">Der Ertrag, auf den alles gerechnet wird. Kaufpreis und Verschuldung sind Vielfache davon.</Kpi>
           <Kpi t="Preiserwartung">Was der Verkäufer erwartet, in EBITDA-Vielfachen. Deine Verhandlungsbasis, keine Vorschrift.</Kpi>
-          <Kpi t="Assetqualität">Marktstellung und Widerstandsfähigkeit, 10 bis 97. Sie treibt das Bewertungsmultiple beim Verkauf.</Kpi>
+          <Kpi t="Assetqualität">Marktstellung und Widerstandsfähigkeit, ein Score von 0 bis 100. Sie treibt das Bewertungsmultiple beim Verkauf.</Kpi>
           <Kpi t="Debt Capacity">Wie viel Fremdkapital die Banken auf dieses Geschäftsmodell geben. Mehr Leverage heißt weniger Eigenkapital je Deal — und weniger Luft, wenn es schlecht läuft.</Kpi>
         </dl>
-        <p className="why"><b>Tu jetzt das:</b> Beauftrage die Due Diligence beim oberen Deal. Sie kostet Geld, aber ohne Datenraum siehst du weder die Branchenreferenz noch die erwartete Performance gegenüber dem Markt — und trägst das volle Risiko, dass die Zahlen im Memorandum geschönt sind.</p>
+        <p className="why"><b>Tu jetzt das:</b> Beauftrage die Due Diligence beim oberen Deal. Sie kostet Geld, aber ohne sie siehst du weder die Sektor-Benchmarks noch die erwartete Performance gegenüber dem Markt — und trägst das volle Risiko, dass die Zahlen im Memorandum geschönt sind.</p>
       </>) },
     { id: "bid", spot: "bid", sat: () => !!bid,
       eyebrow: "Preis", title: "Der Einstiegspreis ist die wichtigste Zahl des Deals",
@@ -1061,23 +1061,28 @@ function GuidedRun({ dark, setDark, back }) {
           <div className="card">
             <h3 className="disp">Gebot eingegangen</h3>
             {/* Wie in der Partie: Der Käufer bietet einen Unternehmenswert, das
-                Multiple ist daraus abgeleitet. */}
-            <table className="kv"><tbody>
-              <tr><td className="lab">Enterprise Value (Gebot)</td><td>{eur(offer.ev)}</td></tr>
-              <tr><td className="lab">÷ Adj. EBITDA</td><td>{eur(offer.eb)}</td></tr>
-              <tr><td className="lab">= Implizites Multiple</td><td>{x(offer.eb > 0 ? offer.ev / offer.eb : 0)}</td></tr>
-              <tr><td className="lab">Nettoverschuldung</td><td>− {eur(offer.nd)}</td></tr>
-              <tr><td className="lab">Bruttoerlös</td><td>{eur(offer.gross)}</td></tr>
-              <tr><td className="lab">Transaktionskosten</td><td>− {eur(offer.gross * PROC_FEE)}</td></tr>
-              {c.ltip && <tr><td className="lab">Managementbeteiligung</td>
-                <td>− {eur(offer.gross * (1 - PROC_FEE) * LTIP_SHARE)}</td></tr>}
-              <tr><td className="lab">Nettoerlös an den Fonds</td>
-                <td style={{ fontWeight: 600 }}>{eur(offer.net)}</td></tr>
-              <tr><td className="lab">Ergebnis</td>
-                <td style={{ color: offer.moic >= 1 ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
-                  {offer.moic.toFixed(2).replace(".", ",")}× · {(pracIrr(offer.moic, q) * 100).toFixed(0).replace("-", "−")} % IRR
-                  · Wertung {pracScore(offer.moic, q).toFixed(2).replace(".", ",")}</td></tr>
-            </tbody></table>
+                Multiple ist daraus abgeleitet. Darunter als Wasserfall, was davon
+                beim Fonds ankommt. Die Zwischenschritte sind aus den Summen
+                zurückgerechnet, damit die Brücke auf den Euro aufgeht. */}
+            <p className="hint" style={{ margin: "2px 16px 0" }}>
+              {eur(offer.ev)} Unternehmenswert = <b>{x(offer.eb > 0 ? offer.ev / offer.eb : 0)}</b> auf {eur(offer.eb)} Adj. EBITDA
+            </p>
+            <div className="pad" style={{ paddingTop: 10 }}>
+              <Waterfall rows={[
+                { l: "Enterprise Value (Gebot)", v: offer.ev, kind: "start" },
+                { l: "Nettoverschuldung", v: offer.gross - offer.ev, kind: "step" },
+                { l: "Bruttoerlös (Eigenkapital)", v: offer.gross, kind: "total", tone: "base" },
+                { l: "Transaktionskosten", v: -offer.gross * PROC_FEE, kind: "step" },
+                ...(offer.gross * (1 - PROC_FEE) - offer.net > 0.05
+                  ? [{ l: "Managementbeteiligung", v: offer.net - offer.gross * (1 - PROC_FEE), kind: "step" as const }] : []),
+                { l: "Nettoerlös an den Fonds", v: offer.net, kind: "total" },
+              ]} />
+              <KpiTiles items={[
+                { l: "MOIC", v: `${offer.moic.toFixed(2).replace(".", ",")}×`, tone: offer.moic >= 1 ? "teal" : "ox" },
+                { l: "IRR", v: `${(pracIrr(offer.moic, q) * 100).toFixed(0).replace("-", "−")} %`, tone: offer.moic >= 1 ? "teal" : "ox" },
+                { l: "Wertung", v: pracScore(offer.moic, q).toFixed(2).replace(".", ",").replace("-", "−") },
+              ]} />
+            </div>
             <button className={"solid" + (G && G.spot === "accept" ? " spot" : "")}
               style={{ width: "100%", marginTop: 10 }} onClick={acceptOffer}>
               🤝 Annehmen · {eur(offer.net)}

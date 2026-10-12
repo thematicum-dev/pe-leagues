@@ -1083,7 +1083,7 @@ export function StatRadar({ axes, color, redacted = false, note = null }) {
   return (
     <div className="bradar">
       <svg viewBox="0 0 140 122" role="img"
-        aria-label={redacted ? "Profil ohne Datenraum verdeckt"
+        aria-label={redacted ? "Profil ohne Due Diligence verdeckt"
           : "Profil: " + axes.map((a) => `${a.k} ${Math.round(cl(a.v) * 100)} von 100`).join(", ")}>
         {[0.25, 0.5, 0.75, 1].map((f) => (
           <polygon key={f} points={ring(f)} fill="none" stroke="var(--rule)" strokeWidth=".7" />
