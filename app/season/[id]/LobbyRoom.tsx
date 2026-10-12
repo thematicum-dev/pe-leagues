@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_HUMAN_ATTRS, type Attrs } from "@/lib/engine/constants";
 import { ATTR_FIELDS, FUND_PROFILE_POINTS } from "@/components/pel/ui";
@@ -229,9 +230,9 @@ export default function LobbyRoom({
             ? "Diese Partie wurde vom Ersteller aufgelöst."
             : "Diese Lobby wurde geschlossen, weil kein menschlicher Spieler mehr übrig war."}
         </p>
-        <a className="btn-primary" href="/dashboard">
+        <Link className="btn-primary" href="/dashboard">
           Zurück zum Dashboard
-        </a>
+        </Link>
       </div>
     );
   }

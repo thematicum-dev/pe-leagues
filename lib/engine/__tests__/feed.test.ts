@@ -166,4 +166,41 @@ describe("Nachrichtenfeed", () => {
     }
     expect(privat, "keine privaten Meldungen erzeugt").toBeGreaterThan(10);
   });
+
+  /* Maßnahmenergebnisse und Abgänge entstehen in maturePeople(), das aus dem
+     Übungsmodus stammt und dessen Kurzform schreibt. Ohne Umschreiben standen
+     sie ohne Halbjahr und ohne Fondsplatz im Feed — unsichtbar für den, den sie
+     betreffen. */
+  it("führt Maßnahmenergebnisse als private Meldung im Feedformat", () => {
+    const rng = createRng(99991);
+    let state = baseState();
+    const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+    state = { ...state, deals: boot.deals, landmark: boot.landmark };
+
+    let ergebnisse = 0;
+    for (let hy = 1; hy <= 12; hy++) {
+      const d: Record<number, TurnDecisions> = {};
+      [0, 1].forEach((slot) => {
+        const me = (state.funds as Any[]).find((f) => f.slot === slot)!;
+        const dec: TurnDecisions = {};
+        const x = (state.deals as Any[])[slot % Math.max(1, state.deals.length)];
+        if ((me.holdings as Any[]).length < 3 && x) {
+          dec.bids = [{ dealId: x.id, multiple: x.askMult * (1 + slot * 0.05), leverage: x.levCap * 0.8 }];
+        }
+        const frei = (me.holdings as Any[]).find((h) => !h.initP);
+        if (frei) dec.initiatives = [{ holdingUid: frei.uid, dim: "plat", id: "opex" }];
+        d[slot] = dec;
+      });
+      const out = runQuarter({ state, halfYear: hy, decisionsBySlot: d, rng } as Any);
+      state = out.state;
+      for (const f of out.feed as Any[]) {
+        expect(f.halfYear, `${JSON.stringify(f)}: ohne Halbjahr`).toBe(hy);
+        expect(typeof f.text, `${JSON.stringify(f)}: ohne Text`).toBe("string");
+        if (!/abgeschlossen, Reifegrad|verfehlt das Ziel|gescheitert/.test(f.text)) continue;
+        ergebnisse++;
+        expect(f.slot, `${f.text}: Maßnahmenergebnis muss privat sein`).toBeTypeOf("number");
+      }
+    }
+    expect(ergebnisse, "keine Maßnahmenergebnisse gemeldet").toBeGreaterThan(3);
+  });
 });

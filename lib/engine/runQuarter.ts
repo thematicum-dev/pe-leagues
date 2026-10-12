@@ -723,8 +723,17 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
 
   /* 3y — People */
   const newShortlists: { uid: string; name: string; seat: string; cands: Any[] }[] = [];
+  /* maturePeople() stammt aus dem Übungsmodus und schreibt seine Meldungen in
+     dessen Kurzform ({q, e, tone, t}), ohne Fondsplatz. Bis zum 11.10.2026
+     landeten sie so im gemeinsamen Feed: ohne `halfYear`, also in keinem
+     Halbjahr angezeigt, und ohne `slot`, also für alle bestimmt. Abgeschlossene
+     und gescheiterte Maßnahmen und abgeworbene Manager erreichten den Spieler
+     in einer Mehrspielerpartie dadurch nie. Jetzt je Fonds gesammelt und in
+     die Form des Feeds übertragen — als private Meldung dieses Fonds. */
   F.forEach((f) => {
-    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists, compat));
+    const own: Any[] = [];
+    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, own, newShortlists, compat));
+    own.forEach((n) => pushFeed(news, q, n.e, n.tone, n.t, f.slot));
   });
   newShortlists.forEach((sl) => {
     const owner = F.find((f) => (f.holdings as Any[]).some((h) => h.uid === sl.uid));

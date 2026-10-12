@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -209,9 +210,11 @@ export default function LobbyOverview({
             </>
           )}
         </p>
-        <a className="btn-primary" href={`/season/${mySeason.id}`}>
+        {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der App und
+            blendet über (app/template.tsx), statt die Seite neu zu laden. */}
+        <Link className="btn-primary" href={`/season/${mySeason.id}`}>
           Zur Partie
-        </a>
+        </Link>
       </div>
     );
   }

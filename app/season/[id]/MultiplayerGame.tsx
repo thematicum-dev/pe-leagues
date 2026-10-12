@@ -25,6 +25,8 @@ import {
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
   Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation,
 } from "@/components/pel/ui";
+import { HalfYearBriefing } from "@/components/pel/briefing";
+import { useFadeOnChange } from "@/components/pel/motion";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
   ExitStartIntent, Seat, HireChoice,
@@ -636,6 +638,31 @@ export default function MultiplayerGame({
     } catch { /* siehe oben */ }
   }, [seasonId, draftKey]);
 
+  /* ---------- Halbjahresbericht ----------
+     Öffnet sich einmal je Halbjahr von selbst, sobald ein ausgewertetes
+     Halbjahr vorliegt und noch nicht abgegeben ist. Gemerkt wird das im
+     Browser: Wer die Partie im selben Halbjahr erneut öffnet, landet direkt im
+     Spiel — der Bericht bleibt über die Meldungsbox erreichbar. */
+  const [briefOpen, setBriefOpen] = useState(false);
+  const briefKey = `pel:brief:${seasonId}:${quarter}`;
+  useEffect(() => {
+    if (quarter < 1 || alreadySubmitted) return;
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(briefKey) === "1";
+      window.localStorage.setItem(briefKey, "1");
+    } catch { /* ohne Speicher: dann eben bei jedem Öffnen */ }
+    /* Wie beim Entwurf oben: localStorage gibt es erst nach dem Mounten, ein
+       Lazy-Initializer erzeugte eine Hydration-Abweichung. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!seen) setBriefOpen(true);
+  }, [briefKey, quarter, alreadySubmitted]);
+
+  /* Abgabe und Rückkehr ins Spiel blenden über, statt hart umzuspringen.
+     Nur Deckkraft: In der Wurzel stecken die fixierten Leisten. */
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFadeOnChange(rootRef, submitted, { lift: 0, duration: 320 });
+
   if (!me) return null;
 
   const NEG = me.attrs.negotiation;
@@ -996,6 +1023,7 @@ export default function MultiplayerGame({
   const feedForNews = visibleFeed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text }));
 
   async function handleSubmit() {
+    haptic("confirm");
     setError(null);
     setPending(true);
 
@@ -1023,7 +1051,8 @@ export default function MultiplayerGame({
 
     setPending(false);
     if (insertError) {
-      if (insertError.code === "23505") { setSubmitted(true); refreshStatus(); return; }
+      if (insertError.code === "23505") { haptic("success"); setSubmitted(true); refreshStatus(); return; }
+      haptic("error");
       /* 42501 heißt hier: Die WITH CHECK-Bedingung der Policy hat abgelehnt.
          Sie prüft nur Dinge, die sich nicht durch einen zweiten Versuch
          ändern — eigenes Profil, laufende Partie, passendes Halbjahr, und vor
@@ -1037,6 +1066,7 @@ export default function MultiplayerGame({
       setError("Das hat nicht geklappt — bitte versuch es erneut.");
       return;
     }
+    haptic("success");
     setSubmitted(true);
     refreshStatus();
     // Sofort anstoßen statt bis zum nächsten Cron-Tick zu warten. Im
@@ -1047,7 +1077,7 @@ export default function MultiplayerGame({
 
   if (submitted) {
     return (
-      <div className={"pel" + (dark ? " dark" : "")}>
+      <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
         <style>{CSS}</style>
         <div className="wrap" style={{ maxWidth: 520, margin: "0 auto" }}>
           <div className="tomb" style={{ margin: "24px 16px" }}>
@@ -1090,7 +1120,7 @@ export default function MultiplayerGame({
   }
 
   return (
-    <div className={"pel" + (dark ? " dark" : "")}>
+    <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
       <style>{CSS}</style>
       <div className="bar">
         {/* Das Halbjahr, über das gerade entschieden wird (1-basiert) — nicht
@@ -1193,7 +1223,8 @@ export default function MultiplayerGame({
       <Toasts items={[]} />
 
       <div className="wrap">
-        <News feed={feedForNews} quarter={quarter} practice={false} />
+        <News feed={feedForNews} quarter={quarter} practice={false}
+          onBrief={quarter >= 1 ? () => setBriefOpen(true) : null} />
 
         {tab === "deals" && (
           <>
@@ -1430,12 +1461,33 @@ export default function MultiplayerGame({
           confirm={(amt: number) => stageInjection(injectPick, amt)}
           close={() => setInjectPick(null)} />
       )}
-      {!sheet && !initPick && shortlistItem && (
+      {briefOpen && (
+        <HalfYearBriefing
+          quarter={quarter}
+          items={visibleFeed.filter((f) => f.halfYear === quarter)
+            .map((f) => ({ e: f.emoji, tone: f.tone, t: f.text, pub: f.slot == null }))}
+          perf={{ score, rank: myRank, funds: state.funds.length, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
+          prev={prev ? {
+            score: prev.score, rank: prev.rank, funds: state.funds.length,
+            tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
+          } : null}
+          todo={{
+            shortlists: shortlistAll.length - shortlistCursor,
+            offers: exitQueueAll.length - exitQueueCursor,
+          }}
+          footer={deadline ? (
+            <>Abgabe für Halbjahr {currentHalfYear}: noch <Countdown deadline={deadline} serverNow={serverNow} />.
+              Ausgewertet wird, sobald alle abgegeben haben oder spätestens zur Frist.</>
+          ) : null}
+          onClose={() => setBriefOpen(false)}
+        />
+      )}
+      {!briefOpen && !sheet && !initPick && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}
           holding={me.holdings.find((h: Any) => h.uid === shortlistItem.holdingUid)}
           analysis={me.attrs.analysis} hire={hireStage} reject={rejectStage} />
       )}
-      {!sheet && !initPick && !shortlistItem && exitQueueItem && (
+      {!briefOpen && !sheet && !initPick && !shortlistItem && exitQueueItem && (
         <Offers item={exitQueueItem} holding={me.holdings.find((h: Any) => h.uid === exitQueueItem.holdingUid)}
           market={state.market} neg={NEG} decide={decideOfferStage} />
       )}

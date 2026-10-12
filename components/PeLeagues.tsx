@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 
 /* ---------------- Spiellogik ----------------
@@ -31,6 +31,18 @@ import {
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
   Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation,
 } from "@/components/pel/ui";
+import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
+import { useFadeOnChange } from "@/components/pel/motion";
+
+/* Kennzahlen des eigenen Fonds (Platz 0) für den Halbjahresbericht */
+function perfOf(F, mk, q): BriefPerf {
+  const me0 = F[0];
+  const scores = F.map((f) => scoreOf(f, mk, q));
+  return {
+    score: scores[0], rank: 1 + scores.filter((v, i) => i > 0 && v > scores[0]).length, funds: F.length,
+    tvpi: tvpiOf(me0, mk, q), irr: irrOf(me0, mk, q), dpi: dpiOf(me0, mk, q), dry: investableOf(me0, q),
+  };
+}
 
 export default function PeLeagues() {
   const [phase, setPhase] = useState("setup");
@@ -74,6 +86,14 @@ export default function PeLeagues() {
   const [injectPick, setInjectPick] = useState(null);   // offene Kapitalzuführung
   const [useProceeds, setUseProceeds] = useState(null);   // offene Verwendungsentscheidung
   const [rolling, setRolling] = useState(false);
+  const [rollOut, setRollOut] = useState(false);   // Ladeschleier blendet aus
+  /* Halbjahresbericht: Daten des zuletzt ausgewerteten Halbjahres, und ob das
+     Fenster gerade offen ist. Die Daten bleiben nach dem Schließen stehen,
+     damit der Bericht sich aus der Meldungsbox erneut öffnen lässt. */
+  const [brief, setBrief] = useState(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useFadeOnChange(wrapRef, quarter);
   const [toasts, setToasts] = useState([]);
   const [burst, setBurst] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -153,12 +173,19 @@ export default function PeLeagues() {
   // Kurze, spürbare Verzögerung vor der Auflösung — Spannung statt Sofortergebnis
   function closeQuarter() {
     if (rolling) return;
-    haptic(14);
+    haptic("confirm");
     setRolling(true);
-    setTimeout(() => { runQuarter(); setRolling(false); }, 620);
+    setTimeout(() => {
+      runQuarter();
+      // Der Schleier blendet aus statt zu verschwinden — darunter steht schon
+      // das neue Halbjahr samt Bericht.
+      setRollOut(true);
+      setTimeout(() => { setRolling(false); setRollOut(false); }, 240);
+    }, 620);
   }
 
   function runQuarter() {
+    const before = perfOf(funds, market, quarter);
     const F = funds.map((f) => ({ ...f, holdings: f.holdings.map((c) => ({ ...c })), realized: [...f.realized] }));
     const mk = { ...market };
     const news = [];
@@ -506,6 +533,7 @@ export default function PeLeagues() {
     if (resolved.length) setExitQueue((p) => [...p, ...resolved]);
     setQuarter(q);
     if (q >= PERIODS) { liquidate(F, mk, q); setPhase("end"); }
+    else { setBrief({ q, prev: quarter > 0 ? before : null, now: perfOf(F, mk, q) }); setBriefOpen(true); }
 
     // Serie guter Halbjahre sichtbar machen — das eigentliche Momentum-Signal
     const newScore = scoreOf(F[0], mk, q);
@@ -516,8 +544,9 @@ export default function PeLeagues() {
     }
     const won = news.find((n) => n.tone === "pos" && (n.e === "🏆" || n.e === "🏛️"));
     const lost = news.find((n) => n.tone === "neg" && (n.e === "☠️" || n.e === "🚪"));
-    if (won) { haptic([10, 20, 10]); if (won.e === "🏛️") fireConfetti(); pushToast(won.t, "pos"); }
-    else if (lost) { haptic(25); pushToast(lost.t, "neg"); }
+    // Das haptische Feedback zum Ergebnis kommt mit dem Halbjahresbericht
+    if (won) { if (won.e === "🏛️") fireConfetti(); pushToast(won.t, "pos"); }
+    else if (lost) pushToast(lost.t, "neg");
   }
 
   /* Ende der Fondslaufzeit: alle verbliebenen Beteiligungen werden zu
@@ -1007,15 +1036,15 @@ function finalize(c, gross, buyer, feeRate, extra) {
       <Toasts items={toasts} />
       {burst > 0 && <Confetti key={burst} seed={burst} rng={rng} />}
       {rolling && (
-        <div className="rollmask">
+        <div className={"rollmask" + (rollOut ? " out" : "")}>
           <div className="rr" />
           <div className="rt">Auktion läuft …</div>
           <div className="rs">Gebote werden aufgelöst</div>
         </div>
       )}
 
-      <div className="wrap">
-        <News feed={feed} quarter={quarter} />
+      <div className="wrap" ref={wrapRef}>
+        <News feed={feed} quarter={quarter} onBrief={brief && brief.q === quarter ? () => setBriefOpen(true) : null} />
         {phase === "end" && (
           <div className="tomb">
             <div className="sub">Fondslaufzeit beendet</div>
@@ -1216,11 +1245,17 @@ function finalize(c, gross, buyer, feeRate, extra) {
           confirm={(amt) => injectCapital(me.holdings.find((h) => h.uid === injectPick), amt)}
           close={() => setInjectPick(null)} />
       )}
-      {!sheet && !initPick && shortlist.length > 0 && (
+      {briefOpen && brief && (
+        <HalfYearBriefing quarter={brief.q} items={feed.filter((f) => f.q === brief.q)}
+          perf={brief.now} prev={brief.prev}
+          todo={{ shortlists: shortlist.length, offers: exitQueue.length }}
+          onClose={() => setBriefOpen(false)} />
+      )}
+      {!briefOpen && !sheet && !initPick && shortlist.length > 0 && (
         <Shortlist item={shortlist[0]} holding={me.holdings.find((h) => h.uid === shortlist[0].uid)}
           analysis={me.attrs.analysis} hire={hire} reject={rejectAll} />
       )}
-      {!sheet && !initPick && shortlist.length === 0 && exitQueue.length > 0 && (
+      {!briefOpen && !sheet && !initPick && shortlist.length === 0 && exitQueue.length > 0 && (
         <Offers item={exitQueue[0]} holding={me.holdings.find((h) => h.uid === exitQueue[0].uid)}
           market={market} neg={NEG} decide={decideOffer} />
       )}

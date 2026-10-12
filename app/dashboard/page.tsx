@@ -1,4 +1,5 @@
 import { signOut } from "@/app/auth/actions";
+import Link from "next/link";
 import { requireAccess } from "@/lib/access/context";
 import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
 import UniverseSwitcher from "./UniverseSwitcher";
@@ -88,9 +89,9 @@ export default async function DashboardPage() {
             )}
           </div>
           <div className="dashtools">
-            <a href="/leaderboard" className="btn-quiet">
+            <Link href="/leaderboard" className="btn-quiet">
               Rangliste
-            </a>
+            </Link>
             {isAdmin && (
               <a href="/admin" className="btn-quiet">
                 Admin
@@ -135,20 +136,22 @@ export default async function DashboardPage() {
         </div>
 
         <div className="modegrid">
-          <a href="/explain" className="modecard">
+          {/* Link statt <a>: Wechsel innerhalb der App, mit Überblendung
+              (app/template.tsx) statt eines harten Neuladens. */}
+          <Link href="/explain" className="modecard">
             <h3>Einführung</h3>
             <p>
               Geführt durch alle Entscheidungen: eine Beteiligung über zehn Halbjahre,
               ein Coach erklärt jeden Schritt.
             </p>
-          </a>
-          <a href="/practice" className="modecard">
+          </Link>
+          <Link href="/practice" className="modecard">
             <h3>Übungsmodus</h3>
             <p>
               Eine vollständige Solopartie gegen vier Fonds derselben Kohorte — wie im
               Spielmodus, nur ohne Mitspieler.
             </p>
-          </a>
+          </Link>
         </div>
       </div>
     </main>

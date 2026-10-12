@@ -838,3 +838,64 @@ body {
 .resendform {
   display: contents;
 }
+
+/* ---------- Seitenübergänge ----------
+   Leichtes Überblenden statt eines harten Schnitts, wenn die Ansicht wechselt.
+   Zwei Wege, eine Animation:
+
+   - .pel-page: Wechsel innerhalb der App — Dashboard ins Spiel und zurück,
+     neues Halbjahr per router.refresh() (siehe app/template.tsx). Das ist
+     der Hauptweg; deshalb sind die Einstiege im Dashboard <Link>s.
+   - @view-transition: die übrigen Navigationen, die eine ganze Seite neu
+     laden (Anmeldung, Weiterleitungen, Formulare). Ohne JavaScript, vom
+     Browser selbst — der lässt sie allerdings aus, sobald die neue Seite
+     nicht schnell genug steht, und das ist bei Next-Seiten nicht selten.
+
+   Erst blendet die alte Ansicht kurz aus, dann die neue ein. Ein reines
+   Ineinanderblenden zeigte für einen Moment beide Seiten übereinander, und
+   bei zwei Seiten mit Text an denselben Stellen liest sich das als Flackern. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-old(.pel-page) {
+  animation: pel-page-out 0.16s ease-in both;
+}
+
+::view-transition-new(root),
+::view-transition-new(.pel-page) {
+  animation: pel-page-in 0.34s cubic-bezier(0.22, 0.9, 0.34, 1) 0.08s both;
+}
+
+@keyframes pel-page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pel-page-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Browser ohne View Transitions: dann wenigstens beim Laden einer Seite
+   einblenden, statt sie hart erscheinen zu lassen. */
+@supports not (view-transition-name: none) {
+  body {
+    animation: pel-page-in 0.34s cubic-bezier(0.22, 0.9, 0.34, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  body {
+    animation: none !important;
+  }
+}

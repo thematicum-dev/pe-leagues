@@ -31,6 +31,8 @@ import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
   SectorEmblem, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
 } from "./battle";
+import { haptic } from "./haptics";
+import { BRIEFING_CSS } from "./briefing";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -517,6 +519,8 @@ export const CSS = `
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   animation:fadeIn .18s ease-out both;}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.pel .rollmask.out{animation:fadeOut .24s ease-in both;pointer-events:none;}
+@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}
 .pel .rollmask .rr{width:46px;height:46px;border:3px solid rgba(228,234,227,.18);border-top-color:var(--gold);
   border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -555,14 +559,12 @@ export const CSS = `
 .pel .tabs button .badge{position:absolute;top:2px;margin-left:16px;background:var(--ox);color:#fff;
   font-size:9px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;
   justify-content:center;padding:0 3px;box-shadow:0 0 0 2px var(--panel);}
-` + BATTLE_CSS;
+` + BATTLE_CSS + BRIEFING_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
-// Kurzes haptisches Feedback auf Geräten, die es unterstützen — no-op sonst
-export function haptic(pattern = 8) {
-  try { if (navigator?.vibrate) navigator.vibrate(pattern); } catch (_) {}
-}
+// Haptisches Feedback (Android: Vibration API, iPhone: System-Klick) — siehe ./haptics.ts
+export { haptic };
 
 // Zahlen springen nicht stumm um, sondern zählen sich sichtbar hoch/runter
 export function AnimatedNumber({ value, format, className, style }) {
@@ -627,13 +629,23 @@ export function Toasts({ items }) {
 
 /* ---------------- Teilkomponenten ---------------- */
 
-export function News({ feed, quarter, practice }) {
+export function News({ feed, quarter, practice, onBrief = null }: {
+  feed: { q: number; e?: string; tone?: string; t: string }[]; quarter: number; practice?: boolean;
+  onBrief?: (() => void) | null;
+}) {
   const last = feed.filter((f) => f.q === quarter);
   return (
     <div className="news">
       <div className="nh">
         <span className="eyebrow">Meldungen aus Halbjahr {quarter}</span>
-        <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
+        {onBrief ? (
+          /* Der Halbjahresbericht lässt sich jederzeit wieder aufrufen */
+          <button className="lnk mono" style={{ fontSize: 11 }} onClick={() => { haptic("tap"); onBrief(); }}>
+            {last.length} · Bericht öffnen
+          </button>
+        ) : (
+          <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
+        )}
       </div>
       {last.length === 0 ? (
         <div className="quiet">{practice ? "Ruhiges Halbjahr — keine Meldungen. Setze eine Maßnahme auf oder schließe das Halbjahr ab." : "Ruhiges Halbjahr — keine Meldungen. Gib Gebote ab oder schließe das Halbjahr ab."}</div>
@@ -869,7 +881,13 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         <div className="bdial">
           <div className="slrow"><span>Gebot</span>
             <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
-          <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => setMult(+e.target.value)} />
+          <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => {
+              /* Rasten beim Ziehen; wer unter die Schmerzgrenze des Verkäufers
+                 rutscht, spürt es, bevor er den Hinweis darunter liest. */
+              const v = +e.target.value;
+              if (v !== mult) haptic(v < reserve && mult >= reserve ? "warning" : "select");
+              setMult(v);
+            }} />
           <p className={"hint" + (mult < reserve ? " ox" : "")} style={{ margin: "2px 0 0" }}>
             {mult < reserve
               ? `Unter der Schmerzgrenze des Verkäufers (rund ${x(reserve)}) — er zieht das Objekt zurück.`
@@ -881,7 +899,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         <div className="bdial">
           <div className="slrow"><span>Leverage</span>
             <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
-          <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => setLev(+e.target.value)} />
+          <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => { const v = +e.target.value; if (v !== lev) haptic("select"); setLev(v); }} />
         </div>
         <div className="bfnums">
           <Row k="Enterprise Value" v={hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)} />
@@ -900,9 +918,9 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
 
       <div className="bacts">
         {bid ? (
-          <button className="ox" style={{ width: "100%" }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
+          <button className="ox" style={{ width: "100%" }} onClick={() => { haptic("tap"); clear(); }}>Angebot zurückziehen</button>
         ) : (
-          <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic(10); setBid({ mult, lev }); }}>
+          <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic("confirm"); setBid({ mult, lev }); }}>
             {!afford ? (me.holdings.length >= MAX_SLOTS ? "Portfolio voll" : "Dry Powder reicht nicht")
               : mult < reserve ? "Angebot abgeben — vermutlich zu niedrig" : "Angebot abgeben"}
           </button>
@@ -2469,7 +2487,7 @@ export function UseProceeds({ item, me, quarter, settle }) {
           <div className="slrow"><span>Im Fonds einbehalten</span>
             <span className="slval">{Math.round((rec / Math.max(0.01, net)) * 100)} % · {eur(rec)}</span></div>
           <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
-            onChange={(e) => setKeep(+e.target.value / 100)} />
+            onChange={(e) => { haptic("select"); setKeep(+e.target.value / 100); }} />
           <table className="kv" style={{ marginTop: 10 }}><tbody>
             <tr><td className="lab">An die Limited Partner</td><td>{eur(dist)}</td></tr>
             <tr><td className="lab">Verfügbar für neue Deals</td><td>{eur(investAfter)}</td></tr>
@@ -2537,7 +2555,7 @@ export function EquityInjection({ c, investable, confirm, close }) {
         <div className="card">
           <div className="pad">
             <input type="range" min={0} max={Math.round(max)} step={1} value={Math.round(amt)}
-              onChange={(e) => setAmt(Number(e.target.value))}
+              onChange={(e) => { haptic("select"); setAmt(Number(e.target.value)); }}
               style={{ width: "100%", accentColor: "var(--gold)" }} />
           </div>
           <table className="ledger fix"><tbody>
@@ -2703,7 +2721,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       <b>{eur(addEb)}</b> · {Math.round(chk.share * 100)} % der Plattform
                       <input type="range" min={Math.round(eb * 0.05 * 10)} max={Math.round(maxEb * 10)} step={1}
                         value={Math.round(addEb * 10)}
-                        onChange={(e) => { setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % des Plattform-EBITDA).
@@ -2716,7 +2734,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         {chk.gap > 0.05 ? `${x(chk.gap)} unter der Preisvorstellung` : "voller Preis"}</span>
                       <input type="range" min={Math.round((ask - 3) * 10)} max={Math.round(ask * 10)} step={1}
                         value={Math.round(mult * 10)}
-                        onChange={(e) => { setBid(Number(e.target.value) / 10); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setBid(Number(e.target.value) / 10); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Preisvorstellung {x(ask)} — Plattformmultiple {x(markMultiple(c, market))} abzüglich
@@ -2730,7 +2748,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                   {(eqCap > 0.5 || eqShort > 0.05) && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
                     <td>
                       <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
-                        onChange={(e) => setAddonEq(Number(e.target.value))}
+                        onChange={(e) => { haptic("select"); setAddonEq(Number(e.target.value)); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
