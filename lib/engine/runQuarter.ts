@@ -328,7 +328,11 @@ function applyImmediateDecisions(
   (decisions.exitStarts || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c || c.proc || c.lockUntil) return;
-    if (c.block && quarter < c.block) return;
+    /* Die Sperre nach einem abgebrochenen Prozess gilt nur für den nächsten
+       Prozess — bilateral bleibt möglich, wie die Karte sagt und wie der
+       Übungsmodus es immer gehalten hat. Bis zum 18.10.2026 verwarf diese
+       Zeile jeden Exit während der Sperre, ohne Meldung. */
+    if (c.block && quarter < c.block && (intent.action === "process" || compat.legacyBlockAllExits)) return;
     const NEG = f.attrs.negotiation;
     if (intent.action === "process") {
       c.proc = { resolveQ: quarter + PROC_Q };

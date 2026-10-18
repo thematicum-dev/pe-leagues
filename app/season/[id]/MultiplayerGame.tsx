@@ -29,7 +29,7 @@ import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
-  ExitStartIntent, Seat, HireChoice,
+  ExitStartIntent, OfferDecisionIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
 import type { AddonOpts } from "@/lib/engine";
 import {
@@ -683,6 +683,8 @@ export default function MultiplayerGame({
      einem frühen Return — ein weiterer wäre ein weiterer bedingter Hook. */
   const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
   equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
+  const stagedOfferByHolding: Record<string, OfferDecisionIntent> = {};
+  offerDecisions.forEach((o) => { stagedOfferByHolding[o.holdingUid] = o; });
   const stagedExitByHolding = useMemo(() => {
     const map: Record<string, ExitStartIntent> = {};
     exitStarts.forEach((e) => { map[e.holdingUid] = e; });
@@ -743,8 +745,18 @@ export default function MultiplayerGame({
     if (exit && !p.proc) {
       // Wie bei den Maßnahmen: runQuarter verankert auf halfYear = quarter + 1.
       // Ein bilateraler Verkauf wird in derselben Auswertung abgewickelt.
-      p.proc = { resolveQ: quarter + 1 + (exit.action === "process" ? PROC_Q : 0) };
+      p.proc = exit.action === "process" ? { resolveQ: quarter + 1 + PROC_Q } : { resolveQ: quarter + 1, sale: true };
     }
+    /* Eine Entscheidung über die Gebote wirkt auf der Karte wie die Auswertung:
+       Ein angenommenes oder nachverhandeltes Gebot ist ein Verkauf in diesem
+       Halbjahr, ein Abbruch sperrt den nächsten Prozess. Vorher blieben die
+       Exit-Schaltflächen offen, und ein zusätzlich vorgemerkter Verkauf wurde
+       vom Server stillschweigend verworfen — die Beteiligung war dann schon
+       verkauft oder gesperrt. Die Sperre zeigt die Karte so, wie sie nach der
+       Auswertung dasteht: zwei Halbjahre, das "eine Jahr" der Schaltfläche. */
+    const offer = stagedOfferByHolding[c.uid];
+    if (offer?.choice === "abort") p.block = quarter + 2;
+    else if (offer && !p.proc) p.proc = { resolveQ: quarter + 1, sale: true };
     return p;
   }
 
@@ -800,18 +812,26 @@ export default function MultiplayerGame({
        lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
        höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
        zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus.                                       */
+       des Dialogs wie ein Fehler aus.
+
+       Geprüft wird gegen currentHalfYear, das Halbjahr, in dem der Server den
+       Exit verbucht — nicht gegen quarter. Bis zum 18.10.2026 stand hier
+       quarter: In Halbjahr 11 erschien der Regler noch, der Server schüttete
+       den Erlös aber trotzdem voll aus.                                     */
     if (ch !== "proc") {
-      const room = recycleRoom(me, Math.max(0, net), quarter);
+      const room = recycleRoom(me, Math.max(0, net), currentHalfYear);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : quarter > INVEST_PERIOD
+        : currentHalfYear > INVEST_PERIOD
           ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
           : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
+      /* PROC_Q + 1: Der Prozess reift in der Auswertung von Halbjahr
+         n + PROC_Q, entscheiden lässt sich über die Gebote erst im Halbjahr
+         danach — dieselbe Zahl, die danach auf der Karte steht. */
       rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
-        ["Gebote liegen vor in", hj(PROC_Q)]);
+        ["Gebote liegen vor in", hj(PROC_Q + 1)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
       return;
@@ -852,7 +872,7 @@ export default function MultiplayerGame({
     const { c, ch, net } = sheet;
     setSheet(null);
     if (ch === "proc") { stageExit(c.uid, "proc", 0); return; }
-    if (recycleRoom(me, net, quarter) > 0.5) {
+    if (recycleRoom(me, net, currentHalfYear) > 0.5) {
       setUseProceedsItem({ c, net, action: ch });
     } else {
       stageExit(c.uid, ch, 0);
@@ -864,13 +884,25 @@ export default function MultiplayerGame({
     setUseProceedsItem(null);
     setSheet(null);
     if (item.offerIndex != null) {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.c.uid, choice: "accept", offerIndex: item.offerIndex, keepPct: keep }]);
+      setOfferDecisions((arr) => [...arr, {
+        holdingUid: item.c.uid, choice: item.reneg ? "reneg" : "accept", offerIndex: item.offerIndex, keepPct: keep,
+      }]);
       setExitQueueCursor((i) => i + 1);
     } else {
       stageExit(item.c.uid, item.action, keep);
     }
   }
 
+  /* Annehmen und Nachverhandeln führen beide zu einem Erlös, über dessen
+     Verwendung der GP entscheidet. Bis zum 18.10.2026 fragte nur das Annehmen
+     danach, und auch das unsichtbar: Der Gebotsdialog blieb stehen und lag
+     über dem Verwendungsdialog. Nachverhandeln schickte gar keinen Anteil mit
+     (der Server schüttete voll aus) und keinen offerIndex — verhandelt wurde
+     dann immer das erste Gebot, gleich welches angeklickt war.
+
+     Beim Nachverhandeln steht der Preis erst in der Auswertung fest. Der
+     Regler zeigt deshalb das Gebot vor der Verhandlung; keepPct ist ein
+     Anteil und gilt für den tatsächlichen Erlös. */
   function decideOfferStage(offer: Any, action: "accept" | "reneg" | "abort") {
     haptic(action === "abort" ? 20 : 10);
     const item = exitQueueItem;
@@ -879,18 +911,13 @@ export default function MultiplayerGame({
       setExitQueueCursor((i) => i + 1);
       return;
     }
-    if (action === "reneg") {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: "reneg" }]);
-      setExitQueueCursor((i) => i + 1);
-      return;
-    }
     const offerIndex = item.offers.indexOf(offer);
     const c = me.holdings.find((h: Any) => h.uid === item.holdingUid);
-    const net = exitNetOf(c, offer.price, PROC_FEE);
-    if (c && recycleRoom(me, net, quarter) > 0.5) {
-      setUseProceedsItem({ c, net, offerIndex });
+    const net = c ? exitNetOf(c, offer.price, PROC_FEE) : 0;
+    if (c && recycleRoom(me, net, currentHalfYear) > 0.5) {
+      setUseProceedsItem({ c, net, offerIndex, reneg: action === "reneg" });
     } else {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: "accept", offerIndex, keepPct: 0 }]);
+      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: action, offerIndex, keepPct: 0 }]);
       setExitQueueCursor((i) => i + 1);
     }
   }
@@ -1341,6 +1368,12 @@ export default function MultiplayerGame({
                       wird mit dem Halbjahresabschluss ausgeführt.
                     </p>
                   )}
+                  {stagedOfferByHolding[c.uid] && stagedOfferByHolding[c.uid].choice !== "abort" && (
+                    <p className="hint" style={{ margin: "-8px 16px 14px" }}>
+                      ✓ Gebot {stagedOfferByHolding[c.uid].choice === "reneg" ? "zur Nachverhandlung vorgemerkt" : "angenommen"} —
+                      wird mit dem Halbjahresabschluss vollzogen.
+                    </p>
+                  )}
                 </div>
               );
             })}
@@ -1482,12 +1515,16 @@ export default function MultiplayerGame({
           onClose={() => setBriefOpen(false)}
         />
       )}
-      {!briefOpen && !sheet && !initPick && shortlistItem && (
+      {/* Beide Dialoge stehen in der Seite nach dem Verwendungsdialog und damit
+          über ihm (gleicher z-index). Solange dort entschieden wird, bleiben
+          sie weg — der Gebotsdialog rückt ohnehin erst nach der Entscheidung
+          zum nächsten Angebot weiter. */}
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}
           holding={me.holdings.find((h: Any) => h.uid === shortlistItem.holdingUid)}
           analysis={me.attrs.analysis} hire={hireStage} reject={rejectStage} />
       )}
-      {!briefOpen && !sheet && !initPick && !shortlistItem && exitQueueItem && (
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && !shortlistItem && exitQueueItem && (
         <Offers item={exitQueueItem} holding={me.holdings.find((h: Any) => h.uid === exitQueueItem.holdingUid)}
           market={state.market} neg={NEG} decide={decideOfferStage} />
       )}

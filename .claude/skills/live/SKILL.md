@@ -49,6 +49,7 @@ Parameter der Route:
 | `hy=N` | Halbjahr, in dem die Partie steht (1–20). Ab 16 greift die Tail-End-Vorschau. Ausgewertet sind N−1 Halbjahre — über das N-te wird gerade entschieden. |
 | `hold=1` | Nichts verkaufen. Ohne das steht das Portfolio spät in der Laufzeit leer. |
 | `breach=1` | Genau ein Unternehmen, danach nur Zukäufe, bis der Covenant reißt und das Portfolio leer ist. Für alles, was ein Totalverlust auslöst. |
+| `proc=1` | Exits über den Verkaufsprozess, für alle reifen Beteiligungen zugleich; Platz 0 kauft dafür früher. Mit `hy=10&proc=1&seed=24` stehen Gebote in der Investitionsperiode an (Erlösdialog mit Regler), mit `hy=11` danach. Für Gebote, Nachverhandeln und die Verwendung der Erlöse. |
 | `seed=N` | Anderer Startwert derselben Mechanik. Der Weg zu jedem Zustand, den die Standardpartie nicht hergibt — suchen lässt er sich mit einem kurzen Vitest-Lauf über `runQuarter`, statt ihn im Browser zu erwürfeln. |
 
 Gefahren im Browser dann mit `node .claude/skills/live/drive.mjs` als

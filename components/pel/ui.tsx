@@ -1013,6 +1013,11 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   const st = c.st ?? 1;
   const blocked = c.block > quarter;
   const inProc = !!c.proc;
+  /* proc.sale: kein Bieterverfahren, sondern ein im laufenden Halbjahr
+     vorgemerkter Verkauf (bilateral, angenommenes Gebot), den die Partie mit
+     dem Halbjahresabschluss vollzieht. Die Exit-Schaltflächen sind zu wie bei
+     einem laufenden Prozess, aber es kommen keine Gebote mehr. */
+  const sold = !!c.proc?.sale;
   const locked = !!c.lockUntil;
   const ripe = c.holdQ >= MIN_HOLD && !locked;
   const canProc = ripe && !inProc && !blocked;      // Prozess: gesperrt nach Abbruch
@@ -1059,7 +1064,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           {st < 1 && <span>{Math.round(st * 100)} % Anteil</span>}
         </>}
         state={<StatePill tone={inProc ? "gold" : health.attention ? "att" : ""}>
-          {inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
+          {sold ? "✓ Verkauf vorgemerkt" : inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
         </StatePill>}
         abilities={(c.flag || c.ltip || health.top) && (
           <div className="babils">
@@ -1264,7 +1269,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
         )}
       </Section>
 
-      {inProc && (
+      {inProc && !sold && (
         <div className="bnote gold">
           📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
           der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
@@ -1829,7 +1834,7 @@ export function TailEndPeek({ fund, market, quarter }) {
       <br /><br />
       Diese Zeile rechnet genau das auf dem heutigen Bestand: Was bliebe, wenn du ab jetzt nichts mehr
       verkaufst. Die Differenz ist der Preis des Liegenlassens — und sie wächst, je näher das Ende
-      rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q)}.
+      rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q + 1)}.
     </Info>
   );
   /* Als eine Zeile, nicht als Warnkasten: Sie steht direkt unter TVPI und IRR
@@ -2487,10 +2492,19 @@ export function MarketChart({ hist }) {
    Euro arbeitet — das hebt den TVPI. Es kostet aber IRR, und zwar systematisch:
    Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
    Abruf morgen; Einbehalten ergibt beides gar nicht. Der frühere Rückfluss
-   gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.        */
+   gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
+
+   `quarter` ist wie überall in den Ansichten die Zahl der ausgewerteten
+   Halbjahre. Verbucht wird der Erlös im Halbjahr danach — dort prüfen
+   applyProceeds() und der Server die Investitionsperiode, also hier auch.
+
+   Aufgebaut wie der Fuß einer Dealkarte (bfoot, bdial, Row) und in der Farbe
+   der verkauften Beteiligung: derselbe Regler wie beim Gebot, statt des
+   Systemreglers, dessen Fahrbahn im dunklen Theme hell über allem stand.    */
 export function UseProceeds({ item, me, quarter, settle }) {
   const { net, c } = item;
-  const room = recycleRoom(me, net, quarter);
+  const decQ = quarter + 1;
+  const room = recycleRoom(me, net, decQ);
   const [keep, setKeep] = useState(0);
   const rec = Math.min(room, net * keep);
   const dist = net - rec;
@@ -2498,24 +2512,37 @@ export function UseProceeds({ item, me, quarter, settle }) {
   const investAfter = investableOf(me, quarter) + rec;
   return (
     <div className="modal">
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}
+        style={{ "--own": identityOf(c.name, c.sector).own } as React.CSSProperties}>
         <div className="tomb">
           <div className="sub">Verwendung der Erlöse</div>
           <div className="amt" style={{ fontSize: 24 }}>{eur(net)}</div>
-          <div className="sub">aus dem Exit von {c.name}</div>
+          <div className="sub">{item.reneg ? "Gebot vor Nachverhandlung · " : ""}aus dem Exit von {c.name}</div>
         </div>
-        <div className="card">
-          <div className="slrow"><span>Im Fonds einbehalten</span>
-            <span className="slval">{Math.round((rec / Math.max(0.01, net)) * 100)} % · {eur(rec)}</span></div>
-          <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
-            onChange={(e) => { haptic("select"); setKeep(+e.target.value / 100); }} />
-          <table className="kv" style={{ marginTop: 10 }}><tbody>
-            <tr><td className="lab">An die Limited Partner</td><td>{eur(dist)}</td></tr>
-            <tr><td className="lab">Verfügbar für neue Deals</td><td>{eur(investAfter)}</td></tr>
-            <tr><td className="lab">Recycling-Spielraum</td>
-              <td>{eur(capLeft)}{quarter > INVEST_PERIOD ? " — Investitionsperiode beendet" : ""}</td></tr>
-          </tbody></table>
-          <p className="hint" style={{ marginTop: 10 }}>
+        <div className="bfoot">
+          <div className="bdial">
+            <div className="slrow"><span>Im Fonds einbehalten</span>
+              <span className="slval">{Math.round((rec / Math.max(0.01, net)) * 100)} % · {eur(rec)}</span></div>
+            <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
+              onChange={(e) => { const v = +e.target.value / 100; if (v !== keep) haptic("select"); setKeep(v); }} />
+          </div>
+          <div className="bfnums">
+            <Row k="An die Limited Partner" v={eur(dist)} />
+            <Row k="Verfügbar für neue Deals" v={eur(investAfter)} />
+            <Row k="Recycling-Spielraum" v={eur(capLeft)} />
+          </div>
+        </div>
+        <div style={{ padding: "12px 16px 0" }}>
+          {decQ > INVEST_PERIOD && (
+            <p className="hint" style={{ margin: "0 0 8px" }}>Die Investitionsperiode ist beendet.</p>
+          )}
+          {item.reneg && (
+            <p className="hint" style={{ margin: "0 0 8px" }}>
+              Der Endpreis steht erst nach der Nachverhandlung fest. Der gewählte Anteil gilt für den
+              tatsächlichen Erlös — auch wenn am Ende das nächste Gebot zum Zug kommt.
+            </p>
+          )}
+          <p className="hint" style={{ margin: 0 }}>
             Einbehalten hebt den TVPI und kostet IRR.
             <Info t="Einbehalten oder ausschütten">
               Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
@@ -2527,7 +2554,7 @@ export function UseProceeds({ item, me, quarter, settle }) {
             </Info>
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, margin: "0 16px 24px" }}>
+        <div style={{ display: "flex", gap: 8, margin: "16px 16px 24px" }}>
           <button style={{ flex: 1 }} onClick={() => settle(0)}>Voll ausschütten</button>
           <button className="solid" style={{ flex: 1 }} onClick={() => settle(keep)}>
             {rec > 0.5 ? `${eur(rec)} einbehalten` : "Bestätigen"}
