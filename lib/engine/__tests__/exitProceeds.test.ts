@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, SECNAMES, SECTORS } from "../engine";
+import { CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, SECNAMES, SECTORS } from "../engine";
+import type { EngineCompat } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
-import type { OfferDecisionIntent, RuntimeFund, RuntimeState } from "../turnTypes";
+import type { ExitStartIntent, OfferDecisionIntent, RuntimeFund, RuntimeState } from "../turnTypes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -88,5 +89,38 @@ describe("Verwendung der Erlöse aus einem Verkaufsprozess", () => {
     const danach = entscheide(INVEST_PERIOD + 1, { choice: "accept", offerIndex: 0, keepPct: 1 });
     expect(danach.verkauft).toBe(true);
     expect(danach.einbehalten).toBe(0);
+  });
+});
+
+/* Nach einem abgebrochenen Prozess ist die Beteiligung für den nächsten
+   Prozess gesperrt — ein bilateraler Verkauf bleibt möglich. Bis zum
+   18.10.2026 verwarf der Server während der Sperre jeden Exit; die
+   Wiederholung alter Halbjahre rechnet weiter so (LEGACY_COMPAT). */
+describe("Sperre nach abgebrochenem Verkaufsprozess", () => {
+  function nachAbbruch(action: ExitStartIntent["action"], compat?: EngineCompat) {
+    const { state, rng, uid } = mitGeboten();
+    const s1 = runQuarter({ state, halfYear: 3, rng,
+      decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, choice: "abort" }] } } }).state;
+    const gesperrt = (s1.funds[0].holdings as Any[]).find((h) => h.uid === uid);
+    const s2 = runQuarter({ state: s1, halfYear: 4, rng, compat,
+      decisionsBySlot: { 0: { exitStarts: [{ holdingUid: uid, action, keepPct: 0 } as ExitStartIntent] } } }).state;
+    const h = (s2.funds[0].holdings as Any[]).find((x) => x.uid === uid);
+    return { block: gesperrt?.block, verkauft: !h, imProzess: !!h?.proc };
+  }
+
+  it("lässt den bilateralen Verkauf während der Sperre zu", () => {
+    const r = nachAbbruch("bilateral");
+    expect(r.block).toBe(5);
+    expect(r.verkauft).toBe(true);
+  });
+
+  it("sperrt den nächsten Verkaufsprozess weiterhin", () => {
+    const r = nachAbbruch("process");
+    expect(r.verkauft).toBe(false);
+    expect(r.imProzess).toBe(false);
+  });
+
+  it("rechnet alte Halbjahre nach dem alten Regelstand nach", () => {
+    expect(nachAbbruch("bilateral", LEGACY_COMPAT).verkauft).toBe(false);
   });
 });

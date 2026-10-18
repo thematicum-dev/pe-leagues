@@ -332,13 +332,17 @@ export interface EngineCompat {
      initDur(E) + 1 Halbjahre zwischen Signing und Closing, seit dem
      16.09.2026 fallen beide in dasselbe Halbjahr (buildInit).               */
   legacyAddonMandate?: boolean;
+  /* Bis 18.10.2026 sperrte ein abgebrochener Verkaufsprozess für zwei
+     Halbjahre jeden Exit der Beteiligung, auch den bilateralen — obwohl die
+     Karte "Bilateral bleibt möglich" sagte (siehe runQuarter, Exits).       */
+  legacyBlockAllExits?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
-  legacyAddonMandate: true,
+  legacyAddonMandate: true, legacyBlockAllExits: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
