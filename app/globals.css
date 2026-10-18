@@ -899,3 +899,43 @@ body {
     animation: none !important;
   }
 }
+
+/* Einladungslink im Dashboard: Adresse und Kopierknopf in einer Zeile,
+   auf schmalen Bildschirmen untereinander. Die Karte hat keine Überschrift,
+   der Hinweis bringt deshalb den Abstand nach oben selbst mit. */
+.invitehint {
+  margin: 16px 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.invitelink {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.invitelink input {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.dashcard .invitelink .btn-primary {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+@media (max-width: 520px) {
+  .dashcard .invitelink .btn-primary {
+    flex-basis: 100%;
+  }
+}
