@@ -30,7 +30,7 @@ function runGoldenGame() {
   SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
   const attrs = { sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 };
   const fund = {
-    cash: CAPITAL, proceeds: 0, investedTotal: 0, fees: 0, holdings: [], realized: [],
+    name: "Testfonds", cash: CAPITAL, proceeds: 0, investedTotal: 0, fees: 0, holdings: [], realized: [],
     undrawn: CAPITAL, drawn: 0, recyc: 0, recycled: 0, distTotal: 0, accrued: 0, calls: [], dists: [],
   };
   let uidCounter = 0;
@@ -43,7 +43,7 @@ function runGoldenGame() {
     const ev = eb * mult;
     const entryEquity = ev - eb * lev + ev * ENTRY_FEE;
     if (entryEquity > investableOf(fund, quarter)) return null;
-    const c = {
+    const c: Record<string, unknown> & { baseLoad?: number } = {
       uid: "c" + uidCounter++, name: d.name, sector: d.sector, desc: d.desc,
       revenue: d.revenue, margin: d.margin, quality: d.quality,
       netDebt: eb * lev, rate: BASE_RATE - 0.25 * attrs.financing,

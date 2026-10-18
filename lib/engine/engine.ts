@@ -49,7 +49,11 @@ export const P2 = ["ner", "avit", "mann", "burg", "feld", "tec", "mont", "sys", 
 /* Geschäftsmodell-Katalog: DACH-Mittelstandsarchetypen.
    m = EBITDA-Marge, g = Wachstum p.a., rb = Umsatzband, lev = Leverage-Kapazität,
    q = Qualitätsscore, fl = typische Risikoflaggen */
-export const BOOK = {
+type Band = [number, number];
+export interface Archetype {
+  s: string[]; cx: number; nw: number; m: Band; g: Band; rb: Band; lev: Band; q: Band; fl: string[]; d: string;
+}
+export const BOOK: Record<string, Archetype[]> = {
   Industrials: [
     { s: ["Dichtungstechnik", "Polymertechnik"], cx: 5, nw: 20, m: [11, 17], g: [0, 3], rb: [30, 120], lev: [3.2, 4.2], q: [35, 60], fl: ["Kundenkonzentration", "Margendruck"],
       d: "Hersteller von Präzisionsdichtungen für Hydraulik- und Pneumatikanwendungen. Serienfertigung an zwei deutschen Standorten, rund 60 % des Umsatzes mit Tier-1-Zulieferern der Nutzfahrzeugindustrie, Rest Bau- und Landmaschinen." },
@@ -1087,7 +1091,13 @@ export function buildInit(
   const ok = rng.rnd() < p;
   const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
     : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
-  let patch = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
+  /* Was die Maßnahme in die laufende Initiative mitnimmt: Zukäufe die Daten
+     des Signings (ma … ok), alle übrigen ihren Ergebnisbeitrag (gain). */
+  let patch: {
+    drag: number; cx: number; nwcRun: number;
+    ma?: boolean; addEb?: number; mult?: number; price?: number; equity?: number; addDebt?: number;
+    fail?: number; gain?: number; ok?: boolean;
+  } = { drag: spec.drag || 0, cx: spec.cx || 0, nwcRun: spec.nwcRun || 0 };
   let debt = ebitdaOf(c) * (spec.oneOff || 0);
   if (spec.ma) {
     if (!chk.ok) return { blocked: chk };
@@ -1208,7 +1218,7 @@ export const PROC_Q = 2;           // Dauer eines Verkaufsprozesses in Halbjahre
 export const IPO_EBITDA = 25;      // Mindest-EBITDA für ein Börsenfenster
 
 // Gebote am Ende eines Verkaufsprozesses
-export function makeOffers(rng: Rng, c, market, funds, neg, q) {
+export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: number; holdings: unknown[] }[], neg, q) {
   const fair = fairOf(c, market, neg, q);
   const out = [];
   const fit = rng.rnd() < 0.6;
@@ -1325,14 +1335,14 @@ export function endPressure(q) {
   return LIQ_DISC * (END_PRESSURE_FROM - left) / END_PRESSURE_FROM;
 }
 
-export function dealMultiple(c, market, neg, q) {
+export function dealMultiple(c, market, neg, q?) {
   return Math.max(2, markMultiple(c, market) * (1 + 0.02 * neg) - endPressure(q));
 }
 export const evOf = (c, mult) => ebitdaOf(c) * mult;
 export const eqvOf = (c, mult) => (evOf(c, mult) - c.netDebt) * (c.st ?? 1);
 
 export const navValueOf = (c, market) => Math.max(0, eqvOf(c, markMultiple(c, market)));
-export const fairOf = (c, market, neg, q) => Math.max(0, eqvOf(c, dealMultiple(c, market, neg, q)));
+export const fairOf = (c, market, neg, q?) => Math.max(0, eqvOf(c, dealMultiple(c, market, neg, q)));
 
 export function navOf(f, market) {
   return f.holdings.reduce((s, c) => s + navValueOf(c, market), 0);
@@ -1388,7 +1398,7 @@ export const investableOf = (f, quarter) =>
    Abruf nicht zustande. Für Gebühren, die dann ungedeckt bleiben (nach
    Totalverlusten möglich), läuft eine Verbindlichkeit auf, die mit der nächsten
    Ausschüttung verrechnet wird. Kein Abruf über das Commitment hinaus.       */
-export function spendFund(f, amt, quarter, accrue) {
+export function spendFund(f, amt, quarter, accrue?) {
   if (!(amt > 0)) return false;
   const fromRecyc = Math.min(amt, f.recyc || 0);
   let call = amt - fromRecyc;
@@ -2488,7 +2498,7 @@ export function lboProjection(
   };
 }
 
-export const impliedMoM = (d, mult, lev, financing, opts) => {
+export const impliedMoM = (d, mult, lev, financing, opts: { years?: number; drift?: number } = {}) => {
   const p = lboProjection(d, mult, lev, financing, opts);
   return p ? p.mom : null;
 };

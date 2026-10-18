@@ -47,8 +47,8 @@ function mitGeboten() {
   const c = (state.funds[0].holdings as Any[])[0];
   expect(c).toBeTruthy();
   const offers = [
-    { buyer: "Bieter A", price: c.entryEquity * 1.6, risk: 0, note: "" },
-    { buyer: "Bieter B", price: c.entryEquity * 1.8, risk: 0, note: "" },
+    { buyer: "Bieter A", kind: "sponsor", price: c.entryEquity * 1.6, risk: 0, note: "" },
+    { buyer: "Bieter B", kind: "sponsor", price: c.entryEquity * 1.8, risk: 0, note: "" },
   ];
   state = { ...state, exitQueue: { 0: [{ holdingUid: c.uid, name: c.name, offers }] } };
   return { state, rng, uid: c.uid as string };

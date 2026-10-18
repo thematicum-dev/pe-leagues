@@ -36,13 +36,13 @@ import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
 import {
-  BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
-  IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
+  BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
+  IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, ddCostOf, dpiOf,
+  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
   eur, exitNetOf, fairOf, healthOf,
-  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  navValueOf, recycleRoom, scoreOf, tvccOf, tvpiOf, x,
+  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initsOf, investableOf, irrOf,
+  recycleRoom, scoreOf, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -663,10 +663,9 @@ export default function MultiplayerGame({
   const rootRef = useRef<HTMLDivElement>(null);
   useFadeOnChange(rootRef, submitted, { lift: 0, duration: 320 });
 
-  if (!me) return null;
-
-  const NEG = me.attrs.negotiation;
-
+  /* Alle Hooks stehen vor dem frühen Return unten: React verlangt in jedem
+     Render dieselbe Reihenfolge der Hooks. Hinter dem Return wären sie
+     bedingt -- ändert sich `me` zwischen zwei Renders, bricht React ab. */
   function initKey(uid: string, dim: string) { return `${uid}:${dim}`; }
   const stagedInitByKey = useMemo(() => {
     const map: Record<string, InitiativeIntent> = {};
@@ -678,18 +677,35 @@ export default function MultiplayerGame({
     searches.forEach((s) => { (map[s.holdingUid] ??= []).push(s); });
     return map;
   }, [searches]);
-  /* Bewusst ohne useMemo: Die Liste hat höchstens so viele Einträge wie das
-     Portfolio Beteiligungen, und die Hooks dieser Komponente stehen hinter
-     einem frühen Return — ein weiterer wäre ein weiterer bedingter Hook. */
-  const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
-  equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
-  const stagedOfferByHolding: Record<string, OfferDecisionIntent> = {};
-  offerDecisions.forEach((o) => { stagedOfferByHolding[o.holdingUid] = o; });
   const stagedExitByHolding = useMemo(() => {
     const map: Record<string, ExitStartIntent> = {};
     exitStarts.forEach((e) => { map[e.holdingUid] = e; });
     return map;
   }, [exitStarts]);
+
+  const rank = useMemo(
+    () =>
+      [...state.funds]
+        .map((f) => ({
+          ...f, tvcc: tvccOf(f, state.market, quarter), tvpi: tvpiOf(f, state.market, quarter),
+          dpi: dpiOf(f, state.market, quarter),
+          irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
+          score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
+        }))
+        .sort((a, b) => b.score - a.score),
+    [state.funds, state.market, quarter, humanSlot],
+  );
+
+  if (!me) return null;
+
+  const NEG = me.attrs.negotiation;
+
+  /* Bewusst ohne useMemo: Die Liste hat höchstens so viele Einträge wie das
+     Portfolio Beteiligungen. */
+  const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
+  equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
+  const stagedOfferByHolding: Record<string, OfferDecisionIntent> = {};
+  offerDecisions.forEach((o) => { stagedOfferByHolding[o.holdingUid] = o; });
 
   // Legt eine "so, als ob"-Ansicht der Beteiligung an: dieselbe Holding-Karte
   // wie im Original zeigt vorgemerkte Suchen/Maßnahmen/MEP/Exits als laufend,
@@ -762,7 +778,7 @@ export default function MultiplayerGame({
 
   // Freie Operating-Kapazität wie im Original, aber inklusive dessen, was
   // in dieser Sitzung schon vorgemerkt (noch nicht abgeschickt) wurde.
-  const busySlots = me.holdings.reduce((n: number, c: Any) => n + initsOf(patchHolding(c)).length, 0);
+  const busySlots = me.holdings.reduce<number>((n, c: Any) => n + initsOf(patchHolding(c)).length, 0);
   const maxInitSlots = INIT_SLOTS + Math.floor(me.attrs.operations / 2);
   const freeSlots = maxInitSlots - busySlots;
 
@@ -957,19 +973,6 @@ export default function MultiplayerGame({
     setEquityInjections((arr) => [...arr.filter((i) => i.holdingUid !== uid), { holdingUid: uid, amount }]);
   }
 
-  const rank = useMemo(
-    () =>
-      [...state.funds]
-        .map((f) => ({
-          ...f, tvcc: tvccOf(f, state.market, quarter), tvpi: tvpiOf(f, state.market, quarter),
-          dpi: dpiOf(f, state.market, quarter),
-          irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
-          score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
-        }))
-        .sort((a, b) => b.score - a.score),
-    [state.funds, state.market, quarter, humanSlot],
-  );
-
   /* Vorstand für die Halbjahresspalte der Value Bridge: der Zustand vor dem
      zuletzt ausgewerteten Halbjahr. history endet auf dem aktuellen Stand. */
   const prevRow = history[history.length - 2];
@@ -984,7 +987,6 @@ export default function MultiplayerGame({
   const meIdx = [...state.funds].sort((a, b) => a.slot - b.slot).findIndex((f) => f.slot === humanSlot);
 
   const dpi = dpiOf(me, state.market, quarter);
-  const gross = grossMoicOf(me, state.market);
   const tvcc = tvccOf(me, state.market, quarter);
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
@@ -1326,7 +1328,7 @@ export default function MultiplayerGame({
           <>
             <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
-              <SectorSplit holdings={me.holdings} market={state.market} cash={me.cash} />
+              <SectorSplit holdings={me.holdings} market={state.market} />
             </div>
             <SeasonDrivers fund={me} market={state.market} quarter={quarter}
               prev={prevBridgeState} />
@@ -1349,7 +1351,7 @@ export default function MultiplayerGame({
               const stagedExit = stagedExitByHolding[c.uid];
               return (
                 <div key={c.uid}>
-                  <Holding c={patched} market={state.market} neg={NEG} quarter={quarter}
+                  <Holding c={patched} market={state.market} quarter={quarter}
                     procCount={me.holdings.filter((h: Any) => h.proc).length} freeSlots={freeSlots}
                     act={{
                       proc: () => previewExit(c, "proc"), bil: () => previewExit(c, "bil"),

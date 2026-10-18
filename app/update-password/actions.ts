@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/forms";
 
-export async function updatePassword(_prevState: unknown, formData: FormData) {
+export async function updatePassword(_prevState: FormState, formData: FormData): Promise<FormState> {
   const password = String(formData.get("password") ?? "");
   const passwordConfirm = String(formData.get("passwordConfirm") ?? "");
 

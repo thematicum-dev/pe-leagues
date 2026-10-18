@@ -2,8 +2,9 @@
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/forms";
 
-export async function signup(_prevState: unknown, formData: FormData) {
+export async function signup(_prevState: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const passwordConfirm = String(formData.get("passwordConfirm") ?? "");

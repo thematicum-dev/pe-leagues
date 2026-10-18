@@ -100,5 +100,5 @@ export function haptic(p: HapticKind | number | number[] = "tap") {
       }
       at += v;
     });
-  } catch (_) { /* Haptik ist Beiwerk — sie darf nie etwas kaputt machen */ }
+  } catch { /* Haptik ist Beiwerk — sie darf nie etwas kaputt machen */ }
 }
