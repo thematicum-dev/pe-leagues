@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, SECNAMES, SECTORS } from "../engine";
+import {
+  CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, PERIODS, SECNAMES, SECTORS, dpiOf, tvpiOf,
+} from "../engine";
 import type { EngineCompat } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { ExitStartIntent, OfferDecisionIntent, RuntimeFund, RuntimeState } from "../turnTypes";
@@ -91,6 +93,20 @@ describe("Verwendung der Erlöse aus einem Verkaufsprozess", () => {
     const spaet = entscheide(INVEST_PERIOD + 5, { choice: "accept", offerIndex: 0, keepPct: 1 });
     expect(spaet.verkauft).toBe(true);
     expect(spaet.einbehalten).toBeCloseTo(spaet.erloes, 6);
+  });
+
+  /* Wer im letzten Halbjahr einbehält, kann nicht mehr investieren. Die
+     Endabrechnung schüttet das Einbehaltene deshalb aus: Der DPI erreicht den
+     TVPI, und im Fonds bleibt nichts liegen. */
+  it("schüttet am Laufzeitende aus, was einbehalten und nicht mehr investiert wurde", () => {
+    const { state, rng, uid } = mitGeboten();
+    const out = runQuarter({ state, halfYear: PERIODS, rng,
+      decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, choice: "accept", offerIndex: 0, keepPct: 1 }] } } });
+    const f = out.state.funds[0] as Any;
+    expect(f.recycled).toBeGreaterThan(0.5);
+    expect(f.recyc).toBe(0);
+    expect(f.holdings.length).toBe(0);
+    expect(dpiOf(f, out.state.market, PERIODS)).toBeCloseTo(tvpiOf(f, out.state.market, PERIODS), 6);
   });
 
   it("rechnet alte Halbjahre mit dem Ende der Investitionsperiode nach", () => {

@@ -928,7 +928,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
 
   let finalFunds = F;
   if (q >= PERIODS) {
-    finalFunds = liquidateAll(F, mk, q, news);
+    finalFunds = liquidateAll(F, mk, q, news, compat);
   }
 
   return {
@@ -963,12 +963,14 @@ export function computeFinalRanking(state: RuntimeState, halfYear: number) {
     .sort((a, b) => b.score - a.score);
 }
 
-function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[]): RuntimeFund[] {
+function liquidateAll(
+  F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[], compat: EngineCompat,
+): RuntimeFund[] {
   return F.map((f) => {
     const g = cloneFund(f);
     // Die Rechnung selbst steht in lib/engine/engine.ts, damit Übungsmodus und
     // Vorschau (tailEndOf) nicht von ihr abweichen können.
-    liquidateHoldings(g, mk, q).forEach(({ c, gross, net, moic }) => {
+    liquidateHoldings(g, mk, q, compat).forEach(({ c, gross, net, moic }) => {
       if (!g.isAi) {
         pushFeed(news, q, moic >= 1 ? "⏳" : "💀", moic >= 1 ? "neu" : "neg",
           `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);

@@ -338,7 +338,9 @@ export interface EngineCompat {
   legacyBlockAllExits?: boolean;
   /* Bis 18.10.2026 durfte ein Exiterlös nur innerhalb der
      Investitionsperiode (bis Halbjahr INVEST_PERIOD) einbehalten werden,
-     danach wurde zwingend voll ausgeschüttet (siehe recycleRoom).          */
+     danach wurde zwingend voll ausgeschüttet (siehe recycleRoom). Und am
+     Laufzeitende blieben einbehaltene, nicht reinvestierte Erlöse stehen,
+     statt ausgeschüttet zu werden (siehe releaseRecycled).                 */
   legacyRecycleInvestPeriod?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
@@ -2292,7 +2294,7 @@ export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c
    und die Kopie im Übungsmodus schrieb keine Value Bridge mit: Die
    Endabrechnung einer Übungspartie verlor damit jeden Tail-End-Deal in den
    Restposten "Transaktionskosten", obwohl dort die halbe Partie steckte.   */
-export function liquidateHoldings(f, market, quarter) {
+export function liquidateHoldings(f, market, quarter, compat: EngineCompat = {}) {
   const out = [];
   (f.holdings || []).forEach((c) => {
     // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
@@ -2307,7 +2309,31 @@ export function liquidateHoldings(f, market, quarter) {
     out.push({ c, gross, net, moic });
   });
   f.holdings = [];
+  if (!compat.legacyRecycleInvestPeriod) releaseRecycled(f, quarter);
   return out;
+}
+
+/* Am Laufzeitende fließt auch zurück, was einbehalten und nicht mehr
+   investiert wurde. TVPI und IRR zählen es ohnehin als Endwert im letzten
+   Halbjahr (totalValueOf, cashflowsOf) — ausgeschüttet war es aber nicht, und
+   der DPI blieb um genau diesen Betrag unter dem TVPI. Seit Recycling über die
+   ganze Laufzeit geht (18.10.2026), ist das der Normalfall: Wer im letzten
+   Halbjahr einbehält, kann nicht mehr investieren. Wie in applyProceeds
+   werden aufgelaufene Gebühren vorher bedient.                             */
+function releaseRecycled(f, quarter) {
+  const amt = f.recyc || 0;
+  if (!(amt > 1e-9)) return;
+  f.recyc = 0;
+  f.cash -= amt;
+  let dist = amt;
+  if ((f.accrued || 0) > 0) {
+    const pay = Math.min(dist, f.accrued);
+    f.accrued -= pay; dist -= pay;
+  }
+  if (dist > 1e-9) {
+    f.dists = [...(f.dists || []), { q: quarter, amt: dist }];
+    f.distTotal = (f.distTotal || 0) + dist;
+  }
 }
 
 /* Dieselbe Verwertung als Vorschau, ohne den Fonds anzufassen: Was bliebe,

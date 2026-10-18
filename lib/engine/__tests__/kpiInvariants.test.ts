@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
-  SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS, INVEST_PERIOD,
+  SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
   fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep, bridgeChain, liveHist,
   tvpiOf, dpiOf, irrOf, scoreOf, cashflowsOf, navOf, totalValueOf, carryOf,
   IRR_FLOOR, IRR_CAP, TVPI_BENCH, IRR_BENCH, clamp,
@@ -73,7 +73,8 @@ function decide(style: Style, state: RuntimeState, hy: number, queue: Any): Turn
     const action = style === "teilexit"
       ? (hy % 3 === 0 ? "cv" : hy % 3 === 1 ? "ipo" : "process")
       : (hy % 2 === 0 ? "bilateral" : "process");
-    const keepPct = style === "recycling" && hy <= INVEST_PERIOD ? 0.9 : 0;
+    // Recycling ist seit dem 18.10.2026 über die ganze Laufzeit möglich
+    const keepPct = style === "recycling" ? 0.9 : 0;
     d.exitStarts = [{ holdingUid: mature[0].uid, action, keepPct } as Any];
   }
   return d;

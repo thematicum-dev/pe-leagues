@@ -2489,7 +2489,8 @@ export function MarketChart({ hist }) {
 /* ---------- Verwendung der Exiterlöse ----------
    Die Entscheidung, die es vorher nicht gab: Was zurück an die Investoren geht
    und was im Fonds bleibt. Einbehalten heißt, dass mehr Kapital je abgerufenem
-   Euro arbeitet — das hebt den TVPI. Es kostet aber IRR, und zwar systematisch:
+   Euro arbeitet — das hebt den TVPI, sofern der nächste Deal mehr verdient als
+   der Fonds bisher. Es kostet aber IRR, und zwar systematisch:
    Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
    Abruf morgen; Einbehalten ergibt beides gar nicht. Der frühere Rückfluss
    gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
@@ -2540,11 +2541,12 @@ export function UseProceeds({ item, me, quarter, settle }) {
             </p>
           )}
           <p className="hint" style={{ margin: 0 }}>
-            Einbehalten hebt den TVPI und kostet IRR.
+            Einbehalten kostet IRR — den TVPI hebt es nur mit einem guten Folgedeal.
             <Info t="Einbehalten oder ausschütten">
               Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
-              Multiple, verschiebt aber den Rückfluss nach hinten und setzt den Betrag erneut dem Risiko
-              aus — im IRR gewinnt der frühere Rückfluss immer.
+              Multiple, wenn der nächste Deal mehr verdient als der Fonds bisher — verschiebt aber den
+              Rückfluss nach hinten und setzt den Betrag erneut dem Risiko aus. Im IRR gewinnt der frühere
+              Rückfluss immer.
               <br /><br />
               Einbehalten lohnt, wenn ein konkreter Deal ansteht und das offene Commitment knapp ist.
               Ausschütten lohnt, wenn der Dealflow nichts Überzeugendes hergibt.

@@ -238,16 +238,16 @@ function Briefing({ dark, setDark, onStart }) {
           </Def>
           <Def t="Bei jedem Exit entscheidest du über die Verwendung">
             Wie viel zurück an die Investoren geht und wie viel im Fonds bleibt, ist deine Entscheidung —
-            innerhalb von zwei Schranken: nur bis Jahr 5, und kumuliert höchstens bis zur Höhe des
-            Commitments. Danach wird zwingend voll ausgeschüttet.
+            über die ganze Laufzeit, aber kumuliert höchstens bis zur Höhe des Commitments. Danach wird
+            zwingend voll ausgeschüttet.
           </Def>
           <Def t="Einbehalten kauft TVPI mit IRR">
-            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple.
-            Es kostet aber systematisch Verzinsung: Ausschütten und später neu abrufen ergibt einen
-            Rückfluss heute und einen Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss
-            gewinnt im IRR immer. Gemessen: durchgehend ausschütten bringt 1,94× bei 17,1 %, durchgehend
-            einbehalten 2,20× bei 15,8 %. Beides ist vertretbar — die Frage ist, ob du einen Deal hast,
-            der das Geld verdient.
+            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple,
+            aber nur, wenn der nächste Deal mehr verdient als der Fonds bisher. Die Verzinsung kostet es
+            dagegen immer: Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
+            Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss gewinnt im IRR immer.
+            Wer einbehält, ohne einen Deal zu haben, der das Geld verdient, verliert deshalb beides —
+            die Frage ist also nie „einbehalten oder nicht“, sondern „wofür“.
           </Def>
           <Def t="Das Commitment ist eine harte Grenze">
             Mehr als {eur(CAPITAL)} kannst du nicht abrufen. Und die Management Fee liegt innerhalb dieser
