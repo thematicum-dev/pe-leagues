@@ -1154,7 +1154,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
-                      <CashflowChart fund={f} scale={cfScale} />
+                      <CashflowChart fund={f} scale={cfScale} peers={funds} quarter={quarter} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c) => {
                         const val = fairOf(c, market, f.attrs.negotiation);

@@ -1430,7 +1430,7 @@ export default function MultiplayerGame({
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
-                      <CashflowChart fund={f} scale={cfScale} />
+                      <CashflowChart fund={f} scale={cfScale} peers={state.funds} quarter={quarter} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c: Any) => {
                         const val = fairOf(c, state.market, f.attrs.negotiation);

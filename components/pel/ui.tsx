@@ -2155,7 +2155,18 @@ export function cashflowScale(funds) {
 
 const cfNum = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE");
 
-export function CashflowChart({ fund, scale }) {
+/* Deployment Rate: kumuliert abgerufenes Kapital je Halbjahr in Prozent des
+   Commitments. Gemessen an den Abrufen, also einschließlich Management Fee und
+   Due Diligence — dieselbe Größe, die TVCC und TVPI trennt (TVCC = TVPI ×
+   Deployment Rate). Recycelte Erlöse, die wieder investiert werden, erscheinen
+   hier nicht: Sie werden nicht abgerufen. Index 0 bis PERIODS.             */
+export function deploymentByHalfYear(f) {
+  const { calls } = cashflowByHalfYear(f);
+  let s = 0;
+  return calls.map((c) => (s += c) / CAPITAL);
+}
+
+export function CashflowChart({ fund, scale, peers = [], quarter = PERIODS }) {
   const [sel, setSel] = useState(null);
   const { calls, dists } = cashflowByHalfYear(fund);
   const sumCalls = calls.reduce((a, b) => a + b, 0), sumDists = dists.reduce((a, b) => a + b, 0);
@@ -2177,6 +2188,30 @@ export function CashflowChart({ fund, scale }) {
   const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
   const shown = sel != null ? sel : null;
   const drawnPct = Math.round((fund.drawn || 0) / CAPITAL * 100);
+
+  /* Deployment Rate als zweite, schmale Grafik auf derselben Zeitachse — kein
+     zweiter Maßstab im Säulendiagramm (Mio. € und % in einer Fläche liest
+     niemand richtig). Der aufgeklappte Fonds als kräftige Linie, die übrigen
+     der Peer Group dünn in Grau als Vergleich. */
+  const upto = Math.max(1, Math.min(PERIODS, quarter));
+  const dep = deploymentByHalfYear(fund);
+  const DT = 6, DB = 46;
+  const dy = (v) => DB - Math.min(1, Math.max(0, v)) * (DB - DT);
+  const linePath = (arr) => hjs.filter((i) => i <= upto)
+    .map((i, n) => `${n ? "L" : "M"}${cx(i).toFixed(1)},${dy(arr[i]).toFixed(1)}`).join(" ");
+  // Die Partie kennt Fonds am Platz (slot), der Übungsmodus an der id
+  const keyOf = (f) => f.slot ?? f.id;
+  const others = peers.filter((p) => keyOf(p) !== keyOf(fund)).map(deploymentByHalfYear);
+  const depNow = dep[upto];
+  const hit = (key, y1, y2) => hjs.map((i) => (
+    /* Auswahl bleibt nach dem Antippen stehen: Bei Touch folgt pointerleave
+       unmittelbar auf den Tap und hätte sie sofort wieder gelöscht. Der
+       Fokusrahmen entfällt, die hinterlegte Spalte zeigt die Auswahl. */
+    <rect key={key + i} x={L + (i - 1) * slot} y={y1} width={slot} height={y2 - y1} fill="transparent"
+      tabIndex={0} style={{ outline: "none" }}
+      aria-label={`Halbjahr ${i}: ${eur(calls[i])} abgerufen, ${eur(dists[i])} ausgeschüttet, Deployment ${Math.round(dep[i] * 100)} %`}
+      onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+  ));
 
   /* Grafik und Zeilen auf derselben Rinne wie die Kopfzeile des Panels (14 px);
      die Tabelle bringt ihre eigene Einrückung mit und steht deshalb außerhalb. */
@@ -2211,23 +2246,54 @@ export function CashflowChart({ fund, scale }) {
             {i === 1 ? "HJ 1" : i}</text>
         ))}
         {/* Trefferflächen: das ganze Halbjahr, nicht nur die Säule */}
-        {hjs.map((i) => (
-          /* Auswahl bleibt nach dem Antippen stehen: Bei Touch folgt pointerleave
-             unmittelbar auf den Tap und hätte sie sofort wieder gelöscht. Der
-             Fokusrahmen entfällt, die hinterlegte Spalte zeigt die Auswahl. */
-          <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
-            tabIndex={0} style={{ outline: "none" }} aria-label={`Halbjahr ${i}: ${eur(calls[i])} abgerufen, ${eur(dists[i])} ausgeschüttet`}
-            onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
-        ))}
+        {hit("h", T, B)}
       </svg>
       <div className="mono" style={{ fontSize: 11, color: "var(--ink2)", minHeight: 16, marginTop: 2 }}>
         {shown != null
           ? <>HJ {shown} · Ausschüttung <b style={{ color: "var(--ink)" }}>+{cfNum(dists[shown])}</b> · Abruf <b style={{ color: "var(--ink)" }}>−{cfNum(calls[shown])}</b> Mio. €</>
           : "Halbjahr antippen für die Werte · Mio. €"}
       </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 10, fontSize: 11, color: "var(--ink2)" }}>
+        <span style={{ color: "var(--ink)", fontWeight: 600 }}>Deployment Rate</span>
+        <span>
+          <i style={{ display: "inline-block", width: 12, height: 2, background: "var(--ink)", marginRight: 5, verticalAlign: 3 }} />dieser Fonds
+          {others.length > 0 && <><i style={{ display: "inline-block", width: 12, height: 1.5, background: "var(--ink2)", opacity: .5, margin: "0 5px 0 12px", verticalAlign: 3 }} />Peer Group</>}
+        </span>
+      </div>
+      <svg viewBox="0 0 300 58" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+        aria-label={`Deployment Rate: ${Math.round(depNow * 100)} % der Zusage abgerufen nach Halbjahr ${upto}`}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+        {shown != null && <rect x={L + (shown - 1) * slot} y={DT} width={slot} height={DB - DT} style={{ fill: "var(--shade)" }} />}
+        {[[1, "100 %"], [0.5, "50 %"], [0, "0"]].map(([v, t]) => (
+          <g key={t}>
+            <line x1={L} y1={dy(v)} x2={R} y2={dy(v)} style={{ stroke: "var(--rule)" }} />
+            <text x={L - 4} y={dy(v) + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>{t}</text>
+          </g>
+        ))}
+        {others.map((arr, n) => (
+          <path key={n} d={linePath(arr)} fill="none" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round"
+            style={{ stroke: "var(--ink2)", opacity: .45 }} />
+        ))}
+        <path d={linePath(dep)} fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" style={{ stroke: "var(--ink)" }} />
+        <circle cx={cx(upto)} cy={dy(depNow)} r="3" strokeWidth="1.5" style={{ fill: "var(--ink)", stroke: "var(--card)" }} />
+        <text x={upto > 16 ? cx(upto) - 6 : cx(upto) + 6} y={dy(depNow) + (depNow > 0.85 ? 9 : -4)} fontSize="8.5" fontWeight="700"
+          textAnchor={upto > 16 ? "end" : "start"} fontFamily="JetBrains Mono" style={{ fill: "var(--ink)" }}>{Math.round(depNow * 100)} %</text>
+        {[1, 5, 10, 15, 20].map((i) => (
+          <text key={i} x={cx(i)} y={DB + 10} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+            {i === 1 ? "HJ 1" : i}</text>
+        ))}
+        {hit("d", DT, DB)}
+      </svg>
+      <div className="mono" style={{ fontSize: 11, color: "var(--ink2)", minHeight: 16, marginTop: 2 }}>
+        {shown != null && shown <= upto
+          ? <>HJ {shown} · <b style={{ color: "var(--ink)" }}>{Math.round(dep[shown] * 100)} %</b> der Zusage abgerufen</>
+          : <>Abgerufen in % der Zusage, inkl. Gebühren</>}
+      </div>
       </div>
       <table className="ledger" style={{ marginTop: 6 }}><tbody>
-        <tr><td className="lab">Abgerufen ({drawnPct} % der Zusage)</td><td>{eur(sumCalls)}</td></tr>
+        <tr><td className="lab">Abgerufen</td><td>{eur(sumCalls)}</td></tr>
+        <tr><td className="lab">Deployment Rate</td><td>{drawnPct} % der Zusage</td></tr>
         <tr><td className="lab">Ausgeschüttet</td><td>{eur(sumDists)}</td></tr>
         <tr><td className="lab">Saldo für die Investoren</td><td style={{ fontWeight: 600 }}>{sumDists - sumCalls >= 0 ? "+" : "−"}{eur(Math.abs(sumDists - sumCalls))}</td></tr>
       </tbody></table>
@@ -2236,7 +2302,7 @@ export function CashflowChart({ fund, scale }) {
         <table className="ledger"><tbody>
           {hjs.filter((i) => calls[i] > 0.05 || dists[i] > 0.05).map((i) => (
             <tr key={i}><td className="lab">HJ {i}</td>
-              <td>+{cfNum(dists[i])} / −{cfNum(calls[i])}</td></tr>
+              <td>+{cfNum(dists[i])} / −{cfNum(calls[i])} · {Math.round(dep[i] * 100)} %</td></tr>
           ))}
         </tbody></table>
       </details>
