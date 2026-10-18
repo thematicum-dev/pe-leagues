@@ -157,7 +157,7 @@ export default async function DashboardPage() {
 
         <div className="dashsection">
           <h2>Mitspieler</h2>
-          <span className="dashsub">Je mehr mitspielen, desto schneller füllen sich die Partien</span>
+          <span className="dashsub">Lade deine Freunde ein, mit denen Du eine Runde spielen möchtest.</span>
         </div>
         <InviteFriends />
       </div>
