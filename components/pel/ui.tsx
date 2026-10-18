@@ -2173,9 +2173,10 @@ export function deploymentByHalfYear(f) {
   return calls.map((c) => (s += c) / CAPITAL);
 }
 
-/* Aufklappbar in den Details eines Fonds der Peer Group: zugeklappt steht nur
-   die Kopfzeile mit den Summen, damit die Liste der Beteiligungen darunter
-   nicht hinter einer Grafik verschwindet. */
+/* In den Details eines Fonds der Peer Group. Beim Aufklappen des Fonds steht
+   die Grafik gleich offen da -- zugeklappt war sie ein zweiter, leicht
+   übersehener Klick. Über die Kopfzeile mit den Summen lässt sie sich
+   einklappen, wenn man nur die Beteiligungen darunter sehen will. */
 export function CashflowChart({ fund, scale }) {
   const [sel, setSel] = useState(null);
   const { calls, dists } = cashflowByHalfYear(fund);
@@ -2200,7 +2201,7 @@ export function CashflowChart({ fund, scale }) {
   const saldo = sumDists - sumCalls;
 
   return (
-    <details className="cfbox">
+    <details className="cfbox" open>
       <summary>
         <span>Abrufe &amp; Ausschüttungen</span>
         <span className="mono">−{cfNum(sumCalls)} / +{cfNum(sumDists)} Mio. €</span>

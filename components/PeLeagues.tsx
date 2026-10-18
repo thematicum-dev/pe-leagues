@@ -1152,8 +1152,8 @@ function finalize(c, gross, buyer, feeRate, extra) {
                   </div>
                   {openFund === f.id && (
                     <div style={{ background: "var(--zebra)", borderBottom: "1px solid var(--rule)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
-                        <span className="eyebrow">{f.me ? "Dein Portfolio" : f.arch.style}</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", columnGap: 12, rowGap: 2, padding: "8px 14px 2px" }}>
+                        <span className="eyebrow" style={{ whiteSpace: "nowrap" }}>{f.me ? "Dein Portfolio" : f.arch.style}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
