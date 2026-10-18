@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_HUMAN_ATTRS, type Attrs } from "@/lib/engine/constants";
+import { FUND_PROFILE_POINTS } from "@/components/pel/ui";
+import FundProfileFields, { pointsOf } from "@/components/FundProfileFields";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -37,6 +41,7 @@ function rpcErrorMessages(showUniverse: boolean): Record<string, string> {
     season_full: "Diese Lobby ist bereits voll.",
     season_not_found: "Diese Partie gibt es nicht mehr.",
     not_authenticated: "Bitte melde dich erneut an.",
+    invalid_fund_attrs: "Die Punkteverteilung ist ungültig.",
   };
 }
 
@@ -164,10 +169,18 @@ export default function LobbyOverview({
     };
   }, [supabase, universeId]);
 
+  /* Beitritt in zwei Schritten: erst das Fondsprofil, dann der Beitritt mit
+     diesem Profil. Vorher wurde das Profil erst im Lobby-Raum gewählt — der
+     Beitritt, der die Lobby füllt, startet die Partie aber sofort, und der
+     fünfte Spieler kam nie dazu. Siehe Migration 20261012090000. */
+  const [joining, setJoining] = useState<{ kind: "join"; seasonId: string } | { kind: "create" } | null>(null);
+  const [attrs, setAttrs] = useState<Attrs>({ ...DEFAULT_HUMAN_ATTRS });
+  const pointsComplete = pointsOf(attrs) === FUND_PROFILE_POINTS;
+
   async function handleJoin(seasonId: string) {
     setError(null);
     setPending(true);
-    const { error: rpcError } = await supabase.rpc("join_season", { p_season_id: seasonId });
+    const { error: rpcError } = await supabase.rpc("join_season", { p_season_id: seasonId, p_attrs: attrs });
     setPending(false);
     if (rpcError) {
       setError(friendlyError(rpcError.message, showUniverse));
@@ -181,6 +194,7 @@ export default function LobbyOverview({
     setPending(true);
     const { data, error: rpcError } = await supabase.rpc("create_and_join_season", {
       p_universe_id: universeId,
+      p_attrs: attrs,
     });
     setPending(false);
     if (rpcError) {
@@ -209,9 +223,47 @@ export default function LobbyOverview({
             </>
           )}
         </p>
-        <a className="btn-primary" href={`/season/${mySeason.id}`}>
+        {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der App und
+            blendet über (app/template.tsx), statt die Seite neu zu laden. */}
+        <Link className="btn-primary" href={`/season/${mySeason.id}`}>
           Zur Partie
-        </a>
+        </Link>
+      </div>
+    );
+  }
+
+  if (joining) {
+    const lobby = joining.kind === "join" ? openLobbies.find((l) => l.id === joining.seasonId) : null;
+    return (
+      <div className="dashcard dashcard-accent">
+        <h2>{joining.kind === "create" ? "Neue Partie eröffnen" : `Partie ${joining.seasonId.slice(0, 8)} beitreten`}</h2>
+        {error && <p className="autherror">{error}</p>}
+        <div className="fundprofile">
+          <h3>Fondsprofil</h3>
+          <p className="dashsub">
+            Verteile {FUND_PROFILE_POINTS} Punkte auf die Fähigkeiten deines Fonds. Die Entscheidung gilt
+            für die gesamte Fondslaufzeit.
+            {lobby && lobby.occupancy >= 4
+              ? " Du bist der fünfte Spieler — mit deinem Beitritt startet die Partie sofort."
+              : " Bis zum Start lässt sie sich in der Lobby noch ändern; sobald fünf Spieler beigetreten sind, startet die Partie."}
+          </p>
+          <FundProfileFields attrs={attrs} onChange={setAttrs} />
+          <button
+            className="btn-primary"
+            disabled={!pointsComplete || pending}
+            onClick={() => (joining.kind === "join" ? handleJoin(joining.seasonId) : handleCreate())}
+          >
+            {pending ? "Einen Moment …" : joining.kind === "join" ? "Mit diesem Profil beitreten" : "Mit diesem Profil eröffnen"}
+          </button>
+          {!pointsComplete && (
+            <p className="dashsub fpnote">Erst wenn alle {FUND_PROFILE_POINTS} Punkte verteilt sind, geht es weiter.</p>
+          )}
+        </div>
+        <div className="lobbyactions">
+          <button className="btn-secondary" onClick={() => { setJoining(null); setError(null); }} disabled={pending}>
+            Zurück
+          </button>
+        </div>
       </div>
     );
   }
@@ -232,7 +284,7 @@ export default function LobbyOverview({
                 : "Zurzeit können keine neuen Partien eröffnet werden."}
           </p>
           {universeActive && (
-            <button className="btn-primary" onClick={handleCreate} disabled={pending}>
+            <button className="btn-primary" onClick={() => { setError(null); setJoining({ kind: "create" }); }} disabled={pending}>
               {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
             </button>
           )}
@@ -245,7 +297,7 @@ export default function LobbyOverview({
             {" · Start spätestens in "}
             <Countdown lobbyOpenedAt={lobby.lobbyOpenedAt} />
           </span>
-          <button className="btn-secondary" onClick={() => handleJoin(lobby.id)} disabled={pending}>
+          <button className="btn-secondary" onClick={() => { setError(null); setJoining({ kind: "join", seasonId: lobby.id }); }} disabled={pending}>
             {pending ? "Einen Moment …" : "Beitreten"}
           </button>
         </div>

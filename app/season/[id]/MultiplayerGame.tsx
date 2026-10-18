@@ -23,24 +23,26 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
+import { HalfYearBriefing } from "@/components/pel/briefing";
+import { useFadeOnChange } from "@/components/pel/motion";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
-  ExitStartIntent, Seat, HireChoice,
+  ExitStartIntent, OfferDecisionIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
 import type { AddonOpts } from "@/lib/engine";
 import {
   EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
 } from "./turnDraft";
 import {
-  BIL_DISC, BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
-  INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
+  BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
+  IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, dealMultiple, ddCapOf, ddCostOf, dpiOf, ebitdaOf,
-  eur, exitNetOf, fairOf,
-  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  markMultiple, navValueOf, recycleRoom, scoreOf, tvpiOf, x,
+  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
+  eur, exitNetOf, fairOf, healthOf,
+  addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initsOf, investableOf, irrOf,
+  recycleRoom, scoreOf, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -636,10 +638,34 @@ export default function MultiplayerGame({
     } catch { /* siehe oben */ }
   }, [seasonId, draftKey]);
 
-  if (!me) return null;
+  /* ---------- Halbjahresbericht ----------
+     Öffnet sich einmal je Halbjahr von selbst, sobald ein ausgewertetes
+     Halbjahr vorliegt und noch nicht abgegeben ist. Gemerkt wird das im
+     Browser: Wer die Partie im selben Halbjahr erneut öffnet, landet direkt im
+     Spiel — der Bericht bleibt über die Meldungsbox erreichbar. */
+  const [briefOpen, setBriefOpen] = useState(false);
+  const briefKey = `pel:brief:${seasonId}:${quarter}`;
+  useEffect(() => {
+    if (quarter < 1 || alreadySubmitted) return;
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(briefKey) === "1";
+      window.localStorage.setItem(briefKey, "1");
+    } catch { /* ohne Speicher: dann eben bei jedem Öffnen */ }
+    /* Wie beim Entwurf oben: localStorage gibt es erst nach dem Mounten, ein
+       Lazy-Initializer erzeugte eine Hydration-Abweichung. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!seen) setBriefOpen(true);
+  }, [briefKey, quarter, alreadySubmitted]);
 
-  const NEG = me.attrs.negotiation;
+  /* Abgabe und Rückkehr ins Spiel blenden über, statt hart umzuspringen.
+     Nur Deckkraft: In der Wurzel stecken die fixierten Leisten. */
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFadeOnChange(rootRef, submitted, { lift: 0, duration: 320 });
 
+  /* Alle Hooks stehen vor dem frühen Return unten: React verlangt in jedem
+     Render dieselbe Reihenfolge der Hooks. Hinter dem Return wären sie
+     bedingt -- ändert sich `me` zwischen zwei Renders, bricht React ab. */
   function initKey(uid: string, dim: string) { return `${uid}:${dim}`; }
   const stagedInitByKey = useMemo(() => {
     const map: Record<string, InitiativeIntent> = {};
@@ -651,16 +677,35 @@ export default function MultiplayerGame({
     searches.forEach((s) => { (map[s.holdingUid] ??= []).push(s); });
     return map;
   }, [searches]);
-  /* Bewusst ohne useMemo: Die Liste hat höchstens so viele Einträge wie das
-     Portfolio Beteiligungen, und die Hooks dieser Komponente stehen hinter
-     einem frühen Return — ein weiterer wäre ein weiterer bedingter Hook. */
-  const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
-  equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
   const stagedExitByHolding = useMemo(() => {
     const map: Record<string, ExitStartIntent> = {};
     exitStarts.forEach((e) => { map[e.holdingUid] = e; });
     return map;
   }, [exitStarts]);
+
+  const rank = useMemo(
+    () =>
+      [...state.funds]
+        .map((f) => ({
+          ...f, tvcc: tvccOf(f, state.market, quarter), tvpi: tvpiOf(f, state.market, quarter),
+          dpi: dpiOf(f, state.market, quarter),
+          irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
+          score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
+        }))
+        .sort((a, b) => b.score - a.score),
+    [state.funds, state.market, quarter, humanSlot],
+  );
+
+  if (!me) return null;
+
+  const NEG = me.attrs.negotiation;
+
+  /* Bewusst ohne useMemo: Die Liste hat höchstens so viele Einträge wie das
+     Portfolio Beteiligungen. */
+  const stagedInjectionByHolding: Record<string, { holdingUid: string; amount: number }> = {};
+  equityInjections.forEach((i) => { stagedInjectionByHolding[i.holdingUid] = i; });
+  const stagedOfferByHolding: Record<string, OfferDecisionIntent> = {};
+  offerDecisions.forEach((o) => { stagedOfferByHolding[o.holdingUid] = o; });
 
   // Legt eine "so, als ob"-Ansicht der Beteiligung an: dieselbe Holding-Karte
   // wie im Original zeigt vorgemerkte Suchen/Maßnahmen/MEP/Exits als laufend,
@@ -716,14 +761,24 @@ export default function MultiplayerGame({
     if (exit && !p.proc) {
       // Wie bei den Maßnahmen: runQuarter verankert auf halfYear = quarter + 1.
       // Ein bilateraler Verkauf wird in derselben Auswertung abgewickelt.
-      p.proc = { resolveQ: quarter + 1 + (exit.action === "process" ? PROC_Q : 0) };
+      p.proc = exit.action === "process" ? { resolveQ: quarter + 1 + PROC_Q } : { resolveQ: quarter + 1, sale: true };
     }
+    /* Eine Entscheidung über die Gebote wirkt auf der Karte wie die Auswertung:
+       Ein angenommenes oder nachverhandeltes Gebot ist ein Verkauf in diesem
+       Halbjahr, ein Abbruch sperrt den nächsten Prozess. Vorher blieben die
+       Exit-Schaltflächen offen, und ein zusätzlich vorgemerkter Verkauf wurde
+       vom Server stillschweigend verworfen — die Beteiligung war dann schon
+       verkauft oder gesperrt. Die Sperre zeigt die Karte so, wie sie nach der
+       Auswertung dasteht: zwei Halbjahre, das "eine Jahr" der Schaltfläche. */
+    const offer = stagedOfferByHolding[c.uid];
+    if (offer?.choice === "abort") p.block = quarter + 2;
+    else if (offer && !p.proc) p.proc = { resolveQ: quarter + 1, sale: true };
     return p;
   }
 
   // Freie Operating-Kapazität wie im Original, aber inklusive dessen, was
   // in dieser Sitzung schon vorgemerkt (noch nicht abgeschickt) wurde.
-  const busySlots = me.holdings.reduce((n: number, c: Any) => n + initsOf(patchHolding(c)).length, 0);
+  const busySlots = me.holdings.reduce<number>((n, c: Any) => n + initsOf(patchHolding(c)).length, 0);
   const maxInitSlots = INIT_SLOTS + Math.floor(me.attrs.operations / 2);
   const freeSlots = maxInitSlots - busySlots;
 
@@ -738,58 +793,57 @@ export default function MultiplayerGame({
   /* ---- Exit-Vorschau (wie previewExit im Original) ---- */
   function previewExit(c: Any, ch: "bil" | "cv" | "ipo" | "proc") {
     const st = c.st ?? 1;
-    const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, state.market);
-    const dMult = dealMultiple(c, state.market, NEG, quarter);
+    // Multiple → EBITDA → Unternehmenswert, für jeden Exit-Weg dieselbe Rechnung
+    const { rows, eqv100 } = exitValuation(c, state.market, NEG, quarter, ch);
 
-    let exMult = dMult, eqDisc = 1, share = st, feeRate = 0, costBasis = c.entryEquity, note = "";
+    let eqDisc = 1;            // prozentualer Abschlag auf Equity-Ebene
+    let share = st;            // verkaufter Anteil
+    let feeRate = 0, costBasis = c.entryEquity, note = "";
     const recap = c.recapOut || 0;
-    const rows: [string, string][] = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC; feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
+      feeRate = BIL_FEE;
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
-      eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE; costBasis = c.entryEquity * CV_STAKE;
+      eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE;
+      costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult; eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE; costBasis = c.entryEquity * IPO_PLACE;
+      eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE;
+      costBasis = c.entryEquity * IPO_PLACE;
       note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
     } else {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
 
-    const ev = eb * exMult;
-    const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
     // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
-      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
-    if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
-    if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag", `−${Math.round((1 - eqDisc) * 100)} %`]);
+    if (ch !== "proc" && share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
+    if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
+      `−${Math.round((1 - eqDisc) * 100)} %`]);
 
-    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
-       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
-       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
-       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus.                                       */
+    /* Warum der Verwendungsdialog ausbleiben kann: Recycling ist kumuliert
+       höchstens bis zur Höhe des Commitments möglich (siehe recycleRoom),
+       danach wird zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das
+       Verschwinden des Dialogs wie ein Fehler aus. Bis zum 18.10.2026 endete
+       das Recycling außerdem mit der Investitionsperiode.
+
+       Geprüft wird gegen currentHalfYear, das Halbjahr, in dem der Server den
+       Exit verbucht — nicht gegen quarter.                                   */
     if (ch !== "proc") {
-      const room = recycleRoom(me, Math.max(0, net), quarter);
+      const room = recycleRoom(me, Math.max(0, net), currentHalfYear);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : quarter > INVEST_PERIOD
-          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
-          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+        : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
-      const fair = Math.max(0, eqv100 * st);
-      rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
-        [`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
-        ["Gebote liegen vor in", hj(PROC_Q)]);
+      /* PROC_Q + 1: Der Prozess reift in der Auswertung von Halbjahr
+         n + PROC_Q, entscheiden lässt sich über die Gebote erst im Halbjahr
+         danach — dieselbe Zahl, die danach auf der Karte steht. */
+      rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
+        ["Gebote liegen vor in", hj(PROC_Q + 1)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
       return;
@@ -830,7 +884,7 @@ export default function MultiplayerGame({
     const { c, ch, net } = sheet;
     setSheet(null);
     if (ch === "proc") { stageExit(c.uid, "proc", 0); return; }
-    if (recycleRoom(me, net, quarter) > 0.5) {
+    if (recycleRoom(me, net, currentHalfYear) > 0.5) {
       setUseProceedsItem({ c, net, action: ch });
     } else {
       stageExit(c.uid, ch, 0);
@@ -842,13 +896,25 @@ export default function MultiplayerGame({
     setUseProceedsItem(null);
     setSheet(null);
     if (item.offerIndex != null) {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.c.uid, choice: "accept", offerIndex: item.offerIndex, keepPct: keep }]);
+      setOfferDecisions((arr) => [...arr, {
+        holdingUid: item.c.uid, choice: item.reneg ? "reneg" : "accept", offerIndex: item.offerIndex, keepPct: keep,
+      }]);
       setExitQueueCursor((i) => i + 1);
     } else {
       stageExit(item.c.uid, item.action, keep);
     }
   }
 
+  /* Annehmen und Nachverhandeln führen beide zu einem Erlös, über dessen
+     Verwendung der GP entscheidet. Bis zum 18.10.2026 fragte nur das Annehmen
+     danach, und auch das unsichtbar: Der Gebotsdialog blieb stehen und lag
+     über dem Verwendungsdialog. Nachverhandeln schickte gar keinen Anteil mit
+     (der Server schüttete voll aus) und keinen offerIndex — verhandelt wurde
+     dann immer das erste Gebot, gleich welches angeklickt war.
+
+     Beim Nachverhandeln steht der Preis erst in der Auswertung fest. Der
+     Regler zeigt deshalb das Gebot vor der Verhandlung; keepPct ist ein
+     Anteil und gilt für den tatsächlichen Erlös. */
   function decideOfferStage(offer: Any, action: "accept" | "reneg" | "abort") {
     haptic(action === "abort" ? 20 : 10);
     const item = exitQueueItem;
@@ -857,18 +923,13 @@ export default function MultiplayerGame({
       setExitQueueCursor((i) => i + 1);
       return;
     }
-    if (action === "reneg") {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: "reneg" }]);
-      setExitQueueCursor((i) => i + 1);
-      return;
-    }
     const offerIndex = item.offers.indexOf(offer);
     const c = me.holdings.find((h: Any) => h.uid === item.holdingUid);
-    const net = exitNetOf(c, offer.price, PROC_FEE);
-    if (c && recycleRoom(me, net, quarter) > 0.5) {
-      setUseProceedsItem({ c, net, offerIndex });
+    const net = c ? exitNetOf(c, offer.price, PROC_FEE) : 0;
+    if (c && recycleRoom(me, net, currentHalfYear) > 0.5) {
+      setUseProceedsItem({ c, net, offerIndex, reneg: action === "reneg" });
     } else {
-      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: "accept", offerIndex, keepPct: 0 }]);
+      setOfferDecisions((arr) => [...arr, { holdingUid: item.holdingUid, choice: action, offerIndex, keepPct: 0 }]);
       setExitQueueCursor((i) => i + 1);
     }
   }
@@ -912,18 +973,6 @@ export default function MultiplayerGame({
     setEquityInjections((arr) => [...arr.filter((i) => i.holdingUid !== uid), { holdingUid: uid, amount }]);
   }
 
-  const rank = useMemo(
-    () =>
-      [...state.funds]
-        .map((f) => ({
-          ...f, tvpi: tvpiOf(f, state.market, quarter), dpi: dpiOf(f, state.market, quarter),
-          irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
-          score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
-        }))
-        .sort((a, b) => b.score - a.score),
-    [state.funds, state.market, quarter, humanSlot],
-  );
-
   /* Vorstand für die Halbjahresspalte der Value Bridge: der Zustand vor dem
      zuletzt ausgewerteten Halbjahr. history endet auf dem aktuellen Stand. */
   const prevRow = history[history.length - 2];
@@ -938,11 +987,13 @@ export default function MultiplayerGame({
   const meIdx = [...state.funds].sort((a, b) => a.slot - b.slot).findIndex((f) => f.slot === humanSlot);
 
   const dpi = dpiOf(me, state.market, quarter);
-  const gross = grossMoicOf(me, state.market);
+  const tvcc = tvccOf(me, state.market, quarter);
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(state.funds);
   /* Stand am Ende des zuletzt ausgewerteten Halbjahres, als Bezugspunkt für
      die Veränderungspfeile in der Kopfleiste. prevFund ist derselbe Fonds im
      Zustand davor, bewertet zu den damaligen Marktständen — nicht der heutige
@@ -965,6 +1016,7 @@ export default function MultiplayerGame({
       .sort((a, b) => b.score - a.score);
     return {
       score: scoreOf(prevFund, mk, q),
+      tvcc: tvccOf(prevFund, mk, q),
       tvpi: tvpiOf(prevFund, mk, q),
       dpi: dpiOf(prevFund, mk, q),
       irr: irrOf(prevFund, mk, q),
@@ -1001,6 +1053,7 @@ export default function MultiplayerGame({
   const feedForNews = visibleFeed.map((f) => ({ q: f.halfYear, e: f.emoji, tone: f.tone, t: f.text }));
 
   async function handleSubmit() {
+    haptic("confirm");
     setError(null);
     setPending(true);
 
@@ -1028,7 +1081,8 @@ export default function MultiplayerGame({
 
     setPending(false);
     if (insertError) {
-      if (insertError.code === "23505") { setSubmitted(true); refreshStatus(); return; }
+      if (insertError.code === "23505") { haptic("success"); setSubmitted(true); refreshStatus(); return; }
+      haptic("error");
       /* 42501 heißt hier: Die WITH CHECK-Bedingung der Policy hat abgelehnt.
          Sie prüft nur Dinge, die sich nicht durch einen zweiten Versuch
          ändern — eigenes Profil, laufende Partie, passendes Halbjahr, und vor
@@ -1042,6 +1096,7 @@ export default function MultiplayerGame({
       setError("Das hat nicht geklappt — bitte versuch es erneut.");
       return;
     }
+    haptic("success");
     setSubmitted(true);
     refreshStatus();
     // Sofort anstoßen statt bis zum nächsten Cron-Tick zu warten. Im
@@ -1052,7 +1107,7 @@ export default function MultiplayerGame({
 
   if (submitted) {
     return (
-      <div className={"pel" + (dark ? " dark" : "")}>
+      <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
         <style>{CSS}</style>
         <div className="wrap" style={{ maxWidth: 520, margin: "0 auto" }}>
           <div className="tomb" style={{ margin: "24px 16px" }}>
@@ -1095,7 +1150,7 @@ export default function MultiplayerGame({
   }
 
   return (
-    <div className={"pel" + (dark ? " dark" : "")}>
+    <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
       <style>{CSS}</style>
       <div className="bar">
         {/* Das Halbjahr, über das gerade entschieden wird (1-basiert) — nicht
@@ -1124,12 +1179,18 @@ export default function MultiplayerGame({
               </div>
             </div>
           </div>
+          {/* Erste Zeile: die beiden Kennzahlen, aus denen die Wertung besteht.
+              Zweite Zeile: TVPI und DPI, zur Information. */}
           <div className="cockkpi mono">
-            <span>TVPI {tvpi.toFixed(2)}×
-              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+            <span>TVCC {tvcc.toFixed(2)}×
+              <Delta value={d(tvcc, prev?.tvcc)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
               <Delta value={d(irr, prev?.irr)} eps={0.0005}
                 format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
+          </div>
+          <div className="cockkpi mono">
+            <span>TVPI {tvpi.toFixed(2)}×
+              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>DPI {dpi.toFixed(2)}×
               <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
@@ -1198,7 +1259,8 @@ export default function MultiplayerGame({
       <Toasts items={[]} />
 
       <div className="wrap">
-        <News feed={feedForNews} quarter={quarter} practice={false} />
+        <News feed={feedForNews} quarter={quarter} practice={false}
+          onBrief={quarter >= 1 ? () => setBriefOpen(true) : null} />
 
         {tab === "deals" && (
           <>
@@ -1266,7 +1328,7 @@ export default function MultiplayerGame({
           <>
             <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
-              <SectorSplit holdings={me.holdings} market={state.market} cash={me.cash} />
+              <SectorSplit holdings={me.holdings} market={state.market} />
             </div>
             <SeasonDrivers fund={me} market={state.market} quarter={quarter}
               prev={prevBridgeState} />
@@ -1275,14 +1337,21 @@ export default function MultiplayerGame({
                 Noch keine Beteiligungen. Im Dealflow findest du strukturierte Prozesse und proprietäre Kontakte.
               </div></div>
             )}
-            <Shelf holdings={me.holdings} market={state.market} cash={me.cash} quarter={quarter}
+            <div className="secthead">
+              <span className="eyebrow">Portfolio</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
+                {me.holdings.filter((c: Any) => healthOf(c, state.market).attention).length > 0
+                  ? `${me.holdings.filter((c: Any) => healthOf(c, state.market).attention).length} × Handlungsbedarf` : ""}
+              </span>
+            </div>
+            <Shelf holdings={me.holdings} market={state.market} dryPowder={investableOf(me, quarter)} quarter={quarter}
               onPick={(uid: string) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c: Any) => {
               const patched = patchHolding(c);
               const stagedExit = stagedExitByHolding[c.uid];
               return (
                 <div key={c.uid}>
-                  <Holding c={patched} market={state.market} neg={NEG} quarter={quarter}
+                  <Holding c={patched} market={state.market} quarter={quarter}
                     procCount={me.holdings.filter((h: Any) => h.proc).length} freeSlots={freeSlots}
                     act={{
                       proc: () => previewExit(c, "proc"), bil: () => previewExit(c, "bil"),
@@ -1306,6 +1375,12 @@ export default function MultiplayerGame({
                     <p className="hint" style={{ margin: "-8px 16px 14px" }}>
                       ✓ Verkauf vorgemerkt ({stagedExit.action === "bilateral" ? "bilateral" : stagedExit.action === "cv" ? "GP-led Secondary" : "IPO"}) —
                       wird mit dem Halbjahresabschluss ausgeführt.
+                    </p>
+                  )}
+                  {stagedOfferByHolding[c.uid] && stagedOfferByHolding[c.uid].choice !== "abort" && (
+                    <p className="hint" style={{ margin: "-8px 16px 14px" }}>
+                      ✓ Gebot {stagedOfferByHolding[c.uid].choice === "reneg" ? "zur Nachverhandlung vorgemerkt" : "angenommen"} —
+                      wird mit dem Halbjahresabschluss vollzogen.
                     </p>
                   )}
                 </div>
@@ -1337,6 +1412,10 @@ export default function MultiplayerGame({
               <TvpiChart hist={tvpiHist} meIdx={meIdx} />
             </div>
             <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={state.funds} meKey={humanSlot} quarter={quarter} />
+            </div>
+            <div className="card">
               <h3 className="disp">Peer Group</h3>
               {rank.map((f, i) => (
                 <div key={f.slot}>
@@ -1351,12 +1430,13 @@ export default function MultiplayerGame({
                   </div>
                   {openFund === f.slot && (
                     <div style={{ background: "var(--zebra)", borderBottom: "1px solid var(--rule)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
-                        <span className="eyebrow">{f.me ? "Dein Portfolio" : f.name}</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", columnGap: 12, rowGap: 2, padding: "8px 14px 2px" }}>
+                        <span className="eyebrow" style={{ whiteSpace: "nowrap" }}>{f.me ? "Dein Portfolio" : f.name}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVPI {f.tvpi.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(investableOf(f, quarter))} Dry Powder
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c: Any) => {
                         const val = fairOf(c, state.market, f.attrs.negotiation);
@@ -1428,12 +1508,37 @@ export default function MultiplayerGame({
           confirm={(amt: number) => stageInjection(injectPick, amt)}
           close={() => setInjectPick(null)} />
       )}
-      {!sheet && !initPick && shortlistItem && (
+      {briefOpen && (
+        <HalfYearBriefing
+          quarter={quarter}
+          items={visibleFeed.filter((f) => f.halfYear === quarter)
+            .map((f) => ({ e: f.emoji, tone: f.tone, t: f.text, pub: f.slot == null }))}
+          perf={{ score, rank: myRank, funds: state.funds.length, tvcc, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
+          prev={prev ? {
+            score: prev.score, rank: prev.rank, funds: state.funds.length,
+            tvcc: prev.tvcc, tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
+          } : null}
+          todo={{
+            shortlists: shortlistAll.length - shortlistCursor,
+            offers: exitQueueAll.length - exitQueueCursor,
+          }}
+          footer={deadline ? (
+            <>Abgabe für Halbjahr {currentHalfYear}: noch <Countdown deadline={deadline} serverNow={serverNow} />.
+              Ausgewertet wird, sobald alle abgegeben haben oder spätestens zur Frist.</>
+          ) : null}
+          onClose={() => setBriefOpen(false)}
+        />
+      )}
+      {/* Beide Dialoge stehen in der Seite nach dem Verwendungsdialog und damit
+          über ihm (gleicher z-index). Solange dort entschieden wird, bleiben
+          sie weg — der Gebotsdialog rückt ohnehin erst nach der Entscheidung
+          zum nächsten Angebot weiter. */}
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}
           holding={me.holdings.find((h: Any) => h.uid === shortlistItem.holdingUid)}
           analysis={me.attrs.analysis} hire={hireStage} reject={rejectStage} />
       )}
-      {!sheet && !initPick && !shortlistItem && exitQueueItem && (
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && !shortlistItem && exitQueueItem && (
         <Offers item={exitQueueItem} holding={me.holdings.find((h: Any) => h.uid === exitQueueItem.holdingUid)}
           market={state.market} neg={NEG} decide={decideOfferStage} />
       )}

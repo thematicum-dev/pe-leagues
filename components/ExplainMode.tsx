@@ -20,10 +20,10 @@ import {
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
   exitNetOf, mepCut,
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
-  CV_FEE, IPO_FEE,
+  BIL_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
-  TVPI_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
-  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, growthPrem,
+  TVCC_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
+  dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
   retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x,
@@ -31,7 +31,7 @@ import {
 
 import {
   CSS, haptic, AnimatedNumber, News, Coach, CoachCtx, Kpi, DealCard, Holding, Def, InitPicker,
-  Shortlist, Sheet,
+  Shortlist, Sheet, Waterfall, KpiTiles,
 } from "@/components/pel/ui";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,7 +181,7 @@ function Briefing({ dark, setDark, onStart }) {
             die Finanzierung genehmigt wurde.
           </Def>
           <Def t="Assetqualität">
-            Eine Note zwischen 10 und 97 beim Einstieg, die den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
+            Ein Score zwischen 0 und 100, der den Preis beim Verkauf steuert. Sie steigt, wenn das Unternehmen
             schneller wächst als sein Markt und die Marge stabil bleibt, und fällt bei hoher Verschuldung,
             vakanten Positionen oder überdehntem Wachstum.
           </Def>
@@ -191,12 +191,9 @@ function Briefing({ dark, setDark, onStart }) {
         <div className="secthead"><span className="eyebrow">3 · Exit</span>
           <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>Verkaufen</span></div>
         <div className="card">
-          <Def t="Vier Wege hinaus">
+          <Def t="Zwei Wege hinaus">
             <b>Auktion</b> — ein Jahr Vorlauf, dann drei Gebote. Höchster Preis, aber der Markt kann sich in der
             Zwischenzeit drehen. <b>Bilateral</b> — sofort, dafür ein halber Multiple-Punkt Abschlag, kein Risiko.
-            <b> GP-led Secondary</b> — 60 % der Beteiligung mit 5 % Abschlag verkaufen und den Rest behalten,
-            jedes Halbjahr wiederholbar. <b>IPO</b> — nur bei offenem Börsenfenster, 40 % werden platziert,
-            der Rest bleibt ein Jahr gesperrt.
           </Def>
           <Def t="Verhandeln">
             Liegt ein Gebot vor, kannst du annehmen, nachverhandeln oder abbrechen. Nachverhandeln bringt
@@ -212,12 +209,15 @@ function Briefing({ dark, setDark, onStart }) {
 
         {/* ---------- Wertung ---------- */}
         <div className="secthead"><span className="eyebrow">Wertung</span>
-          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVPI · 50 % IRR</span></div>
+          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVCC · 50 % IRR</span></div>
         <div className="card">
           <Def t="Zwei Kennzahlen, je zur Hälfte">
-            <b>TVPI</b> misst, wie viel du aus jedem abgerufenen Euro gemacht hast. <b>IRR</b> misst, wie
-            schnell er zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
-            {x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Eine Wertung von
+            <b>TVCC</b> misst, wie viel du aus jedem zugesagten Euro gemacht hast — gemessen am ganzen
+            Commitment, auch am Teil, den du nie abgerufen hast. <b>IRR</b> misst, wie schnell das Geld
+            zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
+            {x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Der <b>TVPI</b> (Wert je
+            abgerufenem Euro) wird weiter angezeigt, zählt aber nicht: Wer wenig abruft, sähe dort besser
+            aus, als er für die Investoren ist. Eine Wertung von
             <b> 1,00</b> ist Benchmarkniveau und trifft das obere Viertel der Kohorte; 1,50 erreicht
             kaum einer, unter 0,35 liegt das untere Viertel.
           </Def>
@@ -241,16 +241,16 @@ function Briefing({ dark, setDark, onStart }) {
           </Def>
           <Def t="Bei jedem Exit entscheidest du über die Verwendung">
             Wie viel zurück an die Investoren geht und wie viel im Fonds bleibt, ist deine Entscheidung —
-            innerhalb von zwei Schranken: nur bis Jahr 5, und kumuliert höchstens bis zur Höhe des
-            Commitments. Danach wird zwingend voll ausgeschüttet.
+            über die ganze Laufzeit, aber kumuliert höchstens bis zur Höhe des Commitments. Danach wird
+            zwingend voll ausgeschüttet.
           </Def>
           <Def t="Einbehalten kauft TVPI mit IRR">
-            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple.
-            Es kostet aber systematisch Verzinsung: Ausschütten und später neu abrufen ergibt einen
-            Rückfluss heute und einen Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss
-            gewinnt im IRR immer. Gemessen: durchgehend ausschütten bringt 1,94× bei 17,1 %, durchgehend
-            einbehalten 2,20× bei 15,8 %. Beides ist vertretbar — die Frage ist, ob du einen Deal hast,
-            der das Geld verdient.
+            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple,
+            aber nur, wenn der nächste Deal mehr verdient als der Fonds bisher. Die Verzinsung kostet es
+            dagegen immer: Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
+            Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss gewinnt im IRR immer.
+            Wer einbehält, ohne einen Deal zu haben, der das Geld verdient, verliert deshalb beides —
+            die Frage ist also nie „einbehalten oder nicht“, sondern „wofür“.
           </Def>
           <Def t="Das Commitment ist eine harte Grenze">
             Mehr als {eur(CAPITAL)} kannst du nicht abrufen. Und die Management Fee liegt innerhalb dieser
@@ -266,10 +266,10 @@ function Briefing({ dark, setDark, onStart }) {
             <tr><td className="lab">Commitment</td><td style={{ textAlign: "left" }}>{eur(CAPITAL)}, abgerufen bei Bedarf, max. {MAX_SLOTS} Beteiligungen</td></tr>
             <tr><td className="lab">Gebührenreserve</td><td style={{ textAlign: "left" }}>{eur(RESERVE_AT_START)} bei Auflage, vom Dry Powder abgezogen</td></tr>
             <tr><td className="lab">Management Fee</td><td style={{ textAlign: "left" }}>{pct(MGMT_FEE * 100)} p.a., ab Jahr 6 auf Anschaffungswerte, innerhalb des Commitments</td></tr>
-            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(CV_FEE * 100)}–{pct(IPO_FEE * 100)} beim Verkauf je nach Weg</td></tr>
+            <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(BIL_FEE * 100)}–{pct(PROC_FEE * 100)} beim Verkauf je nach Weg</td></tr>
             <tr><td className="lab">Carried Interest</td><td style={{ textAlign: "left" }}>20 % über 8 % Hurdle auf die Abrufe</td></tr>
             <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Halbjahr {PERIODS - END_PRESSURE_FROM + 1} sinkt der erzielbare Preis, bis zu −{x(LIQ_DISC)} am Laufzeitende</td></tr>
-            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar bis Jahr 5, kumuliert max. 100 % des Commitments</td></tr>
+            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar über die ganze Laufzeit, kumuliert max. 100 % des Commitments</td></tr>
             <tr><td className="lab">Investitionsperiode</td><td style={{ textAlign: "left" }}>Jahr 1–5</td></tr>
           </tbody></table>
           <p className="hint" style={{ padding: "13px 16px 16px" }}>
@@ -362,7 +362,7 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
   // Ohne Datenraum dasselbe Post-Closing-Risiko wie in der Partie
   const hit = !hadDD && rng.rnd() < clamp(0.5 - 0.09 * PRAC_ATTRS.analysis, 0.05, 0.5)
     ? 0.10 + rng.rnd() * 0.14 : 0;
-  const c = {
+  const c: Any = {
     uid: "prac", name: d.name, sector: d.sector, desc: d.desc,
     revenue: d.revenue, margin: d.margin * (1 - hit), quality: d.quality * (1 - hit / 2),
     netDebt: eb * lev, rate: BASE_RATE - 0.25 * PRAC_ATTRS.financing,
@@ -466,7 +466,7 @@ function GuidedRun({ dark, setDark, back }) {
   const [proc, setProc] = useState(null);
   const [offer, setOffer] = useState(null);
   const [prog, setProg] = useState(0);
-  const market = useMemo(practiceMarket, []);
+  const market = useMemo(() => practiceMarket(), []);
   /* Eigene Zufallsinstanz für die Einführung — unabhängig von der Partie,
      damit sich beide nicht denselben Zufallsstrom teilen. reset() legt bei
      jedem Durchlauf wieder denselben festen Startwert fest. */
@@ -489,6 +489,10 @@ function GuidedRun({ dark, setDark, back }) {
     }]);
   }
 
+  /* Einmal beim Einhängen: Startzustand der Einführung setzen. reset() setzt
+     State und die Zufallsinstanz -- als Lazy-Initializer ginge das nicht,
+     weil reset() auch vom Knopf „Übung wiederholen“ aufgerufen wird. */
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { if (!c) reset(); }, []);
   useEffect(() => { window.scrollTo(0, 0); }, [q]);
 
@@ -578,7 +582,7 @@ function GuidedRun({ dark, setDark, back }) {
     setPhase("run");
     setFeed((p) => [{
       q: 0, e: "🤝", tone: "pos",
-      t: `Zuschlag für <b>${co.name}</b> bei ${x(mult)} EBITDA — Eigenkapital ${eur(co.entryEquity)}, Fremdkapital ${x(lev)}.${co.hit ? " Nach dem Closing zeigt sich, was der Datenraum verhindert hätte: die Marge liegt niedriger als im Verkaufsmemorandum." : ""} Jetzt beginnt die Halteperiode.`,
+      t: `Zuschlag für <b>${co.name}</b> bei ${x(mult)} EBITDA — Eigenkapital ${eur(co.entryEquity)}, Fremdkapital ${x(lev)}.${co.hit ? " Nach dem Closing zeigt sich, was eine Due Diligence verhindert hätte: die Marge liegt niedriger als im Verkaufsmemorandum." : ""} Jetzt beginnt die Halteperiode.`,
     }, ...p]);
   }
 
@@ -586,7 +590,7 @@ function GuidedRun({ dark, setDark, back }) {
     haptic(8);
     setDd((p) => ({ ...p, [d.id]: true }));
     setFeed((p) => [{ q: 0, e: "🔍", tone: "neu",
-      t: `Datenraum zu <b>${d.name}</b> geöffnet (${eur(ddCostOf(d))}). Branchenreferenzen und die erwartete Performance gegenüber dem Markt liegen jetzt vor — und das Post-Closing-Risiko ist ausgeschlossen.` }, ...p]);
+      t: `Due Diligence für <b>${d.name}</b> durchgeführt (${eur(ddCostOf(d))}). Sektor-Benchmarks und die erwartete Performance gegenüber dem Markt liegen jetzt vor — und das Post-Closing-Risiko ist ausgeschlossen.` }, ...p]);
   }
 
   function runStudy() {
@@ -694,7 +698,7 @@ function GuidedRun({ dark, setDark, back }) {
     COACH.forEach((r) => {
       if (fresh.length >= 2 || seen.indexOf(r.id) >= 0) return;
       let hit = false;
-      try { hit = r.when(ctx); } catch (err) { hit = false; }
+      try { hit = r.when(ctx); } catch { hit = false; }
       if (hit) fresh.push(r);
     });
     fresh.forEach((r) => news.push({ q: nq, e: "🎓", tone: "tip", t: r.t }));
@@ -704,9 +708,10 @@ function GuidedRun({ dark, setDark, back }) {
        den auch der bilaterale Weg ergäbe — der Unterschied liegt im Wettbewerb
        unter den Käufern, der in der Partie über makeOffers abgebildet ist.   */
     if (proc && nq >= proc.resolveQ && (n.breach || 0) < 2) {
-      const g2 = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
+      const m2 = dealMultiple(n, market, PRAC_ATTRS.negotiation);
+      const g2 = Math.max(0, eqvOf(n, m2));
       const n2 = exitNetOf(n, g2, PROC_FEE);
-      setOffer({ gross: g2, net: n2, moic: dealMoic(n, n2) });
+      setOffer({ gross: g2, net: n2, moic: dealMoic(n, n2), ev: evOf(n, m2), eb: ebitdaOf(n), nd: n.netDebt });
       news.push({ q: nq, e: "📨", tone: "neu",
         t: `Gebote für <b>${n.name}</b> liegen vor: ${eur(n2)} netto, ${dealMoic(n, n2).toFixed(2)}× auf das eingesetzte Eigenkapital. Der Wettbewerb im Prozess hat den Preis über das getrieben, was ein bilateraler Zuruf gebracht hätte.` });
     }
@@ -734,7 +739,7 @@ function GuidedRun({ dark, setDark, back }) {
     return Math.pow(moic, 2 / holdQ) - 1;
   }
   const pracScore = (moic, holdQ) =>
-    0.5 * clamp(moic / TVPI_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
+    0.5 * clamp(moic / TVCC_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
 
   /* Die eigentliche Lektion beim vorzeitigen Verkauf: Was wäre gewesen, wenn
      man gehalten hätte? Dazu wird die Beteiligung ohne weitere Maßnahmen bis
@@ -779,10 +784,10 @@ function GuidedRun({ dark, setDark, back }) {
         <dl>
           <Kpi t="EBITDA">Der Ertrag, auf den alles gerechnet wird. Kaufpreis und Verschuldung sind Vielfache davon.</Kpi>
           <Kpi t="Preiserwartung">Was der Verkäufer erwartet, in EBITDA-Vielfachen. Deine Verhandlungsbasis, keine Vorschrift.</Kpi>
-          <Kpi t="Assetqualität">Marktstellung und Widerstandsfähigkeit, 10 bis 97. Sie treibt das Bewertungsmultiple beim Verkauf.</Kpi>
+          <Kpi t="Assetqualität">Marktstellung und Widerstandsfähigkeit, ein Score von 0 bis 100. Sie treibt das Bewertungsmultiple beim Verkauf.</Kpi>
           <Kpi t="Debt Capacity">Wie viel Fremdkapital die Banken auf dieses Geschäftsmodell geben. Mehr Leverage heißt weniger Eigenkapital je Deal — und weniger Luft, wenn es schlecht läuft.</Kpi>
         </dl>
-        <p className="why"><b>Tu jetzt das:</b> Beauftrage die Due Diligence beim oberen Deal. Sie kostet Geld, aber ohne Datenraum siehst du weder die Branchenreferenz noch die erwartete Performance gegenüber dem Markt — und trägst das volle Risiko, dass die Zahlen im Memorandum geschönt sind.</p>
+        <p className="why"><b>Tu jetzt das:</b> Beauftrage die Due Diligence beim oberen Deal. Sie kostet Geld, aber ohne sie siehst du weder die Sektor-Benchmarks noch die erwartete Performance gegenüber dem Markt — und trägst das volle Risiko, dass die Zahlen im Memorandum geschönt sind.</p>
       </>) },
     { id: "bid", spot: "bid", sat: () => !!bid,
       eyebrow: "Preis", title: "Der Einstiegspreis ist die wichtigste Zahl des Deals",
@@ -851,7 +856,7 @@ function GuidedRun({ dark, setDark, back }) {
           <Kpi t="MOIC">Was aus jedem eingesetzten Euro geworden ist. Steigt mit der Haltedauer fast immer weiter.</Kpi>
           <Kpi t="IRR">Wie schnell er zurückkam. Sinkt mit jedem Halbjahr, in dem das Kapital gebunden bleibt.</Kpi>
         </dl>
-        <p className="why"><b>Tu jetzt das:</b> Eröffne den Verkaufsprozess. Er dauert {hj(PROC_Q)} — in dieser Zeit läuft das Unternehmen weiter, und du kannst weiter daran arbeiten. Faustregel: Solange der erwartete Wertzuwachs über deiner Zielrendite liegt, halten; darunter verkaufen.</p>
+        <p className="why"><b>Tu jetzt das:</b> Eröffne den Verkaufsprozess. Er dauert {hj(PROC_Q + 1)} — in dieser Zeit läuft das Unternehmen weiter, und du kannst weiter daran arbeiten. Faustregel: Solange der erwartete Wertzuwachs über deiner Zielrendite liegt, halten; darunter verkaufen.</p>
       </>) },
     { id: "wait", spot: "close", sat: () => !!offer || !!over,
       eyebrow: "Prozess läuft", title: "Bis zu den Geboten weiterarbeiten",
@@ -867,9 +872,15 @@ function GuidedRun({ dark, setDark, back }) {
   /* Der Zähler geht nur vorwärts und überspringt Schritte, die beim Aufrufen
      schon erledigt sind — wer den CFO vor der Benchmarkstudie besetzt, wird
      nicht zurückgeschickt.                                                   */
+  /* Bewusst nach jedem Render und ohne Abhängigkeitsliste: sat() liest den
+     ganzen Spielzustand. Als abgeleiteter Wert ginge es nicht, weil der
+     Zähler nie zurückspringen soll, wenn ein erledigter Schritt später
+     wieder unerfüllt ist. Endet, sobald i === prog. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let i = prog;
     while (i < GUIDE.length && GUIDE[i].sat()) i++;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (i !== prog) setProg(i);
   });
 
@@ -880,7 +891,7 @@ function GuidedRun({ dark, setDark, back }) {
       eyebrow: `Schritt ${prog + 1} — ${g.eyebrow}`, title: g.title, body: g.body() };
   }
 
-  function finishExit(n, nq, sh, early) {
+  function finishExit(n, nq, sh, early?) {
     // Exit über einen strukturierten Prozess: kein Kanalabschlag, damit in der
     // Value Bridge ausschließlich die eigene Arbeit sichtbar wird.
     const gross = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
@@ -895,7 +906,7 @@ function GuidedRun({ dark, setDark, back }) {
     setSheet({ kind: "bridge", c: n, price: net, buyer: "Strategischer Käufer", bridge });
     setFeed((p) => [{
       q: nq, e: "🎓", tone: "tip",
-      t: `<b>Fazit.</b> ${moic.toFixed(2)}× nach ${hj(nq)} — ${(pracIrr(moic, nq) * 100).toFixed(0)} % IRR, Wertung ${pracScore(moic, nq).toFixed(2)}.${held ? ` Hättest du bis zum Laufzeitende gehalten, ohne weiter einzugreifen: ${held.moic.toFixed(2)}× bei ${(held.irr * 100).toFixed(0)} % — Wertung ${held.score.toFixed(2)}. ${held.score > pracScore(moic, nq) ? "Zu früh verkauft: die verbleibende Wertsteigerung war den zusätzlichen Zeitaufwand wert." : "Richtig verkauft: der Multiple wäre zwar weiter gestiegen, aber langsamer als dein Kapital anderswo verdient."}` : ""} ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital${(n.recapOut || 0) > 0.5 ? ` — davon ${eur(n.recapOut)} bereits während der Haltezeit ausgeschüttet, der Rest beim Exit` : ""}.${base != null ? ` Dieselbe Beteiligung unangetastet gehalten: <b>${base.toFixed(2)}×</b> — allein aus Entschuldung und Cashflow. Deine Arbeit hat ${moic >= base ? "" : "−"}${Math.abs(Math.round((moic - base) * 100))} Prozentpunkte ${moic >= base ? "hinzugefügt" : "gekostet"}. Genau diese Frage stellt das Investment Committee: Was wäre ohne dich passiert?` : ""} Lies die Value Bridge von oben nach unten: Der <b>EBITDA-Balken</b> ist deine operative Arbeit, <b>Multiple-Expansion</b> kommt hier ausschließlich aus Assetqualität und Wachstumsprämie — der Markt stand still. <b>Entschuldung</b> ist der Cashflow, den das Unternehmen selbst erwirtschaftet hat. Der Kostenbalken ist der Teil, den du nie zurückverdienst.`,
+      t: `<b>Fazit.</b> ${moic.toFixed(2)}× nach ${hj(nq)} — ${(pracIrr(moic, nq) * 100).toFixed(0)} % IRR, Wertung ${pracScore(moic, nq).toFixed(2)}.${held ? ` Hättest du bis zum Laufzeitende gehalten, ohne weiter einzugreifen: ${held.moic.toFixed(2)}× bei ${(held.irr * 100).toFixed(0)} % — Wertung ${held.score.toFixed(2)}. ${held.score > pracScore(moic, nq) ? "Zu früh verkauft: die verbleibende Wertsteigerung war den zusätzlichen Zeitaufwand wert." : "Richtig verkauft: der Multiple wäre zwar weiter gestiegen, aber langsamer als dein Kapital anderswo verdient."}` : ""} ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital${(n.recapOut || 0) > 0.5 ? ` — davon ${eur(n.recapOut)} bereits während der Haltezeit ausgeschüttet, der Rest beim Exit` : ""}.${base != null ? ` Dieselbe Beteiligung unangetastet gehalten: <b>${base.toFixed(2)}×</b> — allein aus Entschuldung und Cashflow. Deine Arbeit hat ${moic >= base ? "" : "−"}${Math.abs(Math.round((moic - base) * 100))} Prozentpunkte ${moic >= base ? "hinzugefügt" : "gekostet"}. Genau diese Frage stellt das Investment Committee: Was wäre ohne dich passiert?` : ""} Lies die Value Bridge von oben nach unten: Der <b>EBITDA-Balken</b> ist deine operative Arbeit, <b>Multiple-Expansion</b> kommt hier ausschließlich aus Assetqualität und Wachstumsprämie — der Markt stand still. <b>Entschuldung</b> ist der Cashflow, den das Unternehmen selbst erwirtschaftet hat.`,
     }, ...p]);
   }
 
@@ -1016,7 +1027,7 @@ function GuidedRun({ dark, setDark, back }) {
           </div>
         )}
 
-        <Holding c={c} market={market} neg={PRAC_ATTRS.negotiation} quarter={q}
+        <Holding c={c} market={market} quarter={q}
           procCount={0} freeSlots={over ? 0 : freeSlots} practice
           act={{
             proc: () => {}, bil: () => {}, cv: () => {}, ipo: () => {},
@@ -1041,7 +1052,7 @@ function GuidedRun({ dark, setDark, back }) {
             <p className="hint" style={{ marginTop: 4 }}>
               Bei sofortigem Verkauf stünden {offerMoic.toFixed(2).replace(".", ",")}× auf dem Papier —
               {" "}{(pracIrr(offerMoic, q) * 100).toFixed(0).replace("-", "−")} % IRR, Wertung {pracScore(offerMoic, q).toFixed(2).replace(".", ",")}.
-              Ein strukturierter Prozess braucht {hj(PROC_Q)}, bringt aber Wettbewerb unter die Käufer
+              Ein strukturierter Prozess braucht {hj(PROC_Q + 1)}, bringt aber Wettbewerb unter die Käufer
               und damit den besseren Preis als ein bilateraler Zuruf.
             </p>
             <button className={"solid" + (G && G.spot === "proc" ? " spot" : "")}
@@ -1062,18 +1073,29 @@ function GuidedRun({ dark, setDark, back }) {
         {!over && offer && (
           <div className="card">
             <h3 className="disp">Gebot eingegangen</h3>
-            <table className="kv"><tbody>
-              <tr><td className="lab">Bruttoerlös</td><td>{eur(offer.gross)}</td></tr>
-              <tr><td className="lab">Transaktionskosten</td><td>− {eur(offer.gross * PROC_FEE)}</td></tr>
-              {c.ltip && <tr><td className="lab">Managementbeteiligung</td>
-                <td>− {eur(offer.gross * (1 - PROC_FEE) * LTIP_SHARE)}</td></tr>}
-              <tr><td className="lab">Nettoerlös an den Fonds</td>
-                <td style={{ fontWeight: 600 }}>{eur(offer.net)}</td></tr>
-              <tr><td className="lab">Ergebnis</td>
-                <td style={{ color: offer.moic >= 1 ? "var(--teal)" : "var(--ox)", fontWeight: 600 }}>
-                  {offer.moic.toFixed(2).replace(".", ",")}× · {(pracIrr(offer.moic, q) * 100).toFixed(0).replace("-", "−")} % IRR
-                  · Wertung {pracScore(offer.moic, q).toFixed(2).replace(".", ",")}</td></tr>
-            </tbody></table>
+            {/* Wie in der Partie: Der Käufer bietet einen Unternehmenswert, das
+                Multiple ist daraus abgeleitet. Darunter als Wasserfall, was davon
+                beim Fonds ankommt. Die Zwischenschritte sind aus den Summen
+                zurückgerechnet, damit die Brücke auf den Euro aufgeht. */}
+            <p className="hint" style={{ margin: "2px 16px 0" }}>
+              {eur(offer.ev)} Unternehmenswert = <b>{x(offer.eb > 0 ? offer.ev / offer.eb : 0)}</b> auf {eur(offer.eb)} Adj. EBITDA
+            </p>
+            <div className="pad" style={{ paddingTop: 10 }}>
+              <Waterfall rows={[
+                { l: "Enterprise Value (Gebot)", v: offer.ev, kind: "start" },
+                { l: "Nettoverschuldung", v: offer.gross - offer.ev, kind: "step" },
+                { l: "Bruttoerlös (Eigenkapital)", v: offer.gross, kind: "total", tone: "base" },
+                { l: "Transaktionskosten", v: -offer.gross * PROC_FEE, kind: "step" },
+                ...(offer.gross * (1 - PROC_FEE) - offer.net > 0.05
+                  ? [{ l: "Managementbeteiligung", v: offer.net - offer.gross * (1 - PROC_FEE), kind: "step" as const }] : []),
+                { l: "Nettoerlös an den Fonds", v: offer.net, kind: "total" },
+              ]} />
+              <KpiTiles items={[
+                { l: "MOIC", v: `${offer.moic.toFixed(2).replace(".", ",")}×`, tone: offer.moic >= 1 ? "teal" : "ox" },
+                { l: "IRR", v: `${(pracIrr(offer.moic, q) * 100).toFixed(0).replace("-", "−")} %`, tone: offer.moic >= 1 ? "teal" : "ox" },
+                { l: "Wertung", v: pracScore(offer.moic, q).toFixed(2).replace(".", ",").replace("-", "−") },
+              ]} />
+            </div>
             <button className={"solid" + (G && G.spot === "accept" ? " spot" : "")}
               style={{ width: "100%", marginTop: 10 }} onClick={acceptOffer}>
               🤝 Annehmen · {eur(offer.net)}

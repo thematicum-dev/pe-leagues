@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAccess } from "@/lib/access/context";
+import BestDeals, { type BestDealRow } from "./BestDeals";
 
 interface LeaderboardRow {
   profile_id: string;
@@ -37,6 +38,11 @@ export default async function LeaderboardPage() {
     p_universe_id: activeUniverse.id,
   });
   const rows = (data ?? []) as LeaderboardRow[];
+
+  const { data: dealData, error: dealError } = await supabase.rpc("best_deals", {
+    p_universe_id: activeUniverse.id,
+  });
+  const deals = (dealData ?? []) as BestDealRow[];
 
   return (
     <main className="dashwrap">
@@ -85,6 +91,8 @@ export default async function LeaderboardPage() {
             </div>
           ))}
         </div>
+
+        <BestDeals deals={deals} error={dealError?.message ?? null} />
       </div>
     </main>
   );

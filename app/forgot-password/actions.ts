@@ -2,8 +2,9 @@
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/forms";
 
-export async function requestPasswordReset(_prevState: unknown, formData: FormData) {
+export async function requestPasswordReset(_prevState: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) {
     return { error: "Bitte E-Mail-Adresse eingeben." };

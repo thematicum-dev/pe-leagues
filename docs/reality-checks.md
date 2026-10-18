@@ -147,6 +147,21 @@ kommentarlos. Ein verschwindender Dialog sieht aus wie ein Fehler.
 Modi, woran man ist: wie viel einbehalten werden kann, oder warum nichts —
 Investitionsperiode vorbei oder Deckel ausgeschöpft.
 
+**Nachtrag 18.10.2026.** Die erste der beiden Grenzen ist gefallen: Recycling
+geht jetzt über die ganze Laufzeit, es bleibt nur der Deckel von einem
+Commitment. Ein später Exit soll den Erlös ebenso in einen Zukauf oder neuen
+Deal stecken können. Bereits ausgewertete Halbjahre rechnet die Wiederholung
+weiter nach der alten Regel (`legacyRecycleInvestPeriod`). Die
+Investitionsperiode zählt weiterhin für die Management Fee.
+
+Bei der Gelegenheit neu gemessen (40 Startwerte, einfache Strategie: Gebot
+zum Angebotspreis, Kostenprogramm, Exit nach sechs Halbjahren): immer
+ausschütten 1,17× bei 0,4 %, bis Jahr 5 einbehalten 1,15× bei −0,3 %, immer
+einbehalten 1,06× bei −0,3 %. Einbehalten kostet zuverlässig IRR; den TVPI
+hebt es nur, wenn das Geld in einen Deal fließt, der mehr verdient als der
+Fonds bisher. Die Zahlen im Erklärmodus (1,94× gegen 2,20×) stammten noch aus
+dem MVP und sind durch diese Aussage ersetzt.
+
 ### 6 — Fondskapital für Zukäufe
 
 **Frage.** Es sollte möglich sein, ein Add-on mit Eigenkapital aus dem Fonds zu

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 
 /* ---------------- Spiellogik ----------------
@@ -22,15 +22,28 @@ import {
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
-  seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
+  seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 import {
-  TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
+  TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, 
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
+import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
+import { useFadeOnChange } from "@/components/pel/motion";
+
+/* Kennzahlen des eigenen Fonds (Platz 0) für den Halbjahresbericht */
+function perfOf(F, mk, q): BriefPerf {
+  const me0 = F[0];
+  const scores = F.map((f) => scoreOf(f, mk, q));
+  return {
+    score: scores[0], rank: 1 + scores.filter((v, i) => i > 0 && v > scores[0]).length, funds: F.length,
+    tvcc: tvccOf(me0, mk, q), tvpi: tvpiOf(me0, mk, q), irr: irrOf(me0, mk, q), dpi: dpiOf(me0, mk, q),
+    dry: investableOf(me0, q),
+  };
+}
 
 export default function PeLeagues() {
   const [phase, setPhase] = useState("setup");
@@ -74,6 +87,14 @@ export default function PeLeagues() {
   const [injectPick, setInjectPick] = useState(null);   // offene Kapitalzuführung
   const [useProceeds, setUseProceeds] = useState(null);   // offene Verwendungsentscheidung
   const [rolling, setRolling] = useState(false);
+  const [rollOut, setRollOut] = useState(false);   // Ladeschleier blendet aus
+  /* Halbjahresbericht: Daten des zuletzt ausgewerteten Halbjahres, und ob das
+     Fenster gerade offen ist. Die Daten bleiben nach dem Schließen stehen,
+     damit der Bericht sich aus der Meldungsbox erneut öffnen lässt. */
+  const [brief, setBrief] = useState(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useFadeOnChange(wrapRef, quarter);
   const [toasts, setToasts] = useState([]);
   const [burst, setBurst] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -153,12 +174,19 @@ export default function PeLeagues() {
   // Kurze, spürbare Verzögerung vor der Auflösung — Spannung statt Sofortergebnis
   function closeQuarter() {
     if (rolling) return;
-    haptic(14);
+    haptic("confirm");
     setRolling(true);
-    setTimeout(() => { runQuarter(); setRolling(false); }, 620);
+    setTimeout(() => {
+      runQuarter();
+      // Der Schleier blendet aus statt zu verschwinden — darunter steht schon
+      // das neue Halbjahr samt Bericht.
+      setRollOut(true);
+      setTimeout(() => { setRolling(false); setRollOut(false); }, 240);
+    }, 620);
   }
 
   function runQuarter() {
+    const before = perfOf(funds, market, quarter);
     const F = funds.map((f) => ({ ...f, holdings: f.holdings.map((c) => ({ ...c })), realized: [...f.realized] }));
     const mk = { ...market };
     const news = [];
@@ -257,7 +285,7 @@ export default function PeLeagues() {
         // Gerade erworben: im unrealisierten Block des Ausgangsstands noch nicht da
         uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
       };
-      c.baseLoad = seatLoad(c);
+      Object.assign(c, { baseLoad: seatLoad(c) });
       spendFund(f, c.entryEquity, q);
       f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
       f.holdings.push(c);
@@ -506,6 +534,7 @@ export default function PeLeagues() {
     if (resolved.length) setExitQueue((p) => [...p, ...resolved]);
     setQuarter(q);
     if (q >= PERIODS) { liquidate(F, mk, q); setPhase("end"); }
+    else { setBrief({ q, prev: quarter > 0 ? before : null, now: perfOf(F, mk, q) }); setBriefOpen(true); }
 
     // Serie guter Halbjahre sichtbar machen — das eigentliche Momentum-Signal
     const newScore = scoreOf(F[0], mk, q);
@@ -516,8 +545,9 @@ export default function PeLeagues() {
     }
     const won = news.find((n) => n.tone === "pos" && (n.e === "🏆" || n.e === "🏛️"));
     const lost = news.find((n) => n.tone === "neg" && (n.e === "☠️" || n.e === "🚪"));
-    if (won) { haptic([10, 20, 10]); if (won.e === "🏛️") fireConfetti(); pushToast(won.t, "pos"); }
-    else if (lost) { haptic(25); pushToast(lost.t, "neg"); }
+    // Das haptische Feedback zum Ergebnis kommt mit dem Halbjahresbericht
+    if (won) { if (won.e === "🏛️") fireConfetti(); pushToast(won.t, "pos"); }
+    else if (lost) pushToast(lost.t, "neg");
   }
 
   /* Ende der Fondslaufzeit: alle verbliebenen Beteiligungen werden zu
@@ -549,12 +579,6 @@ export default function PeLeagues() {
   const busySlots = me ? me.holdings.reduce((n, c) => n + initsOf(c).length, 0) : 0;
   const maxSlots = me ? INIT_SLOTS + Math.floor(me.attrs.operations / 2) : INIT_SLOTS;
   const freeSlots = maxSlots - busySlots;
-
-  function chargeCompany(uid, mult) {
-    setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== uid ? h : chargeOff(h, "mgmt", ebitdaOf(h) * mult)),
-    }));
-  }
 
   function startSearch(c, seat) {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
@@ -694,11 +718,11 @@ export default function PeLeagues() {
     setFeed((p) => [{ q: quarter, e: "📣", tone: "neu", t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Gebote liegen in ${hj(PROC_Q + 1)} vor.` }, ...p]);
   }
 
-function finalize(c, gross, buyer, feeRate, extra) {
+function finalize(c, gross, buyer, feeRate, extra?) {
     const net = exitNetOf(c, gross, feeRate);
     /* Steht Spielraum zum Einbehalten zur Verfügung, entscheidet der GP — sonst
        wird direkt voll ausgeschüttet und der Dialog erscheint gar nicht.      */
-    if (recycleRoom(me, net, quarter) > 0.5) {
+    if (recycleRoom(me, net, decQ) > 0.5) {
       setUseProceeds({ c, gross, buyer, feeRate, extra, net });
       return;
     }
@@ -707,7 +731,6 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
   function settle(c, gross, buyer, feeRate, extra, keep) {
     const net = exitNetOf(c, gross, feeRate);
-    const st = c.st ?? 1;
     const bridge = makeBridge(c, gross, net);
     setUseProceeds(null);
     setFunds((F) => F.map((f, i) => {
@@ -787,30 +810,22 @@ function finalize(c, gross, buyer, feeRate, extra) {
   /* Vorschau: Bewertung und Rückflüsse, bevor der Exit freigegeben wird */
   function previewExit(c, ch) {
     const st = c.st ?? 1;
-    const eb = ebitdaOf(c);
-    const mMult = markMultiple(c, market);
-    const dMult = dealMultiple(c, market, NEG, quarter);
+    // Multiple → EBITDA → Unternehmenswert, für jeden Exit-Weg dieselbe Rechnung
+    const { rows, eqv100 } = exitValuation(c, market, NEG, quarter, ch);
 
-    let exMult = dMult;        // Multiple, das den Enterprise Value bestimmt
     let eqDisc = 1;            // prozentualer Abschlag auf Equity-Ebene
     let share = st;            // verkaufter Anteil
     let feeRate = 0, costBasis = c.entryEquity, note = "";
-
     const recap = c.recapOut || 0;
-    const rows = [["Adj. EBITDA (LTM)", eur(eb)], ["Bewertungsmultiple", x(mMult)]];
-    if (ch !== "ipo" && NEG > 0) rows.push([`Verhandlungsprämie +${NEG * 2} %`, x(dMult)]);
 
     if (ch === "bil") {
-      exMult = dMult - BIL_DISC;
       feeRate = BIL_FEE;
-      rows.push([`Abschlag bilateral`, `−${BIL_DISC.toFixed(1).replace(".", ",")}× EBITDA`]);
       note = "Sofortiger Vollzug, kein Marktrisiko. Jedes Halbjahr erneut möglich.";
     } else if (ch === "cv") {
       eqDisc = CV_DISC; share = st * CV_STAKE; feeRate = CV_FEE;
       costBasis = c.entryEquity * CV_STAKE;
       note = "Teilexit an einen Secondary-Investor. Liquidität jetzt, künftige Wertsteigerung anteilig weg. Jedes Halbjahr wiederholbar.";
     } else if (ch === "ipo") {
-      exMult = mMult;          // am Kapitalmarkt zählt kein Verhandlungsgeschick
       eqDisc = IPO_DISC; share = st * IPO_PLACE; feeRate = IPO_FEE;
       costBasis = c.entryEquity * IPO_PLACE;
       note = "Die Restbeteiligung wird nach einem Jahr Lock-up zum dann gültigen Kurs verwertet.";
@@ -818,35 +833,28 @@ function finalize(c, gross, buyer, feeRate, extra) {
       note = "Der Preis steht erst bei Prozessende — bis dahin bewegen sich Multiples und EBITDA weiter.";
     }
 
-    const ev = eb * exMult;
-    const eqv100 = ev - c.netDebt;
     const gross = Math.max(0, eqv100 * share * eqDisc);
+    // Nettoerlös an den Fonds: Transaktionskosten und Sweet Equity des MEP
     const net = exitNetOf(c, gross, feeRate);
 
-    rows.push(["Exit-Multiple", x(exMult)], ["Enterprise Value", eur(ev)],
-      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
-    if (share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
+    if (ch !== "proc" && share < 1) rows.push([`× verkaufter Anteil ${Math.round(share * 100)} %`, eur(eqv100 * share)]);
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
-    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
-       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
-       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
-       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus.                                       */
+    /* Warum der Verwendungsdialog ausbleiben kann: Recycling ist kumuliert
+       höchstens bis zur Höhe des Commitments möglich (siehe recycleRoom),
+       danach wird zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das
+       Verschwinden des Dialogs wie ein Fehler aus. Bis zum 18.10.2026 endete
+       das Recycling außerdem mit der Investitionsperiode.                    */
     if (ch !== "proc") {
-      const room = recycleRoom(me, Math.max(0, net), quarter);
+      const room = recycleRoom(me, Math.max(0, net), decQ);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : quarter > INVEST_PERIOD
-          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
-          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+        : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
-      const fair = Math.max(0, eqv100 * st);
-      rows.push(["Erwartete Gebotsspanne", eur(fair * 0.86) + " – " + eur(fair * 1.08)],
-        [`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
-        ["Gebote liegen vor in", hj(PROC_Q)]);
+      rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
+        ["Gebote liegen vor in", hj(PROC_Q + 1)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
       return;
@@ -930,7 +938,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
   }
 
   const rank = useMemo(() => funds.map((f) => ({
-    ...f, tvpi: tvpiOf(f, market, quarter), dpi: dpiOf(f, market, quarter),
+    ...f, tvcc: tvccOf(f, market, quarter), tvpi: tvpiOf(f, market, quarter), dpi: dpiOf(f, market, quarter),
     irr: irrOf(f, market, quarter),
     gross: grossMoicOf(f, market), score: scoreOf(f, market, quarter),
   })).sort((a, b) => b.score - a.score), [funds, market, quarter]);
@@ -955,9 +963,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
           </div>
           <div style={{ padding: "0 16px" }}>
             <p style={{ fontSize: 14, color: "var(--ink2)", lineHeight: 1.55, margin: 0 }}>
-              Fünf Fonds, je {eur(CAPITAL)}, zehn Jahre. Ihr bietet auf denselben Dealflow, führt eure Beteiligungen
-              und verkauft sie wieder. Gewertet wird zur Hälfte der TVPI, zur Hälfte der IRR — was du verdienst
-              und wie lange du dafür brauchst.
+              Wähle dein Fondsprofil.
             </p>
           </div>
           <FundProfileEditor attrs={attrs} setAttrs={setAttrs} onSubmit={start} submitLabel="Fonds auflegen" />
@@ -968,10 +974,13 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
   const dpi = me ? dpiOf(me, market, quarter) : 0;
   const gross = me ? grossMoicOf(me, market) : 0;
+  const tvcc = me ? tvccOf(me, market, quarter) : 1;
   const tvpi = me ? tvpiOf(me, market, quarter) : 1;
   const irr = me ? irrOf(me, market, quarter) : 0;
   const score = me ? scoreOf(me, market, quarter) : 0;
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(funds);
 
   return (
     <div className={"pel" + (dark ? " dark" : "")}><style>{CSS}</style>
@@ -999,7 +1008,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
           </button>
         </div>
         <div className="barrow" style={{ marginTop: 6, fontSize: 10.5, opacity: .55 }}>
-          <span className="mono">TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}×</span>
+          <span className="mono">TVCC {tvcc.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · TVPI {tvpi.toFixed(2)}×</span>
           <span className="mono">Platz {myRank}/{funds.length}{streak >= 2 ? ` · 🔥×${streak}` : ""} · {me.holdings.length}/{MAX_SLOTS} PortCos</span>
         </div>
         {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
@@ -1022,22 +1031,22 @@ function finalize(c, gross, buyer, feeRate, extra) {
       <Toasts items={toasts} />
       {burst > 0 && <Confetti key={burst} seed={burst} rng={rng} />}
       {rolling && (
-        <div className="rollmask">
+        <div className={"rollmask" + (rollOut ? " out" : "")}>
           <div className="rr" />
           <div className="rt">Auktion läuft …</div>
           <div className="rs">Gebote werden aufgelöst</div>
         </div>
       )}
 
-      <div className="wrap">
-        <News feed={feed} quarter={quarter} />
+      <div className="wrap" ref={wrapRef}>
+        <News feed={feed} quarter={quarter} onBrief={brief && brief.q === quarter ? () => setBriefOpen(true) : null} />
         {phase === "end" && (
           <div className="tomb">
             <div className="sub">Fondslaufzeit beendet</div>
             <div className="amt">{score.toFixed(2)}</div>
             <div className="sub">Wertung · Platz {myRank} von 5</div>
             <div className="sub" style={{ marginTop: 6 }}>
-              TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}× · Brutto-MOIC {gross.toFixed(2)}×
+              TVCC {tvcc.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · TVPI {tvpi.toFixed(2)}× · DPI {dpi.toFixed(2)}× · Brutto-MOIC {gross.toFixed(2)}×
             </div>
             <div className="sub" style={{ marginTop: 4, opacity: .7 }}>
               {eur(me.drawn || 0)} von {eur(CAPITAL)} abgerufen · {eur(me.distTotal || 0)} ausgeschüttet
@@ -1074,27 +1083,29 @@ function finalize(c, gross, buyer, feeRate, extra) {
               <TvpiChart hist={tvpiHist} meIdx={0} />
             </div>
             <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={funds} meKey={0} quarter={quarter} />
+            </div>
+            <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
-              <SectorSplit holdings={me.holdings} market={market} cash={me.cash} />
+              <SectorSplit holdings={me.holdings} market={market} />
             </div>
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
                 Noch keine Beteiligungen. Im Dealflow findest du vier strukturierte Prozesse und deine proprietären Kontakte.
               </div></div>
             )}
-            {me.holdings.length > 0 && (
-              <div className="secthead">
-                <span className="eyebrow">Beteiligungen</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
-                  {me.holdings.filter((c) => healthOf(c, market).attention).length > 0
-                    ? `${me.holdings.filter((c) => healthOf(c, market).attention).length} × Handlungsbedarf` : ""}
-                </span>
-              </div>
-            )}
-            <Shelf holdings={me.holdings} market={market} cash={me.cash} quarter={quarter}
+            <div className="secthead">
+              <span className="eyebrow">Portfolio</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--ox)" }}>
+                {me.holdings.filter((c) => healthOf(c, market).attention).length > 0
+                  ? `${me.holdings.filter((c) => healthOf(c, market).attention).length} × Handlungsbedarf` : ""}
+              </span>
+            </div>
+            <Shelf holdings={me.holdings} market={market} dryPowder={investableOf(me, quarter)} quarter={quarter}
               onPick={(uid) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c) => (
-              <Holding key={c.uid} c={c} market={market} neg={NEG} quarter={quarter} procCount={procCount}
+              <Holding key={c.uid} c={c} market={market} quarter={quarter} procCount={procCount}
                 freeSlots={freeSlots} act={{
                   proc: () => previewExit(c, "proc"), bil: () => previewExit(c, "bil"),
                   cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),
@@ -1134,12 +1145,13 @@ function finalize(c, gross, buyer, feeRate, extra) {
                   </div>
                   {openFund === f.id && (
                     <div style={{ background: "var(--zebra)", borderBottom: "1px solid var(--rule)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
-                        <span className="eyebrow">{f.me ? "Dein Portfolio" : f.arch.style}</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", columnGap: 12, rowGap: 2, padding: "8px 14px 2px" }}>
+                        <span className="eyebrow" style={{ whiteSpace: "nowrap" }}>{f.me ? "Dein Portfolio" : f.arch.style}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVPI {f.tvpi.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(investableOf(f, quarter))} Dry Powder
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c) => {
                         const val = fairOf(c, market, f.attrs.negotiation);
@@ -1233,11 +1245,21 @@ function finalize(c, gross, buyer, feeRate, extra) {
           confirm={(amt) => injectCapital(me.holdings.find((h) => h.uid === injectPick), amt)}
           close={() => setInjectPick(null)} />
       )}
-      {!sheet && !initPick && shortlist.length > 0 && (
+      {briefOpen && brief && (
+        <HalfYearBriefing quarter={brief.q} items={feed.filter((f) => f.q === brief.q)}
+          perf={brief.now} prev={brief.prev}
+          todo={{ shortlists: shortlist.length, offers: exitQueue.length }}
+          onClose={() => setBriefOpen(false)} />
+      )}
+      {/* Solange über die Verwendung eines Erlöses entschieden wird, bleiben
+          Shortlist und Gebote weg: Sie stehen weiter unten in der Seite und
+          lägen sonst über dem Verwendungsdialog. Mit zwei Geboten in der
+          Schlange verdeckte das nächste Gebot den Dialog des ersten. */}
+      {!briefOpen && !sheet && !initPick && !useProceeds && shortlist.length > 0 && (
         <Shortlist item={shortlist[0]} holding={me.holdings.find((h) => h.uid === shortlist[0].uid)}
           analysis={me.attrs.analysis} hire={hire} reject={rejectAll} />
       )}
-      {!sheet && !initPick && shortlist.length === 0 && exitQueue.length > 0 && (
+      {!briefOpen && !sheet && !initPick && !useProceeds && shortlist.length === 0 && exitQueue.length > 0 && (
         <Offers item={exitQueue[0]} holding={me.holdings.find((h) => h.uid === exitQueue[0].uid)}
           market={market} neg={NEG} decide={decideOffer} />
       )}

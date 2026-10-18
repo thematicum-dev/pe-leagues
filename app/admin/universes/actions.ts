@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "../adminAuth";
+import type { FormState } from "@/lib/forms";
 
 export async function createUniverseAction(
-  _prevState: unknown,
+  _prevState: FormState,
   formData: FormData,
-): Promise<{ error: string | null; success?: boolean }> {
+): Promise<FormState> {
   const { supabase } = await requireAdmin();
 
   const key = String(formData.get("key") ?? "").trim().toLowerCase();
@@ -41,9 +42,9 @@ export async function createUniverseAction(
 }
 
 export async function updateUniverseAction(
-  _prevState: unknown,
+  _prevState: FormState,
   formData: FormData,
-): Promise<{ error: string | null; success?: boolean }> {
+): Promise<FormState> {
   const { supabase } = await requireAdmin();
 
   const id = String(formData.get("universeId") ?? "");

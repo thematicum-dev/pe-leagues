@@ -211,7 +211,8 @@ function Racks({ rnd, id, k = "", glow = false }) {
   const dx = rnd() * 8 - 4;
   /* Drei Schränke von hinten nach vorn. `dim` ist die Tiefenstufe: Sie
      bestimmt Deckkraft und ob überhaupt Licht gezeigt wird. */
-  const cabs = [
+  const cabs: { x: number; w: number; top: number; bot: number; dim: number; rows: number;
+    lit?: boolean[]; wide?: number[] }[] = [
     { x: 44 + dx, w: 42, top: 92, bot: 188, dim: 0.3, rows: 6 },
     { x: 92 + dx, w: 50, top: 74, bot: 194, dim: 0.6, rows: 7 },
     { x: 150 + dx, w: 78, top: 46, bot: 200, dim: 1, rows: 8 + Math.floor(rnd() * 3) },
@@ -508,7 +509,7 @@ function Robot({ rnd, id, k = "", glow = false }) {
       ))}
 
       {/* Gelenke: Ring mit Schraubenkranz — das Zeichen für "Maschine" */}
-      {[[sh, 12, 8], [el, 9.5, 6]].map(([c, r, n], i) => (
+      {([[sh, 12, 8], [el, 9.5, 6]] as [number[], number, number][]).map(([c, r, n], i) => (
         <g key={i}>
           <circle cx={c[0]} cy={c[1]} r={r} fill={`url(#${k}rb)`} stroke={id.lit} strokeWidth="1.8" />
           <circle cx={c[0]} cy={c[1]} r={r * 0.42} fill={id.shade} stroke={id.own} strokeWidth="1" />
@@ -985,7 +986,7 @@ export function StatRow({ items }) {
 }
 
 /* Abschnitt mit Überschrift — "Investment Thesis" und alles, was ihr folgt. */
-export function Section({ title, right = null, children, flush = false }) {
+export function Section({ title, right = null, children = null, flush = false }) {
   return (
     <section className={"bsec" + (flush ? " flush" : "")}>
       {title && (
@@ -1083,7 +1084,7 @@ export function StatRadar({ axes, color, redacted = false, note = null }) {
   return (
     <div className="bradar">
       <svg viewBox="0 0 140 122" role="img"
-        aria-label={redacted ? "Profil ohne Datenraum verdeckt"
+        aria-label={redacted ? "Profil ohne Due Diligence verdeckt"
           : "Profil: " + axes.map((a) => `${a.k} ${Math.round(cl(a.v) * 100)} von 100`).join(", ")}>
         {[0.25, 0.5, 0.75, 1].map((f) => (
           <polygon key={f} points={ring(f)} fill="none" stroke="var(--rule)" strokeWidth=".7" />
@@ -1131,7 +1132,7 @@ export function StatRadar({ axes, color, redacted = false, note = null }) {
    und Qualität eine Streuung, und eine Beteiligung wächst über die
    Halteperiode über ihr Einstiegsband hinaus.                                */
 const CATALOG = SECNAMES.flatMap((s) => BOOK[s]);
-const AX_SPAN = (() => {
+const AX_SPAN = ((): Record<string, [number, number]> => {
   let mMax = 0, gMin = 1e9, gMax = -1e9, ebMax = 0, cMin = 1e9, cMax = -1e9;
   for (const a of CATALOG) {
     mMax = Math.max(mMax, a.m[1]);
@@ -1302,6 +1303,12 @@ export const BATTLE_CSS = `
 .pel .bicons .s{display:block;font-size:8.5px;color:var(--ink2);margin-top:2px;line-height:1.3;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .bicons .s.teal{color:var(--teal);} .pel .bicons .s.ox{color:var(--ox);}
+/* Gesperrter Vergleichswert: Er existiert, liegt aber im Datenraum. Als Plakette
+   in der Farbe der Due Diligence statt als graues Fragezeichen — man soll sehen,
+   dass hier etwas fehlt und womit es sich öffnen lässt. */
+.pel .bicons .s.lock{display:inline-block;max-width:100%;margin-top:4px;padding:1px 6px;border-radius:999px;
+  font-size:9px;font-weight:650;color:var(--gold);background:color-mix(in srgb, var(--gold) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--gold) 40%, transparent);}
 /* "Cash Conv." samt Erklär-Punkt braucht rund 73 px; eine Viertelspalte hat
    auf 360 px nur 79 px abzüglich Abstand. Ab hier stehen zwei nebeneinander. */
 @media (max-width:379px){
@@ -1510,19 +1517,21 @@ export const BATTLE_CSS = `
 /* Regler. Der Systemregler übernimmt im dunklen Theme die Fahrbahn des
    Betriebssystems — hell und flächig — und stünde damit als hellster Balken
    über allem anderen. Beide Herstellerpräfixe sind nötig, WebKit und Gecko
-   teilen sich keinen Selektor dafür. */
-.pel .bcard input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
+   teilen sich keinen Selektor dafür. Dieselben Regler stehen in jedem
+   Kartenfuß (.bfoot), auch außerhalb einer Karte — im Dialog zur Verwendung
+   der Erlöse. */
+.pel :is(.bcard, .bfoot) input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
   background:transparent;margin:8px 0 2px;height:20px;cursor:pointer;}
-.pel .bcard input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:var(--rule);}
-.pel .bcard input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:var(--rule);}
-.pel .bcard input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+.pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:var(--rule);}
+.pel :is(.bcard, .bfoot) input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:var(--rule);}
+.pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
   width:19px;height:19px;border-radius:50%;margin-top:-6.5px;background:var(--own);
   border:2px solid var(--card);box-shadow:0 0 0 1px color-mix(in srgb, var(--own) 70%, transparent),
   0 2px 6px rgba(0,0,0,.35);}
-.pel .bcard input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;
+.pel :is(.bcard, .bfoot) input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;
   background:var(--own);border:2px solid var(--card);
   box-shadow:0 0 0 1px color-mix(in srgb, var(--own) 70%, transparent),0 2px 6px rgba(0,0,0,.35);}
-.pel .bcard input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:99px;}
+.pel :is(.bcard, .bfoot) input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:99px;}
 .pel .bdial{margin-top:12px;}
 .pel .bdial + .bdial{margin-top:14px;}
 

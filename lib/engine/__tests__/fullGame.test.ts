@@ -30,7 +30,7 @@ function runGoldenGame() {
   SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
   const attrs = { sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 };
   const fund = {
-    cash: CAPITAL, proceeds: 0, investedTotal: 0, fees: 0, holdings: [], realized: [],
+    name: "Testfonds", cash: CAPITAL, proceeds: 0, investedTotal: 0, fees: 0, holdings: [], realized: [],
     undrawn: CAPITAL, drawn: 0, recyc: 0, recycled: 0, distTotal: 0, accrued: 0, calls: [], dists: [],
   };
   let uidCounter = 0;
@@ -43,7 +43,7 @@ function runGoldenGame() {
     const ev = eb * mult;
     const entryEquity = ev - eb * lev + ev * ENTRY_FEE;
     if (entryEquity > investableOf(fund, quarter)) return null;
-    const c = {
+    const c: Record<string, unknown> & { baseLoad?: number } = {
       uid: "c" + uidCounter++, name: d.name, sector: d.sector, desc: d.desc,
       revenue: d.revenue, margin: d.margin, quality: d.quality,
       netDebt: eb * lev, rate: BASE_RATE - 0.25 * attrs.financing,
@@ -215,8 +215,13 @@ const GOLDEN_RESULT = {
      Unverändert: finalRngPosition, drawn, cash, undrawn, nav, die Marktstände
      und die Value Bridge — der Wasserfall verteilt nur, er rechnet nichts neu.
      Die Zinsschranke (INT_BARRIER) greift in dieser Partie nicht: Der Leverage
-     liegt bei 0,75 × levCap, der Zinsaufwand damit unter 30 % des EBITDA. */
-  score: 0.760918,
+     liegt bei 0,75 × levCap, der Zinsaufwand damit unter 30 % des EBITDA.
+     Ein siebtes Mal mit dem Wechsel der Wertung vom TVPI auf den TVCC
+     (TVCC_BENCH 1,6). Bewegt sich nur score: Der Fonds hat 459,6 von 500
+     abgerufen, TVCC = 1,6886 × 459,6 / 500 = 1,552, normiert 0,970 statt
+     0,993 -- die Wertung sinkt um die Hälfte der Differenz, 0,760918 ->
+     0,749304. */
+  score: 0.749304,
   carry: 74.249754,
   landmark: {
     sector: "Consumer",

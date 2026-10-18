@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/forms";
 
-export async function requestAccess(_prevState: unknown, formData: FormData) {
+export async function requestAccess(_prevState: FormState, formData: FormData): Promise<FormState> {
   const displayName = String(formData.get("displayName") ?? "").trim();
   const message = String(formData.get("message") ?? "").trim();
 

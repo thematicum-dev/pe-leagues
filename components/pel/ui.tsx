@@ -1,36 +1,37 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useContext, useRef } from "react";
+import React, { useState, useMemo, useEffect, useContext, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
-import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
-  ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
-  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_EBITDA, IPO_FEE,
-  IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
-  MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
-  RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RETAINER_PCT, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
-  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
-  buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
-  dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
-  evOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
-  impliedMoM, initById, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
+  ADDON_HEADROOM, BASE_RATE, BIL_DISC, CAPITAL,
+  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST, END_PRESSURE_FROM,
+  ENTRY_FEE, FAIL_SUNK, INITS, INVEST_PERIOD, 
+  IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_DEAL, LTIP_SHARE, MAX_PROC,
+  MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, 
+  RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
+  SECTORS, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, 
+  cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCostOf, dealMoic,
+  dealMultiple, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eur,
+  evOf, exitNetOf, fairOf, fitLabel, healthOf, hj,
+  impliedMoM, initGain, initRuns, initSuccess, initsOf, investableOf, 
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge, tailEndOf, initDurationOf,
-  PPE_YEARS, TAX_RATE, DEAL_YEARS, MIN_CASH_PCT,
-  isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
-  newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
+  DEAL_YEARS,
+  isCapped, markMultiple, navValueOf, 
+  overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
+  signBonusOf, tvpiOf, x,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
   SectorEmblem, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
 } from "./battle";
+import { haptic } from "./haptics";
+import { BRIEFING_CSS } from "./briefing";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -41,6 +42,7 @@ export const CSS = `
 .pel { --paper:#F4F6F2; --card:#FFFFFF; --ink:#12201F; --ink2:#6B7B79;
   --rule:#E2E7DF; --ox:#B4443C; --teal:#1B7A6B; --gold:#B08430; --shade:#EDF1EA;
   --zebra:transparent; --panel:#12201F; --onpanel:#F4F6F2; --glow:rgba(18,32,31,.05);
+  --cfin:#0E8C76; --cfout:#C2453B;
   /* Signalfarben für die Kopfleiste. Die Leiste steht in beiden Themes auf
      --panel, also immer auf dunklem Grund — die themeabhängigen --ox/--teal/
      --gold sind im hellen Theme für dunklen Text auf hellem Grund gemacht und
@@ -55,7 +57,8 @@ export const CSS = `
 
 .pel.dark { --paper:#0C1214; --card:#161F22; --ink:#EDF1EE; --ink2:#8E9C9B;
   --rule:#243033; --ox:#E3897F; --teal:#5FC4B1; --gold:#DCB264; --shade:#1C282B;
-  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4); }
+  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4);
+  --cfin:#22A98F; --cfout:#E06A5E; }
 .pel *{box-sizing:border-box;}
 .pel .wrap{max-width:520px;margin:0 auto;padding-bottom:88px;}
 .pel .disp{font-weight:600;letter-spacing:-.025em;line-height:1.15;}
@@ -384,6 +387,13 @@ export const CSS = `
 .pel .tomb .sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);}
 
 .pel .lb{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule);}
+.pel .cfbox{border-top:1px solid var(--rule);margin-top:8px;}
+.pel .cfbox > summary{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 14px;
+  font-size:12px;color:var(--ink);cursor:pointer;list-style:none;}
+.pel .cfbox > summary::-webkit-details-marker{display:none;}
+.pel .cfbox > summary > span:first-child::before{content:"▸";display:inline-block;width:12px;color:var(--ink2);transition:transform .2s ease;}
+.pel .cfbox[open] > summary > span:first-child::before{transform:rotate(90deg);}
+.pel .cfbox > summary > .mono{font-size:11px;color:var(--ink2);white-space:nowrap;}
 .pel .lb .rk{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink2);width:16px;}
 .pel .lb .nm{flex:1;font-size:13px;}
 .pel .lb .mo{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;}
@@ -409,6 +419,14 @@ export const CSS = `
 .pel .news{margin:12px 16px;border:1px solid var(--rule);background:var(--card);box-shadow:0 1px 0 var(--glow);}
 .pel .news .nh{display:flex;justify-content:space-between;align-items:center;padding:14px 15px 10px;
   border-bottom:1px solid var(--rule);}
+.pel .news.shut .nh{border-bottom:0;padding-bottom:14px;}
+.pel .news .ntoggle{background:none;border:0;border-radius:0;padding:0;cursor:pointer;text-align:left;font-family:inherit;
+  display:inline-flex;align-items:center;}
+.pel .news .ntoggle:hover:not(:disabled){background:none;color:var(--ink);border:0;}
+.pel .news .ntoggle::before{content:"";width:0;height:0;margin-right:8px;flex-shrink:0;
+  border-left:6px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;
+  transform:rotate(90deg);transition:transform .2s ease;}
+.pel .news.shut .ntoggle::before{transform:none;}
 .pel .item{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--rule);
   font-size:13px;line-height:1.45;animation:slide .3s ease-out both;}
 .pel .item:last-child{border-bottom:0;}
@@ -517,6 +535,8 @@ export const CSS = `
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   animation:fadeIn .18s ease-out both;}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.pel .rollmask.out{animation:fadeOut .24s ease-in both;pointer-events:none;}
+@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}
 .pel .rollmask .rr{width:46px;height:46px;border:3px solid rgba(228,234,227,.18);border-top-color:var(--gold);
   border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -555,17 +575,36 @@ export const CSS = `
 .pel .tabs button .badge{position:absolute;top:2px;margin-left:16px;background:var(--ox);color:#fff;
   font-size:9px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;
   justify-content:center;padding:0 3px;box-shadow:0 0 0 2px var(--panel);}
-` + BATTLE_CSS;
+
+/* Wasserfall (Value Bridge, Exit-Gebot) */
+.pel .wf{display:flex;flex-direction:column;gap:2px;}
+.pel .wfr{padding:5px 0;}
+.pel .wfr.total{border-top:1px solid var(--rule);margin-top:4px;padding-top:9px;}
+.pel .wfh{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12.5px;line-height:1.35;}
+.pel .wfl{color:var(--ink2);}
+.pel .wfr.total .wfl{color:var(--ink);font-weight:600;}
+.pel .wfv{white-space:nowrap;font-size:12.5px;color:var(--ink);}
+.pel .wfv.pos{color:var(--teal);} .pel .wfv.neg{color:var(--ox);}
+.pel .wfr.total .wfv{font-weight:600;}
+.pel .wft{position:relative;height:9px;margin-top:4px;background:var(--shade);border-radius:2px;overflow:hidden;}
+.pel .wft i{position:absolute;top:0;bottom:0;border-radius:2px;transition:left .4s ease,width .4s ease;}
+.pel .wft i.base{background:var(--ink);} .pel .wft i.pos{background:var(--teal);}
+.pel .wft i.neg{background:var(--ox);} .pel .wft i.gold{background:var(--gold);}
+.pel .kpit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);margin-top:12px;}
+.pel .kpit>div{background:var(--card);padding:9px 10px;min-width:0;}
+.pel .kpil{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);}
+.pel .kpiv{font-size:16px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pel .kpiv.teal{color:var(--teal);} .pel .kpiv.ox{color:var(--ox);}
+` + BATTLE_CSS + BRIEFING_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
-// Kurzes haptisches Feedback auf Geräten, die es unterstützen — no-op sonst
-export function haptic(pattern = 8) {
-  try { if (navigator?.vibrate) navigator.vibrate(pattern); } catch (_) {}
-}
+// Haptisches Feedback (Android: Vibration API, iPhone: System-Klick) — siehe ./haptics.ts
+export { haptic };
 
 // Zahlen springen nicht stumm um, sondern zählen sich sichtbar hoch/runter
-export function AnimatedNumber({ value, format, className, style }) {
+export function AnimatedNumber({ value, format, className = undefined, style = undefined }) {
   const [shown, setShown] = useState(value);
   const [flash, setFlash] = useState("");
   const prev = React.useRef(value);
@@ -592,11 +631,14 @@ export function AnimatedNumber({ value, format, className, style }) {
 }
 
 // Kurzer Konfettiausbruch bei großen Erfolgen — dezent limitiert, kein Dauerfeuer
+const CONFETTI_COLORS = ["#A9863C", "#1F5F5B", "#7A2E2E", "#8478BE", "#E9EDE4"];
 export function Confetti({ seed, rng }: { seed: number; rng: Rng }) {
-  const colors = ["#A9863C", "#1F5F5B", "#7A2E2E", "#8478BE", "#E9EDE4"];
+  /* Neu gewürfelt wird nur mit einem neuen Ausbruch (seed), nicht weil der
+     Aufrufer eine andere Zufallsinstanz durchreicht. */
   const pieces = useMemo(() => Array.from({ length: 26 }, (_, i) => ({
     id: i, l: 2 + rng.rnd() * 96, delay: rng.rnd() * .35, dur: 1.1 + rng.rnd() * .6,
-    c: colors[i % colors.length], rot: Math.round(rng.rnd() * 360),
+    c: CONFETTI_COLORS[i % CONFETTI_COLORS.length], rot: Math.round(rng.rnd() * 360),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [seed]);
   return (
     <div className="confetti" aria-hidden="true">
@@ -627,15 +669,49 @@ export function Toasts({ items }) {
 
 /* ---------------- Teilkomponenten ---------------- */
 
-export function News({ feed, quarter, practice }) {
+/* Eingeklappte Meldungen bleiben eingeklappt: Die Box steht über allen drei
+   Tabs, und die Wahl gilt auch nach dem Neuladen und in den folgenden
+   Halbjahren, bis man sie wieder aufklappt. Im Browser gespeichert; ohne
+   Speicher (privates Fenster) gilt sie nur bis zum Neuladen. */
+const NEWS_KEY = "pel-news-collapsed";
+const newsListeners = new Set<() => void>();
+let newsCollapsedMem = false;
+function readNewsCollapsed() {
+  try { return localStorage.getItem(NEWS_KEY) === "1"; } catch { return newsCollapsedMem; }
+}
+function setNewsCollapsed(v: boolean) {
+  newsCollapsedMem = v;
+  try { if (v) localStorage.setItem(NEWS_KEY, "1"); else localStorage.removeItem(NEWS_KEY); } catch {}
+  newsListeners.forEach((l) => l());
+}
+function subscribeNews(l: () => void) {
+  newsListeners.add(l);
+  return () => { newsListeners.delete(l); };
+}
+
+export function News({ feed, quarter, practice, onBrief = null }: {
+  feed: { q: number; e?: string; tone?: string; t: string }[]; quarter: number; practice?: boolean;
+  onBrief?: (() => void) | null;
+}) {
   const last = feed.filter((f) => f.q === quarter);
+  const collapsed = useSyncExternalStore(subscribeNews, readNewsCollapsed, () => false);
   return (
-    <div className="news">
+    <div className={"news" + (collapsed ? " shut" : "")}>
       <div className="nh">
-        <span className="eyebrow">Meldungen aus Halbjahr {quarter}</span>
-        <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
+        <button type="button" className="eyebrow ntoggle" aria-expanded={!collapsed}
+          onClick={() => { haptic("tap"); setNewsCollapsed(!collapsed); }}>
+          Meldungen aus Halbjahr {quarter}
+        </button>
+        {onBrief ? (
+          /* Der Halbjahresbericht lässt sich jederzeit wieder aufrufen */
+          <button className="lnk mono" style={{ fontSize: 11 }} onClick={() => { haptic("tap"); onBrief(); }}>
+            {last.length} · Bericht öffnen
+          </button>
+        ) : (
+          <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
+        )}
       </div>
-      {last.length === 0 ? (
+      {collapsed ? null : last.length === 0 ? (
         <div className="quiet">{practice ? "Ruhiges Halbjahr — keine Meldungen. Setze eine Maßnahme auf oder schließe das Halbjahr ab." : "Ruhiges Halbjahr — keine Meldungen. Gib Gebote ab oder schließe das Halbjahr ab."}</div>
       ) : (
         last.map((f, i) => (
@@ -786,11 +862,11 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: pct(d.growth),
           tone: bench ? (gapG >= 0 ? "teal" : "ox") : "",
-          sub: bench ? `${grow(gapG)} pp` : "Sektor ?", subTone: bench ? (gapG >= 0 ? "teal" : "ox") : "" },
+          sub: bench ? `${grow(gapG)} pp` : "🔒 Sektor", subTone: bench ? (gapG >= 0 ? "teal" : "ox") : "lock" },
         { icon: "margin", k: "Marge", v: hidden ? "—" : pct(d.margin),
           tone: hidden ? "dim" : bench ? (gapM >= 0 ? "teal" : "ox") : "",
-          sub: hidden ? "verdeckt" : bench ? `${grow(gapM)} pp` : "Bench. ?",
-          subTone: hidden || !bench ? "" : gapM >= 0 ? "teal" : "ox" },
+          sub: hidden ? "🔒 verdeckt" : bench ? `${grow(gapM)} pp` : "🔒 Bench.",
+          subTone: hidden || !bench ? "lock" : gapM >= 0 ? "teal" : "ox" },
         { icon: "cash", k: "Cash Conv.", v: hidden ? "—" : pct(conv),
           tone: hidden ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -798,6 +874,29 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           v: hidden ? <>—</> : <>{Math.round(d.quality)}<GradeChip score={d.quality} /></>,
           tone: hidden ? "dim" : "", sub: "von 100", info: <Info k="quality" /> },
       ]} />
+
+      {/* Die Due Diligence steht direkt unter den Kennzahlen, deren gesperrte
+          Vergleichswerte sie öffnet — Schloss und Schlüssel an einer Stelle,
+          wie die Branchenreferenz auf der Beteiligungskarte. */}
+      <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
+        {dd ? (
+          <p className="hint teal">✅ Due Diligence durchgeführt — Sektor-Benchmarks und Wachstumsschätzung aus der Analyse stehen auf der Karte.</p>
+        ) : (
+          <>
+            <button onClick={onDD} className={sp("dd").trim()}
+              disabled={investableOf(me, quarter) < ddCost || ddFull} style={{ width: "100%" }}>
+              {ddFull ? `🔍 Deal-Team ausgelastet · ${ddUsed}/${ddCap} Prozesse`
+                : `🔍 Due Diligence · ${eur(ddCost)}`}
+            </button>
+            <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 8 }}>
+              {hidden ? "🔒 Ohne Due Diligence bleiben Ertrag, Cashflow und die Sektor-Benchmarks oben verdeckt."
+                : flagHidden ? "🔒 Flagge, Sektor-Benchmarks und erwartetes Wachstum bleiben ohne Due Diligence verdeckt."
+                : ddFull ? `Höchstens ${ddCap} Due-Diligence-Prozesse gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
+                : `🔒 Die Due Diligence liefert die gesperrten Werte oben: Sektor-Benchmarks und Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp), dazu kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
+            </p>
+          </>
+        )}
+      </Section>
 
       {/* Alles, was zur Beurteilung gehört, aber nicht auf den ersten Blick
           gebraucht wird. Nichts verschwindet — es liegt eine Geste entfernt.
@@ -812,7 +911,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           <StatTile label="Erw. Wachstum vs. Sektor" info={<Info k="drift" />}
             value={dd ? grow(dEst) : "—"}
             tone={dd ? (dEst >= 0 ? "teal" : "ox") : "dim"}
-            sub={dd ? `± ${dBand.toFixed(1).replace(".", ",")} pp p. a.` : "nur mit Datenraum"} />
+            sub={dd ? `± ${dBand.toFixed(1).replace(".", ",")} pp p. a.` : "nur mit Due Diligence"} />
           <StatTile label="Adj. EBITDA − Capex"
             value={hidden ? "—" : eur(eb - capexA)} tone={hidden ? "dim" : ""}
             sub={hidden ? "verdeckt" : `Capex ${pct(d.capexPct)} vom Umsatz`} />
@@ -821,7 +920,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         </div>
         <div className="bprofile">
           <StatRadar color={id.own} redacted={hidden}
-            note={hidden ? "Datenraum erforderlich" : "relativ zu Investmentuniversum"}
+            note={hidden ? "Due Diligence erforderlich" : "relativ zu Investmentuniversum"}
             axes={[
               { k: "Marge", v: AX.margin(d.margin) },
               { k: "Wachstum", v: AX.growth(d.growth) },
@@ -835,38 +934,24 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             label={`📑 Financial Statements · ${DEAL_YEARS} Jahre`} />
           {hidden && (
             <p className="hint" style={{ marginTop: 6 }}>
-              Ohne Datenraum nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
+              Ohne Due Diligence nur die Umsatzreihe — Ertrag und Cashflow bleiben verdeckt.
             </p>
           )}
         </div>
       </More>
-
-      <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
-        {dd ? (
-          <p className="hint teal">🔍 Datenraum offen — Branchenreferenz und Wachstumsschätzung stehen auf der Karte.</p>
-        ) : (
-          <>
-            <button onClick={onDD} className={sp("dd").trim()}
-              disabled={investableOf(me, quarter) < ddCost || ddFull} style={{ width: "100%" }}>
-              {ddFull ? `🔍 Deal-Team ausgelastet · ${ddUsed}/${ddCap} Prozesse`
-                : `🔍 Due Diligence · ${eur(ddCost)}`}
-            </button>
-            <p className={"hint" + (hidden || flagHidden ? " ox" : "")} style={{ marginTop: 8 }}>
-              {hidden ? "Ohne Datenraum bleiben Ertrag und Cashflow verdeckt."
-                : flagHidden ? "Flagge, Branchenreferenz und erwartetes Wachstum bleiben ohne Datenraum verdeckt."
-                : ddFull ? `Höchstens ${ddCap} Datenräume gleichzeitig bei Analysefähigkeit ${me.attrs.analysis}.`
-                : `Branchenreferenz, Wachstumsschätzung (± ${dBand.toFixed(1).replace(".", ",")} pp) und kein Post-Closing-Risiko. Fällig unabhängig vom Zuschlag.`}
-            </p>
-          </>
-        )}
-      </Section>
 
       <Section title="Underwriting" right={`max. ${x(cap)} Leverage`} />
       <div className="bfoot">
         <div className="bdial">
           <div className="slrow"><span>Gebot</span>
             <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
-          <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => setMult(+e.target.value)} />
+          <input type="range" min={q4(Math.max(3, reserve - 0.5))} max={q4(d.askMult + 4)} step={0.25} value={mult} onChange={(e) => {
+              /* Rasten beim Ziehen; wer unter die Schmerzgrenze des Verkäufers
+                 rutscht, spürt es, bevor er den Hinweis darunter liest. */
+              const v = +e.target.value;
+              if (v !== mult) haptic(v < reserve && mult >= reserve ? "warning" : "select");
+              setMult(v);
+            }} />
           <p className={"hint" + (mult < reserve ? " ox" : "")} style={{ margin: "2px 0 0" }}>
             {mult < reserve
               ? `Unter der Schmerzgrenze des Verkäufers (rund ${x(reserve)}) — er zieht das Objekt zurück.`
@@ -878,7 +963,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         <div className="bdial">
           <div className="slrow"><span>Leverage</span>
             <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
-          <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => setLev(+e.target.value)} />
+          <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => { const v = +e.target.value; if (v !== lev) haptic("select"); setLev(v); }} />
         </div>
         <div className="bfnums">
           <Row k="Enterprise Value" v={hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)} />
@@ -897,9 +982,9 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
 
       <div className="bacts">
         {bid ? (
-          <button className="ox" style={{ width: "100%" }} onClick={() => { haptic(10); clear(); }}>Angebot zurückziehen</button>
+          <button className="ox" style={{ width: "100%" }} onClick={() => { haptic("tap"); clear(); }}>Angebot zurückziehen</button>
         ) : (
-          <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic(10); setBid({ mult, lev }); }}>
+          <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic("confirm"); setBid({ mult, lev }); }}>
             {!afford ? (me.holdings.length >= MAX_SLOTS ? "Portfolio voll" : "Dry Powder reicht nicht")
               : mult < reserve ? "Angebot abgeben — vermutlich zu niedrig" : "Angebot abgeben"}
           </button>
@@ -935,7 +1020,7 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
       <Section title="Investment Thesis">
         <p className="bthesis">{rest || lead}</p>
         <p className="hint" style={{ marginTop: 8 }}>
-          Ertrag, Marge und Qualität erst mit dem Datenraum.
+          Ertrag, Marge und Qualität erst mit der Due Diligence.
         </p>
       </Section>
       {note && <div className="bnote gold">{note}</div>}
@@ -944,7 +1029,7 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
   );
 }
 
-export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, practice }) {
+export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false }) {
   const spot = useContext(CoachCtx);
   const sp = (k) => (spot === k ? " spot" : "");
   const health = healthOf(c, market);
@@ -963,19 +1048,31 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   // Spalten abzüglich der Eröffnungsspalte: so viele Geschäftsjahre stehen im Bericht
   const finYears = statements ? statements.periods.length - 1 : 0;
   const val = navValueOf(c, market);
-  const real = fairOf(c, market, neg);
-  const m = val / c.entryEquity;
   const out = c.cashOut || 0;
   const cost = c.costTotal ?? c.entryEquity;
   const mTot = (val + out) / cost;
   const st = c.st ?? 1;
   const blocked = c.block > quarter;
   const inProc = !!c.proc;
+  /* proc.sale: kein Bieterverfahren, sondern ein im laufenden Halbjahr
+     vorgemerkter Verkauf (bilateral, angenommenes Gebot), den die Partie mit
+     dem Halbjahresabschluss vollzieht. Die Exit-Schaltflächen sind zu wie bei
+     einem laufenden Prozess, aber es kommen keine Gebote mehr. */
+  const sold = !!c.proc?.sale;
   const locked = !!c.lockUntil;
   const ripe = c.holdQ >= MIN_HOLD && !locked;
   const canProc = ripe && !inProc && !blocked;      // Prozess: gesperrt nach Abbruch
-  const canNow = ripe && !inProc;                   // Bilateral und CV: jedes Halbjahr erneut
-  const ipoOpen = canNow && st === 1 && market[c.sector] >= SECTORS[c.sector].m * 1.05 && eb >= IPO_EBITDA;
+  const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
+  /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
+     Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
+  const exitStatus = c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
+    : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
+    : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
+    : endPressure(quarter) > 0.05
+      ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
+    : PERIODS - quarter <= END_PRESSURE_FROM + 2
+      ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q + 1)}.`
+    : "";
 
   /* Eine Beteiligung im Prozess ist die seltenste Karte des Portfolios — ihr
      Wert steht zur Abstimmung. Sie bekommt deshalb denselben goldenen Rahmen
@@ -1008,7 +1105,7 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
           {st < 1 && <span>{Math.round(st * 100)} % Anteil</span>}
         </>}
         state={<StatePill tone={inProc ? "gold" : health.attention ? "att" : ""}>
-          {inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
+          {sold ? "✓ Verkauf vorgemerkt" : inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
         </StatePill>}
         abilities={(c.flag || c.ltip || health.top) && (
           <div className="babils">
@@ -1041,10 +1138,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: cagr == null ? "—" : pctS(cagr),
           tone: !c.dd || cagr == null ? "" : cagrPrem(c) >= 0 ? "teal" : "ox",
-          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "Markt ?" },
+          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "🔒 Markt", subTone: c.dd ? "" : "lock" },
         { icon: "margin", k: "Marge", v: pct(c.margin),
           tone: !c.dd ? "" : c.margin >= c.benchMargin ? "teal" : "ox",
-          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "Bench. ?" },
+          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "🔒 Bench.", subTone: c.dd ? "" : "lock" },
         { icon: "cash", k: "Cash Conv.", v: conv == null ? "—" : pct(conv),
           tone: conv == null ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -1054,8 +1151,8 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
       ]} />
 
       {/* Die Branchenreferenz gehört unter die Kennzahlen, nicht ans Ende der
-          Karte: Sie ist genau das, was in der Zeile darüber als "Bench. ?" und
-          "Markt ?" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
+          Karte: Sie ist genau das, was in der Zeile darüber als gesperrte "Bench." und
+          "Markt" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
           Knopf über die volle Breite — die Lücke und ihre Behebung stehen
           damit an einer Stelle. */}
       {!c.dd && act.study && (
@@ -1147,9 +1244,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             );
           })}
         </div>
-        <p className="hint" style={{ padding: "9px 15px 0" }}>
-          Tippen startet ein Search-Mandat · Retainer {pct(RETAINER_PCT * 100)} eines Jahresgehalts · Shortlist in {hj(2)}
-        </p>
       </Section>
 
       <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
@@ -1167,7 +1261,10 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             Akquisitionsschuld wird beim Closing gezogen, zusammen mit dem
             erworbenen EBITDA (maturePeople). Der Eigenkapitalanteil fließt beim
             Signing an den Verkäufer; er erhöht die Kostenbasis des Deals, nicht
-            die Verschuldung der Plattform. */}
+            die Verschuldung der Plattform.
+
+            Nur Statusmeldungen: Steht nichts an, bleibt die Zeile leer. */}
+        {(initsOf(c).length > 0 || freeSlots <= 0) && (
         <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
           {initsOf(c).length
             ? initsOf(c).map((I) => (I.ma
@@ -1177,9 +1274,9 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
                 : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
               + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
-            : freeSlots <= 0 ? "Operating-Kapazität im Portfolio ausgeschöpft."
-            : `Performance und Growth laufen parallel. Maßnahmen lassen sich wiederholen — jede weitere Auflage bringt weniger und dauert länger, und ob überhaupt noch etwas zu holen ist, steht als Eignung im Katalog.${(c.done || []).length ? ` Bisher ${(c.done || []).length} Programme abgeschlossen.` : ""}`}
+            : "Operating-Kapazität im Portfolio ausgeschöpft."}
         </div>
+        )}
         {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
             Karte bisher nicht zu beantworten: `done` zählt nur Kennungen mit,
             und der Umsatzsprung einer Integration steht ohne Erklärung im
@@ -1204,16 +1301,16 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
               onClick={() => { haptic(8); act.inject(); }}>
               💶 Eigenkapital nachschießen
             </button>
-            <p className="hint" style={{ marginTop: 6 }}>
-              {c.breach
-                ? "Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis."
-                : "Fondskapital in die Beteiligung: senkt Verschuldung und Zinslast, erhöht den Einstand."}
-            </p>
+            {!!c.breach && (
+              <p className="hint" style={{ marginTop: 6 }}>
+                Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
+              </p>
+            )}
           </>
         )}
       </Section>
 
-      {inProc && (
+      {inProc && !sold && (
         <div className="bnote gold">
           📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
           der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
@@ -1238,21 +1335,14 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
             </button>
             <button disabled={!canNow} onClick={act.bil}>Bilateral</button>
           </div>
-          <div className="bactgrid" style={{ marginTop: 8 }}>
-            <button disabled title="Vorübergehend deaktiviert">🔄 GP-led Secondary</button>
-            <button disabled={!ipoOpen} onClick={act.ipo}>🔔 IPO</button>
-          </div>
+          {/* GP-led Secondary und IPO sind abgeschaltet. Engine und Server führen
+              beide Wege weiter (runQuarter.ts) — zurückholen heißt nur, die
+              Schaltflächen wieder einzublenden. */}
+          {exitStatus && (
           <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 8, lineHeight: 1.5 }}>
-            {c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
-              : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral und Continuation bleiben möglich.`
-              : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
-              : endPressure(quarter) > 0.05
-                ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
-              : PERIODS - quarter <= END_PRESSURE_FROM + 2
-                ? `Noch ${hj(PERIODS - quarter)} Laufzeit. Ab ${hj(END_PRESSURE_FROM)} vor Schluss preisen Käufer den Verkaufsdruck ein — ein Prozess braucht selbst ${hj(PROC_Q + 1)}.`
-              : ipoOpen ? "Börsenfenster offen: 40 % platzieren, Rest ein Jahr im Lock-up."
-              : "Jede Option zeigt Bewertung und Rückfluss, bevor du freigibst."}
+            {exitStatus}
           </div>
+          )}
         </Section>
       )}
       <div className="bend" />
@@ -1554,12 +1644,10 @@ function StatementsSheet({ st, hidden, close }) {
      Beteiligung mit acht Jahren Historie hätte man sonst erst vier Wischer zu
      tun, bevor die Gegenwart überhaupt sichtbar wird.                       */
   const wrapRef = useRef(null);
-  const [scrolls, setScrolls] = useState(false);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     el.scrollLeft = el.scrollWidth;
-    setScrolls(el.scrollWidth > el.clientWidth + 4);
   }, [view]);
 
   return (
@@ -1629,10 +1717,7 @@ function StatementsSheet({ st, hidden, close }) {
               </tbody>
             </table>
           </div>
-          {scrolls && (
-            <p className="finnote">Die jüngste Periode steht rechts — waagerecht wischen zeigt die früheren.</p>
-          )}
-          <StatementNotes st={st} view={view} hidden={hidden} />
+          <StatementNotes st={st} hidden={hidden} />
           <div className="pad" style={{ paddingTop: 14 }}>
             <button className="solid" style={{ width: "100%" }} onClick={close}>Schließen</button>
           </div>
@@ -1642,80 +1727,28 @@ function StatementsSheet({ st, hidden, close }) {
   );
 }
 
-/* Fußnoten. Sie sind kein Beiwerk: Ohne sie stünde in der GuV eine
-   Abschreibung, deren Höhe niemand nachvollziehen kann, und eine Steuer, die
-   auf einem anderen Ergebnis bemessen ist als dem darüber. */
-function StatementNotes({ st, view, hidden }) {
+/* Fußnoten. Nur noch Statusmeldungen — was fehlt oder vorläufig ist. Die
+   Erklärungen zur Herleitung (Adjusted gegen Reported EBITDA, Abschreibung,
+   Bilanzaufbau, Überleitung) stehen nicht mehr unter den Tabellen; die
+   Zahlen tragen sich selbst. */
+function StatementNotes({ st, hidden }) {
   if (hidden) {
     return (
       <p className="finnote ox" style={{ color: "var(--ox)" }}>
-        Ohne Datenraum liegt nur die Umsatzreihe vor. Alles darunter — Ertrag, Kapitalbindung,
-        Cashflow — steht erst mit der Due Diligence zur Verfügung.
+        Ohne Due Diligence liegt nur die Umsatzreihe vor. Alles darunter — Ertrag, Kapitalbindung,
+        Cashflow — steht erst nach ihrer Durchführung zur Verfügung.
       </p>
     );
   }
-  const common = (
-    <p className="finnote">
-      <b>Adjusted gegen Reported EBITDA.</b> Das Modell führt das operative Ergebnis frei von
-      Einmaleffekten — das ist das <b>Adjusted EBITDA</b>, und nur dieses steht auf der Karte,
-      im Multiple und im Covenant. Programmkosten, Restrukturierung und die Kosten eines
-      Managementwechsels sind Einmalaufwendungen: sie werden hier abgezogen und ergeben das
-      <b> Reported EBITDA</b>. Investitionsnachholung, Cash Release, Zukäufe und Ausschüttungen
-      sind keine Ergebnisgrößen und stehen unterhalb des EBITDA.
-    </p>
-  );
+  if (!st.anyEstimated) return null;
   return (
-    <>
-      {common}
-      {view === "pl" && (
-        <p className="finnote">
-          <b>Abschreibungen = Investitionen.</b> Die Steuerbemessungsgrundlage des Modells ist
-          EBITDA abzüglich Zins und Capex; Capex steht dort stellvertretend für die Abschreibung.
-          Der Steuersatz beträgt {Math.round(TAX_RATE * 100)} %, bemessen auf dem Ergebnis
-          <i> vor</i> Einmalaufwendungen — die sind im Modell nicht steuerwirksam.
-          {!st.levered && " Zinsen erscheinen nicht: Die Darstellung ist cash-free/debt-free, die Finanzierung des Verkäufers gehört nicht zum Kaufgegenstand."}
-        </p>
-      )}
-      {view === "bs" && (
-        <p className="finnote">
-          <b>Herleitung.</b> Net Working Capital ist der Bestand, mit dem die Engine rechnet:
-          Kapitalbindungsquote mal Umsatz. Die Sachanlagen entsprechen {PPE_YEARS} Jahren
-          Investitionsaufwand — bei linearer Abschreibung über rund {PPE_YEARS * 2} Jahre der
-          Restbuchwert im Beharrungszustand.{st.levered ? ` Das Modell führt nur die Nettoverschuldung; für die Bilanz wird sie getrennt in eine operative Kasse von ${MIN_CASH_PCT} % vom Jahresumsatz und das Bankdarlehen, das den Rest trägt. Ist die Beteiligung netto schuldenfrei, entfällt das Darlehen und die Kasse trägt den Überschuss.` : ""}
-          {st.kind === "holding" && " Die Eröffnungsbilanz steht zum Enterprise Value des Erwerbs; die Kaufpreisallokation trägt den Unterschied zum übernommenen Vermögen, die Akquisitionsfinanzierung steht als Nettoverschuldung darunter. Transaktionskosten des Erwerbs trägt der Fonds, nicht das Unternehmen."}
-        </p>
-      )}
-      {view === "cf" && st.levered && (
-        <p className="finnote">
-          <b>Überleitung.</b> Nettoverschuldung Anfang abzüglich Netto-Cashflow zuzüglich
-          Ausschüttungen ergibt exakt den Stand am Periodenende — dieselbe Zahl, mit der die
-          Engine rechnet und die auf der Beteiligungskarte im Leverage steht.
-        </p>
-      )}
-      {st.kind === "deal" && (
-        <p className="finnote">
-          <b>Historie.</b> Umsatz und Marge zeigen die <b>unterliegende Entwicklung</b> und
-          schwanken mit derselben Volatilität, die das Spiel für die Zukunft unterstellt —
-          laufendes Wachstums- und Margenrauschen, dazu gedämpft die Sprünge aus dem
-          Ereigniskatalog. Was einmalig ist, steht nicht dort, sondern in den
-          Einmalaufwendungen: Restrukturierung, ein Managementwechsel, ein abgebrochenes
-          Programm drücken das berichtete Ergebnis, nicht das bereinigte. Zwei Größen bleiben
-          exakt: das LTM-Jahr und das ausgewiesene Wachstum der letzten drei Jahre. Dessen Basis
-          liegt ein Jahr vor der ersten Spalte, deshalb ergibt der Vergleich der drei gezeigten
-          Jahre nicht denselben Wert. Investitions- und Kapitalbindungsquote weist der Datenraum
-          nur auf LTM-Niveau aus und stehen deshalb über alle Jahre gleich.
-        </p>
-      )}
-      {st.anyEstimated && (
-        <p className="finnote ox" style={{ color: "var(--ox)" }}>
-          <b>Vorläufige Spalten.</b> Für diese Perioden lag die Detailmitschrift der Engine beim
-          Laden noch nicht vor — sie sind hier mit den Formeln des Modells rekonstruiert, die
-          Nettoverschuldung am Periodenende ist aber die tatsächliche. Der Server rechnet solche
-          Perioden nach und trägt die exakten Beträge nach; nach dem nächsten Halbjahreswechsel
-          steht hier die gespielte Zahlenreihe.
-        </p>
-      )}
-    </>
+    <p className="finnote ox" style={{ color: "var(--ox)" }}>
+      <b>Vorläufige Spalten.</b> Für diese Perioden lag die Detailmitschrift der Engine beim
+      Laden noch nicht vor — sie sind hier mit den Formeln des Modells rekonstruiert, die
+      Nettoverschuldung am Periodenende ist aber die tatsächliche. Der Server rechnet solche
+      Perioden nach und trägt die exakten Beträge nach; nach dem nächsten Halbjahreswechsel
+      steht hier die gespielte Zahlenreihe.
+    </p>
   );
 }
 
@@ -1774,7 +1807,6 @@ export function Stages({ c, compact }) {
   const pl = peopleLvl(c), A = accEff(c), OS = overstretch(c);
   const sc = (c.searches || [])[0];
   const runP = sc ? (sc.waiting ? "Shortlist" : "Search") : null;
-  const runI = c.initP ? "Performance" : c.initA ? "Growth" : null;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
   return (
     <div className="bability">
@@ -1842,7 +1874,7 @@ export function TailEndPeek({ fund, market, quarter }) {
       <br /><br />
       Diese Zeile rechnet genau das auf dem heutigen Bestand: Was bliebe, wenn du ab jetzt nichts mehr
       verkaufst. Die Differenz ist der Preis des Liegenlassens — und sie wächst, je näher das Ende
-      rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q)}.
+      rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q + 1)}.
     </Info>
   );
   /* Als eine Zeile, nicht als Warnkasten: Sie steht direkt unter TVPI und IRR
@@ -2125,14 +2157,234 @@ export function TvpiChart({ hist, meIdx }) {
   );
 }
 
+/* ---------- Kapitalabrufe und Ausschüttungen ----------
+   Die Zahlungsströme zwischen Fonds und Investoren je Halbjahr: Ausschüttungen
+   nach oben, Abrufe nach unten, von einer gemeinsamen Nulllinie. Das ist die
+   Reihe, auf der IRR und DPI stehen, und die Form, in der ein LP seinen Fonds
+   sieht — erst die Abrufe, dann (hoffentlich) die Rückflüsse.
+
+   Abrufe sind jeder Euro, den der Fonds abruft: Kaufpreise, Zuführungen, Due
+   Diligence und Management Fee. Ausschüttungen stehen vor Carry, so wie sie im
+   Fonds gebucht werden; der Carry wird erst in TVPI, TVCC und IRR abgezogen.
+
+   Alle Fonds der Peer Group teilen sich eine Skala (cashflowScale) und dieselbe
+   Zeitachse über die ganze Laufzeit — sonst sähe ein kleiner Abruf bei einem
+   zurückhaltenden Fonds genauso hoch aus wie ein großer bei einem anderen.
+
+   Die beiden Farben (--cfin, --cfout) sind eigene Stufen nahe an --teal und
+   --ox: Die Markenfarben selbst lagen für Flächen unter der Sättigungsgrenze
+   bzw. im dunklen Theme zu hell. Geprüft mit dem Palettenprüfer, hell gegen
+   #FFFFFF, dunkel gegen #161F22, alle Prüfungen bestanden.                   */
+export function cashflowByHalfYear(f) {
+  const calls = new Array(PERIODS + 1).fill(0), dists = new Array(PERIODS + 1).fill(0);
+  const at = (q) => Math.min(PERIODS, Math.max(1, Math.round(q || 0)));
+  (f.calls || []).forEach((c) => { calls[at(c.q)] += c.amt || 0; });
+  (f.dists || []).forEach((d) => { dists[at(d.q)] += d.amt || 0; });
+  return { calls, dists };
+}
+export function cashflowScale(funds) {
+  let up = 0, down = 0;
+  (funds || []).forEach((f) => {
+    const { calls, dists } = cashflowByHalfYear(f);
+    up = Math.max(up, ...dists); down = Math.max(down, ...calls);
+  });
+  return { up, down };
+}
+
+const cfNum = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE");
+
+/* Deployment Rate: kumuliert abgerufenes Kapital je Halbjahr in Prozent des
+   Commitments. Gemessen an den Abrufen, also einschließlich Management Fee und
+   Due Diligence — dieselbe Größe, die TVCC und TVPI trennt (TVCC = TVPI ×
+   Deployment Rate). Recycelte Erlöse, die wieder investiert werden, erscheinen
+   hier nicht: Sie werden nicht abgerufen. Index 0 bis PERIODS.             */
+export function deploymentByHalfYear(f) {
+  const { calls } = cashflowByHalfYear(f);
+  let s = 0;
+  return calls.map((c) => (s += c) / CAPITAL);
+}
+
+/* In den Details eines Fonds der Peer Group. Beim Aufklappen des Fonds steht
+   die Grafik gleich offen da -- zugeklappt war sie ein zweiter, leicht
+   übersehener Klick. Über die Kopfzeile mit den Summen lässt sie sich
+   einklappen, wenn man nur die Beteiligungen darunter sehen will. */
+export function CashflowChart({ fund, scale }) {
+  const [sel, setSel] = useState(null);
+  const { calls, dists } = cashflowByHalfYear(fund);
+  const sumCalls = calls.reduce((a, b) => a + b, 0), sumDists = dists.reduce((a, b) => a + b, 0);
+  if (sumCalls < 0.05 && sumDists < 0.05) return null;
+
+  // Skala: gemeinsame Obergrenze der Peer Group, nach oben auf ganze 10 Mio. gerundet
+  const r10 = (v) => Math.max(10, Math.ceil(v / 10) * 10);
+  const up = r10(Math.max(scale?.up || 0, ...dists)), down = r10(Math.max(scale?.down || 0, ...calls));
+  const L = 30, R = 296, T = 6, B = 98;
+  const y0 = T + (B - T) * (up / (up + down));
+  const k = (B - T) / (up + down);
+  const slot = (R - L) / PERIODS, bw = Math.min(9, slot - 2), rr = 2.5;
+  const cx = (i) => L + (i - 0.5) * slot;
+  // Säule mit gerundetem Datenende und gerader Kante an der Nulllinie
+  const barUp = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 - h + r} Q${x0},${y0 - h} ${x0 + r},${y0 - h} H${x0 + bw - r} Q${x0 + bw},${y0 - h} ${x0 + bw},${y0 - h + r} V${y0} Z`; };
+  const barDn = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 + h - r} Q${x0},${y0 + h} ${x0 + r},${y0 + h} H${x0 + bw - r} Q${x0 + bw},${y0 + h} ${x0 + bw},${y0 + h - r} V${y0} Z`; };
+  const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
+  const drawnPct = Math.round((fund.drawn || 0) / CAPITAL * 100);
+  const saldo = sumDists - sumCalls;
+
+  return (
+    <details className="cfbox" open>
+      <summary>
+        <span>Abrufe &amp; Ausschüttungen</span>
+        <span className="mono">−{cfNum(sumCalls)} / +{cfNum(sumDists)} Mio. €</span>
+      </summary>
+      {/* Grafik und Zeilen auf derselben Rinne wie die Kopfzeile des Panels
+          (14 px); die Tabelle bringt ihre eigene Einrückung mit. */}
+      <div style={{ padding: "2px 14px 0" }}>
+        <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--ink2)", marginBottom: 4 }}>
+          <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfin)", marginRight: 5, verticalAlign: -1 }} />Ausschüttungen</span>
+          <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfout)", marginRight: 5, verticalAlign: -1 }} />Abrufe</span>
+        </div>
+        <svg viewBox="0 0 300 112" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+          aria-label={`Kapitalabrufe und Ausschüttungen je Halbjahr: ${eur(sumCalls)} abgerufen, ${eur(sumDists)} ausgeschüttet`}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+          {sel != null && <rect x={L + (sel - 1) * slot} y={T} width={slot} height={B - T} style={{ fill: "var(--shade)" }} />}
+          <text x={L - 4} y={T + 6} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>+{up}</text>
+          <text x={L - 4} y={y0 + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>0</text>
+          <text x={L - 4} y={B} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>−{down}</text>
+          <line x1={L} y1={T} x2={R} y2={T} style={{ stroke: "var(--rule)" }} />
+          <line x1={L} y1={B} x2={R} y2={B} style={{ stroke: "var(--rule)" }} />
+          {hjs.map((i) => {
+            const x0 = cx(i) - bw / 2;
+            return (
+              <g key={i}>
+                {dists[i] > 0.05 && <path d={barUp(x0, Math.max(1, dists[i] * k - 1))} style={{ fill: "var(--cfin)" }} />}
+                {calls[i] > 0.05 && <path d={barDn(x0, Math.max(1, calls[i] * k - 1))} style={{ fill: "var(--cfout)" }} />}
+              </g>
+            );
+          })}
+          <line x1={L} y1={y0} x2={R} y2={y0} style={{ stroke: "var(--ink2)" }} strokeWidth="0.75" />
+          {[1, 5, 10, 15, 20].map((i) => (
+            <text key={i} x={cx(i)} y={B + 10} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+              {i === 1 ? "HJ 1" : i}</text>
+          ))}
+          {/* Trefferflächen: das ganze Halbjahr, nicht nur die Säule. Die Auswahl
+              bleibt nach dem Antippen stehen — bei Touch folgt pointerleave
+              unmittelbar auf den Tap. Der Fokusrahmen entfällt, die hinterlegte
+              Spalte zeigt die Auswahl. */}
+          {hjs.map((i) => (
+            <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
+              tabIndex={0} style={{ outline: "none" }}
+              aria-label={`Halbjahr ${i}: ${eur(calls[i])} abgerufen, ${eur(dists[i])} ausgeschüttet`}
+              onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+          ))}
+        </svg>
+        <div className="mono" style={{ fontSize: 11, color: "var(--ink2)", minHeight: 16, marginTop: 2 }}>
+          {sel != null
+            ? <>HJ {sel} · Ausschüttung <b style={{ color: "var(--ink)" }}>+{cfNum(dists[sel])}</b> · Abruf <b style={{ color: "var(--ink)" }}>−{cfNum(calls[sel])}</b> Mio. €</>
+            : "Halbjahr antippen für die Werte · Mio. €"}
+        </div>
+      </div>
+      <table className="ledger" style={{ marginTop: 6 }}><tbody>
+        <tr><td className="lab">Abgerufen ({drawnPct} % der Zusage)</td><td>{eur(sumCalls)}</td></tr>
+        <tr><td className="lab">Ausgeschüttet</td><td>{eur(sumDists)}</td></tr>
+        <tr><td className="lab">Saldo für die Investoren</td><td style={{ fontWeight: 600 }}>{saldo >= 0 ? "+" : "−"}{eur(Math.abs(saldo))}</td></tr>
+      </tbody></table>
+      <details style={{ margin: "2px 0 8px" }}>
+        <summary className="hint" style={{ cursor: "pointer", padding: "6px 16px" }}>Werte je Halbjahr</summary>
+        <table className="ledger"><tbody>
+          {hjs.filter((i) => calls[i] > 0.05 || dists[i] > 0.05).map((i) => (
+            <tr key={i}><td className="lab">HJ {i}</td>
+              <td>+{cfNum(dists[i])} / −{cfNum(calls[i])}</td></tr>
+          ))}
+        </tbody></table>
+      </details>
+    </details>
+  );
+}
+
+/* ---------- Deployment Rate der Kohorte ----------
+   Steht unter dem Wertungsverlauf und ist genauso gebaut: der eigene Fonds als
+   kräftige Linie mit Endwert, die übrigen Fonds dünn in Grau. Bis zum
+   ausgewerteten Halbjahr, auf der Zeitachse der ganzen Laufzeit — so sieht man
+   auch, wie viel Zeit zum Einsetzen der Zusage noch bleibt. */
+export function DeploymentChart({ funds, meKey, quarter }) {
+  const [sel, setSel] = useState(null);
+  const keyOf = (f) => f.slot ?? f.id;
+  const upto = Math.min(PERIODS, Math.max(0, quarter));
+  if (upto < 1) return <div className="quiet">Die Deployment Rate entsteht ab dem ersten Halbjahr.</div>;
+  const me = funds.find((f) => keyOf(f) === meKey);
+  const meDep = me ? deploymentByHalfYear(me) : null;
+  const others = funds.filter((f) => keyOf(f) !== meKey).map(deploymentByHalfYear);
+  const L = 30, R = 276, T = 8, B = 76;
+  const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
+  const slot = (R - L) / PERIODS;
+  const cx = (i) => L + (i - 0.5) * slot;
+  const dy = (v) => B - Math.min(1, Math.max(0, v)) * (B - T);
+  const path = (arr) => hjs.filter((i) => i <= upto)
+    .map((i, n) => `${n ? "L" : "M"}${cx(i).toFixed(1)},${dy(arr[i]).toFixed(1)}`).join(" ");
+  const avg = (i) => others.length ? others.reduce((s, a) => s + a[i], 0) / others.length : null;
+  const pctS = (v) => `${Math.round(v * 100)} %`;
+  const focus = sel != null && sel <= upto ? sel : upto;
+
+  return (
+    <div className="pad" style={{ paddingTop: 4 }}>
+      <svg viewBox="0 0 300 92" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+        aria-label={`Deployment Rate: ${meDep ? pctS(meDep[upto]) : "–"} der Zusage abgerufen nach Halbjahr ${upto}`}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+        {sel != null && sel <= upto && <rect x={L + (sel - 1) * slot} y={T} width={slot} height={B - T} style={{ fill: "var(--shade)" }} />}
+        {[[1, "100 %"], [0.5, "50 %"], [0, "0"]].map(([v, t]) => (
+          <g key={t}>
+            <line x1={L} y1={dy(v)} x2={R} y2={dy(v)} style={{ stroke: "var(--rule)" }} />
+            <text x={L - 4} y={dy(v) + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>{t}</text>
+          </g>
+        ))}
+        {others.map((arr, n) => (
+          <path key={n} d={path(arr)} fill="none" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round"
+            style={{ stroke: "var(--ink2)", opacity: .45 }} />
+        ))}
+        {meDep && <>
+          <path d={path(meDep)} fill="none" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" style={{ stroke: "var(--ink)" }} />
+          <circle cx={cx(upto)} cy={dy(meDep[upto])} r="3" strokeWidth="1.5" style={{ fill: "var(--ink)", stroke: "var(--card)" }} />
+          <text x={cx(upto) + 6} y={dy(meDep[upto]) + 3} fontSize="9.5" fontWeight="700" fontFamily="JetBrains Mono"
+            style={{ fill: "var(--ink)" }}>{pctS(meDep[upto])}</text>
+        </>}
+        {[1, 5, 10, 15, 20].map((i) => (
+          <text key={i} x={cx(i)} y={B + 11} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+            {i === 1 ? "HJ 1" : i}</text>
+        ))}
+        {/* Trefferflächen je Halbjahr — dieselbe Bedienung wie in der
+            Cashflow-Grafik, die Auswahl bleibt bei Touch stehen. */}
+        {hjs.filter((i) => i <= upto).map((i) => (
+          <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
+            tabIndex={0} style={{ outline: "none" }}
+            aria-label={`Halbjahr ${i}: ${meDep ? pctS(meDep[i]) : "–"} abgerufen${avg(i) != null ? `, Peer Group im Schnitt ${pctS(avg(i))}` : ""}`}
+            onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+        ))}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, color: "var(--ink2)", marginTop: 6 }}>
+        <span>
+          <i style={{ display: "inline-block", width: 12, height: 2, background: "var(--ink)", marginRight: 5, verticalAlign: 3 }} />dein Fonds
+          <i style={{ display: "inline-block", width: 12, height: 1.5, background: "var(--ink2)", opacity: .5, margin: "0 5px 0 12px", verticalAlign: 3 }} />Peer Group
+        </span>
+        <span className="mono">
+          HJ {focus} · <b style={{ color: "var(--ink)" }}>{meDep ? pctS(meDep[focus]) : "–"}</b>
+          {avg(focus) != null && <> · Ø {pctS(avg(focus))}</>}
+        </span>
+      </div>
+      <p className="hint" style={{ marginTop: 6 }}>Abgerufenes Kapital in % der Zusage, einschließlich Gebühren. TVCC = TVPI × Deployment Rate.</p>
+    </div>
+  );
+}
+
 /* Sektorallokation auf NAV-Basis — zeigt Klumpenrisiko, das in einer Liste untergeht. */
-export function SectorSplit({ holdings, market, cash }) {
-  const nav = {};
+export function SectorSplit({ holdings, market }) {
+  const nav: Record<string, number> = {};
   holdings.forEach((c) => { nav[c.sector] = (nav[c.sector] || 0) + navValueOf(c, market); });
   const total = Object.values(nav).reduce((a, b) => a + b, 0);
   if (total <= 0) return <div className="quiet">Noch kein investiertes Kapital.</div>;
   const rows = SECNAMES.filter((s) => nav[s] > 0).sort((a, b) => nav[b] - nav[a]);
-  let run = 0;
+  // linke Kante jedes Balkenabschnitts: Summe der Anteile davor
+  const lefts = rows.map((_, k) => rows.slice(0, k).reduce((a, sec) => a + (nav[sec] / total) * 300, 0));
   /* Balken im .pad, Tabelle daneben auf gleicher Rinne — vorher stand die Tabelle
      im .pad und war dadurch doppelt eingerückt.                                  */
   return (
@@ -2140,8 +2392,8 @@ export function SectorSplit({ holdings, market, cash }) {
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 14 }}>
         <svg viewBox="0 0 300 14" style={{ width: "100%", display: "block" }} role="img"
           aria-label="Sektorallokation des Portfolios auf NAV-Basis">
-          {rows.map((sec) => {
-            const w = (nav[sec] / total) * 300, xx = run; run += w;
+          {rows.map((sec, k) => {
+            const w = (nav[sec] / total) * 300, xx = lefts[k];
             return <rect key={sec} x={xx} y="0" width={Math.max(1, w - 1)} height="14" fill={SECCOLOR[sec]} />;
           })}
         </svg>
@@ -2164,8 +2416,12 @@ export function SectorSplit({ holdings, market, cash }) {
 }
 
 /* Portfolioregal: eine Kachel je Beteiligung mit Wertverlauf, Miniatur-Tragwerk und
-   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.     */
-export function Shelf({ holdings, market, cash, quarter, onPick }) {
+   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.
+   dryPowder ist dieselbe Größe wie in der Kopfzeile (investableOf): offenes
+   Commitment plus einbehaltene Erlöse, abzüglich der Reserve für künftige
+   Gebühren. Vorher stand hier f.cash, ohne den Gebührenabzug -- unter
+   demselben Namen ein deutlich höherer Betrag als oben.                      */
+export function Shelf({ holdings, market, dryPowder, quarter, onPick }) {
   return (
     <>
       {holdings.map((c) => {
@@ -2214,7 +2470,7 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
       {holdings.length < MAX_SLOTS && (
         <div className="bslot">
           <b>{MAX_SLOTS - holdings.length === 1 ? "Ein freier Platz" : `${MAX_SLOTS - holdings.length} freie Plätze`}</b>
-          {eur(cash)} Dry Powder · noch {hj(PERIODS - quarter)}
+          {eur(dryPowder)} Dry Powder · noch {hj(PERIODS - quarter)}
         </div>
       )}
     </>
@@ -2260,12 +2516,12 @@ export const GLOSSARY = {
     d: <>Wächst dieses Unternehmen dauerhaft <b>schneller oder langsamer als sein Sektor</b> — gewinnt es
       also Marktanteile oder verliert es welche? Angegeben in Prozentpunkten Umsatzwachstum pro Jahr
       gegenüber dem Sektorschnitt. <b>+2,0</b> heißt: rund zwei Punkte mehr Wachstum als der Markt, Jahr für
-      Jahr. Die Zahl ist eine <b>Schätzung aus dem Datenraum</b>, keine Tatsache; das <b>±-Band</b> dahinter
+      Jahr. Die Zahl ist eine <b>Schätzung aus der Due Diligence</b>, keine Tatsache; das <b>±-Band</b> dahinter
       ist die Unschärfe. Eine höhere Due-Diligence-Fähigkeit verkleinert das Band, schließt es aber nie.</>,
   },
   quality: {
     t: "Assetqualität",
-    d: <>Ein Sammelwert zwischen 10 und 97 beim Einstieg für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
+    d: <>Ein Score zwischen 0 und 100 für alles, was ein Unternehmen wertvoll macht, ohne in EBITDA oder
       Marge zu stehen: <b>Kundenbindung, Marktposition, Preissetzungsmacht, Abhängigkeiten</b>. Er wirkt
       direkt auf das Bewertungsmultiple — je höher, desto mehr zahlt ein Käufer je Euro EBITDA. Value
       Creation kann ihn heben, ein Abschwung oder überzogener Leverage drückt ihn.</>,
@@ -2286,11 +2542,15 @@ export const GLOSSARY = {
   },
   score: {
     t: "Wertung",
-    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVPI, zur Hälfte IRR</b>, jeweils gegen
-      eine Marke normiert ({x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
+    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVCC, zur Hälfte IRR</b>, jeweils gegen
+      eine Marke normiert ({x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
       und damit das obere Viertel der Kohorte.</b> Sie beantwortet beide
       Fragen zugleich — wie viel du verdienst und wie lange du dafür brauchst. Ein hoher Multiple nach zehn
-      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.</>,
+      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.
+      <br /><br />
+      <b>TVCC</b> ist der Gesamtwert je <b>zugesagtem</b> Euro, also gemessen am ganzen Commitment von
+      {" "}{eur(CAPITAL)}. Der <b>TVPI</b> misst denselben Wert je <b>abgerufenem</b> Euro und wird weiter
+      angezeigt, zählt aber nicht für die Wertung: Er übersieht Kapital, das nie investiert wurde.</>,
   },
   fit: {
     t: "Eignung",
@@ -2402,7 +2662,7 @@ export const ATTR_FIELDS = [
 ];
 
 export function FundProfileEditor({ attrs, setAttrs, points = FUND_PROFILE_POINTS, onSubmit, submitLabel, submitDisabled = false, footer = null }) {
-  const used = Object.values(attrs).reduce((a, b) => a + b, 0);
+  const used = Object.values<number>(attrs).reduce((a, b) => a + b, 0);
   return (
     <div className="card">
       <h3 className="disp">Fondsprofil</h3>
@@ -2497,13 +2757,23 @@ export function MarketChart({ hist }) {
 /* ---------- Verwendung der Exiterlöse ----------
    Die Entscheidung, die es vorher nicht gab: Was zurück an die Investoren geht
    und was im Fonds bleibt. Einbehalten heißt, dass mehr Kapital je abgerufenem
-   Euro arbeitet — das hebt den TVPI. Es kostet aber IRR, und zwar systematisch:
+   Euro arbeitet — das hebt den TVPI, sofern der nächste Deal mehr verdient als
+   der Fonds bisher. Es kostet aber IRR, und zwar systematisch:
    Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
    Abruf morgen; Einbehalten ergibt beides gar nicht. Der frühere Rückfluss
-   gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.        */
+   gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
+
+   `quarter` ist wie überall in den Ansichten die Zahl der ausgewerteten
+   Halbjahre. Verbucht wird der Erlös im Halbjahr danach (decQ), und mit
+   diesem Halbjahr rechnen applyProceeds() und der Server.
+
+   Aufgebaut wie der Fuß einer Dealkarte (bfoot, bdial, Row) und in der Farbe
+   der verkauften Beteiligung: derselbe Regler wie beim Gebot, statt des
+   Systemreglers, dessen Fahrbahn im dunklen Theme hell über allem stand.    */
 export function UseProceeds({ item, me, quarter, settle }) {
   const { net, c } = item;
-  const room = recycleRoom(me, net, quarter);
+  const decQ = quarter + 1;
+  const room = recycleRoom(me, net, decQ);
   const [keep, setKeep] = useState(0);
   const rec = Math.min(room, net * keep);
   const dist = net - rec;
@@ -2511,36 +2781,47 @@ export function UseProceeds({ item, me, quarter, settle }) {
   const investAfter = investableOf(me, quarter) + rec;
   return (
     <div className="modal">
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}
+        style={{ "--own": identityOf(c.name, c.sector).own } as React.CSSProperties}>
         <div className="tomb">
           <div className="sub">Verwendung der Erlöse</div>
           <div className="amt" style={{ fontSize: 24 }}>{eur(net)}</div>
-          <div className="sub">aus dem Exit von {c.name}</div>
+          <div className="sub">{item.reneg ? "Gebot vor Nachverhandlung · " : ""}aus dem Exit von {c.name}</div>
         </div>
-        <div className="card">
-          <div className="slrow"><span>Im Fonds einbehalten</span>
-            <span className="slval">{Math.round((rec / Math.max(0.01, net)) * 100)} % · {eur(rec)}</span></div>
-          <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
-            onChange={(e) => setKeep(+e.target.value / 100)} />
-          <table className="kv" style={{ marginTop: 10 }}><tbody>
-            <tr><td className="lab">An die Investoren</td><td>{eur(dist)}</td></tr>
-            <tr><td className="lab">Verfügbar für neue Deals</td><td>{eur(investAfter)}</td></tr>
-            <tr><td className="lab">Recycling-Spielraum</td>
-              <td>{eur(capLeft)}{quarter > INVEST_PERIOD ? " — Investitionsperiode beendet" : ""}</td></tr>
-          </tbody></table>
-          <p className="hint" style={{ marginTop: 10 }}>
-            Einbehalten hebt den TVPI und kostet IRR.
+        <div className="bfoot">
+          <div className="bdial">
+            <div className="slrow"><span>Im Fonds einbehalten</span>
+              <span className="slval">{Math.round((rec / Math.max(0.01, net)) * 100)} % · {eur(rec)}</span></div>
+            <input type="range" min={0} max={100} step={5} value={Math.round(keep * 100)}
+              onChange={(e) => { const v = +e.target.value / 100; if (v !== keep) haptic("select"); setKeep(v); }} />
+          </div>
+          <div className="bfnums">
+            <Row k="An die Limited Partner" v={eur(dist)} />
+            <Row k="Verfügbar für neue Deals" v={eur(investAfter)} />
+            <Row k="Recycling-Spielraum" v={eur(capLeft)} />
+          </div>
+        </div>
+        <div style={{ padding: "12px 16px 0" }}>
+          {item.reneg && (
+            <p className="hint" style={{ margin: "0 0 8px" }}>
+              Der Endpreis steht erst nach der Nachverhandlung fest. Der gewählte Anteil gilt für den
+              tatsächlichen Erlös — auch wenn am Ende das nächste Gebot zum Zug kommt.
+            </p>
+          )}
+          <p className="hint" style={{ margin: 0 }}>
+            Einbehalten kostet IRR — den TVPI hebt es nur mit einem guten Folgedeal.
             <Info t="Einbehalten oder ausschütten">
-              Einbehaltenes Kapital arbeitet weiter, statt an die Investoren zurückzufließen. Das hebt den
-              Multiple, verschiebt aber den Rückfluss nach hinten und setzt den Betrag erneut dem Risiko
-              aus — im IRR gewinnt der frühere Rückfluss immer.
+              Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
+              Multiple, wenn der nächste Deal mehr verdient als der Fonds bisher — verschiebt aber den
+              Rückfluss nach hinten und setzt den Betrag erneut dem Risiko aus. Im IRR gewinnt der frühere
+              Rückfluss immer.
               <br /><br />
               Einbehalten lohnt, wenn ein konkreter Deal ansteht und das offene Commitment knapp ist.
               Ausschütten lohnt, wenn der Dealflow nichts Überzeugendes hergibt.
             </Info>
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, margin: "0 16px 24px" }}>
+        <div style={{ display: "flex", gap: 8, margin: "16px 16px 24px" }}>
           <button style={{ flex: 1 }} onClick={() => settle(0)}>Voll ausschütten</button>
           <button className="solid" style={{ flex: 1 }} onClick={() => settle(keep)}>
             {rec > 0.5 ? `${eur(rec)} einbehalten` : "Bestätigen"}
@@ -2589,7 +2870,7 @@ export function EquityInjection({ c, investable, confirm, close }) {
         <div className="card">
           <div className="pad">
             <input type="range" min={0} max={Math.round(max)} step={1} value={Math.round(amt)}
-              onChange={(e) => setAmt(Number(e.target.value))}
+              onChange={(e) => { haptic("select"); setAmt(Number(e.target.value)); }}
               style={{ width: "100%", accentColor: "var(--gold)" }} />
           </div>
           <table className="ledger fix"><tbody>
@@ -2755,7 +3036,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       <b>{eur(addEb)}</b> · {Math.round(chk.share * 100)} % der Plattform
                       <input type="range" min={Math.round(eb * 0.05 * 10)} max={Math.round(maxEb * 10)} step={1}
                         value={Math.round(addEb * 10)}
-                        onChange={(e) => { setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % des Plattform-EBITDA).
@@ -2768,7 +3049,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         {chk.gap > 0.05 ? `${x(chk.gap)} unter der Preisvorstellung` : "voller Preis"}</span>
                       <input type="range" min={Math.round((ask - 3) * 10)} max={Math.round(ask * 10)} step={1}
                         value={Math.round(mult * 10)}
-                        onChange={(e) => { setBid(Number(e.target.value) / 10); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setBid(Number(e.target.value) / 10); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Preisvorstellung {x(ask)} — Plattformmultiple {x(markMultiple(c, market))} abzüglich
@@ -2782,7 +3063,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                   {(eqCap > 0.5 || eqShort > 0.05) && <tr><td className="lab">Eigenkapital aus dem Fonds</td>
                     <td>
                       <input type="range" min={0} max={Math.round(eqCap)} step={1} value={Math.round(addonEq)}
-                        onChange={(e) => setAddonEq(Number(e.target.value))}
+                        onChange={(e) => { haptic("select"); setAddonEq(Number(e.target.value)); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         {eur(addonEq)} von {eur(eqCap)} investierbar — senkt die Akquisitionsschuld,
@@ -2983,12 +3264,129 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
   );
 }
 
+/* ---------- Bewertung beim Exit ----------
+   Eine Rechnung für alle Exit-Dialoge, in der Reihenfolge, in der sie
+   entsteht: erst das Multiple, dann das EBITDA, dann der Unternehmenswert.
+
+   Das Multiple wird aufgebaut, nicht nur genannt. Jede Zeile unter dem
+   Bewertungsmultiple weist ausschließlich ihren eigenen Effekt in Turns aus —
+   Verhandlungsprämie, Druck des Laufzeitendes, Abschlag des Kanals —, und die
+   Summe ist das Exit-Multiple. Gerundet wird über die Zwischenstände, nicht
+   Zeile für Zeile: 8,14 + 0,33 − 0,5 stünde sonst als 8,1 + 0,3 − 0,5 auf dem
+   Bildschirm und darunter 8,0×.
+
+   Beim Verkaufsprozess steht statt eines Werts die erwartete Gebotsspanne,
+   ebenfalls erst in Multiples und dann in Euro. Die Gebote selbst lauten auf
+   den Anteil des Fonds am Eigenkapital (makeOffers: 0,86 bis 1,08 des
+   erzielbaren Werts); umgerechnet auf den Unternehmenswert ergibt das genau
+   das implizite Multiple, das später auf der Gebotskarte steht.            */
+/* ---------- Wasserfall ----------
+   Eine Brücke von einem Ausgangswert über Zu- und Abschläge zu einem Ergebnis,
+   eine Zeile je Schritt: oben Beschriftung und Betrag, darunter der Balken über
+   die volle Breite. Vorher stand die Value Bridge als SVG mit Beschriftung,
+   Balken und Zahl in einer Zeile — lange Beschriftungen liefen in die Balken,
+   und weil der Maßstab nur den Endwert kannte, liefen Zwischenstände über den
+   Endwert hinaus in die Zahlenspalte und negative Schritte ganz aus dem Bild.
+   Jetzt reicht der Maßstab vom kleinsten bis zum größten Zwischenstand.
+
+   kind: "start" setzt den Lauf, "step" verschiebt ihn, "total" ist eine
+   Zwischen- oder Endsumme und beginnt wieder bei null. */
+export function Waterfall({ rows, fmt = eur }: {
+  rows: { l: string; v: number; kind: "start" | "step" | "total"; tone?: "base" | "gold" }[];
+  fmt?: (v: number) => string;
+}) {
+  // Laufender Stand nach jeder Zeile; daraus Anfang und Ende jedes Balkens
+  const levels = rows.reduce<number[]>((acc, r) => [...acc, r.kind === "step" ? (acc[acc.length - 1] ?? 0) + r.v : r.v], []);
+  const spans = rows.map((r, i) => {
+    const from = r.kind === "step" ? (levels[i - 1] ?? 0) : 0;
+    return [Math.min(from, levels[i]), Math.max(from, levels[i])];
+  });
+  const lo = Math.min(0, ...spans.map((sp) => sp[0]));
+  const hi = Math.max(1e-9, ...spans.map((sp) => sp[1]));
+  const at = (v: number) => ((v - lo) / (hi - lo)) * 100;
+  return (
+    <div className="wf">
+      {rows.map((r, i) => {
+        const [a, b] = spans[i];
+        const cls = r.kind === "step" ? (r.v >= 0 ? "pos" : "neg") : (r.tone || (r.kind === "total" ? "gold" : "base"));
+        const val = r.kind === "step" ? `${r.v >= 0 ? "+" : "−"} ${fmt(Math.abs(r.v))}` : fmt(r.v);
+        return (
+          <div className={"wfr " + r.kind} key={i}>
+            <div className="wfh"><span className="wfl">{r.l}</span><span className={"wfv mono " + cls}>{val}</span></div>
+            <div className="wft"><i className={cls} style={{ left: `${at(a)}%`, width: `${Math.max(0.8, at(b) - at(a))}%` }} /></div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Kennzahlen in Kacheln — drei nebeneinander, statt sie in eine Tabellenzeile
+   zu drängen, aus der sie bei 390 px herausliefen. */
+export function KpiTiles({ items }: { items: { l: string; v: string; tone?: string }[] }) {
+  return (
+    <div className="kpit">
+      {items.map((k) => (
+        <div key={k.l}><div className="kpil">{k.l}</div><div className={"kpiv mono " + (k.tone || "")}>{k.v}</div></div>
+      ))}
+    </div>
+  );
+}
+
+export const BID_LOW = 0.86, BID_HIGH = 1.08;
+const r1 = (v) => Math.round(v * 10) / 10;
+export const turns = (v) => (v < 0 ? "−" : "+") + x(Math.abs(v));
+
+export function exitValuation(c, market, neg, quarter, ch) {
+  const st = c.st ?? 1;
+  const eb = ebitdaOf(c);
+  const mMult = markMultiple(c, market);
+  const rows: [string, string][] = [["Bewertungsmultiple", x(mMult)]];
+  let exMult = mMult;
+  if (ch !== "ipo") {                 // am Kapitalmarkt zählt kein Verhandlungsgeschick
+    const negMult = dealMultiple(c, market, neg, null);
+    exMult = dealMultiple(c, market, neg, quarter);
+    if (neg > 0) rows.push([`Verhandlungsprämie +${neg * 2} %`, turns(r1(negMult) - r1(mMult))]);
+    if (r1(exMult) !== r1(negMult)) rows.push(["Abschlag Exitfenster", turns(r1(exMult) - r1(negMult))]);
+    if (ch === "bil") {
+      exMult -= BIL_DISC;
+      rows.push(["Abschlag bilateral", turns(-BIL_DISC)]);
+    }
+  }
+  rows.push(["= Exit-Multiple", x(exMult)]);
+
+  const ev = eb * exMult;
+  const eqv100 = ev - c.netDebt;
+  if (ch === "proc") {
+    const eq = Math.max(0, eqv100);
+    const evAt = (f) => eq * f + c.netDebt;
+    rows.push(
+      ["Erwartete Gebotsspanne", `${x(eb > 0 ? evAt(BID_LOW) / eb : 0)} – ${x(eb > 0 ? evAt(BID_HIGH) / eb : 0)}`],
+      ["× Adj. EBITDA (LTM)", eur(eb)],
+      ["= Enterprise Value", `${eur(evAt(BID_LOW))} – ${eur(evAt(BID_HIGH))}`],
+      ["− Nettoverschuldung", "−" + eur(c.netDebt)],
+      ["= Equity Value (100 %)", `${eur(eq * BID_LOW)} – ${eur(eq * BID_HIGH)}`]);
+    if (st < 1) rows.push([`× Anteil ${Math.round(st * 100)} %`,
+      `${eur(eq * st * BID_LOW)} – ${eur(eq * st * BID_HIGH)}`]);
+  } else {
+    rows.push(["× Adj. EBITDA (LTM)", eur(eb)], ["= Enterprise Value", eur(ev)],
+      ["− Nettoverschuldung", "−" + eur(c.netDebt)], ["= Equity Value (100 %)", eur(eqv100)]);
+  }
+  return { rows, exMult, ev, eqv100 };
+}
+
+/* Gebote. Ein Käufer bietet einen Unternehmenswert; das Multiple ist daraus
+   abgeleitet, nicht umgekehrt — deshalb steht der EV im Kopf jeder Karte und
+   das implizite EV/EBITDA-Multiple darunter. Vom Bruttoerlös gehen die
+   Transaktionskosten und das Sweet Equity des MEP ab, genau wie bei der
+   Abrechnung (exitNetOf).                                                   */
 export function Offers({ item, holding, market, neg, decide }) {
   const eb = holding ? ebitdaOf(holding) : 0;
   const st = holding ? (holding.st ?? 1) : 1;
   const nd = holding ? holding.netDebt : 0;
   const fair = holding ? fairOf(holding, market, neg) : 0;
   const mMult = holding ? markMultiple(holding, market) : 0;
+  const mep = !!(holding && holding.ltip);
 
   return (
     <div className="modal">
@@ -3002,29 +3400,35 @@ export function Offers({ item, holding, market, neg, decide }) {
           const eqv100 = st > 0 ? o.price / st : 0;
           const ev = eqv100 + nd;
           const impMult = eb > 0 ? ev / eb : 0;
-          const net = o.price * (1 - PROC_FEE);
-          const moic = holding ? net / holding.entryEquity : 0;
+          const afterFee = o.price * (1 - PROC_FEE);
+          const net = holding ? exitNetOf(holding, o.price, PROC_FEE) : afterFee;
+          const moic = holding ? dealMoic(holding, net) : 0;
           return (
             <div className="card" key={i} style={{ marginTop: i === 0 ? 12 : 8 }}>
               <div className="pad" style={{ paddingTop: 12, paddingBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: 15, fontWeight: 600 }}>{o.buyer}</span>
-                  <span className="mono" style={{ fontSize: 17 }}>{x(impMult)}</span>
+                  <span className="mono" style={{ fontSize: 17 }}>{eur(ev)}</span>
+                </div>
+                <div className="mono" style={{ fontSize: 11.5, color: "var(--ink2)", textAlign: "right", marginTop: 2 }}>
+                  EV · implizit {x(impMult)} EV/EBITDA
                 </div>
                 <div style={{ fontSize: 12, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>{o.note}</div>
               </div>
               <table className="ledger fix"><tbody>
-                <tr><td className="lab">Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
-                <tr><td className="lab">Gebotenes Multiple</td><td>{x(impMult)}
+                <tr><td className="lab">Enterprise Value (Gebot)</td><td>{eur(ev)}</td></tr>
+                <tr><td className="lab">÷ Adj. EBITDA (LTM)</td><td>{eur(eb)}</td></tr>
+                <tr><td className="lab">= Implizites Multiple</td><td>{x(impMult)}
                   <span style={{ color: impMult >= mMult ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
-                    {" "}{impMult >= mMult ? "+" : ""}{(impMult - mMult).toFixed(1).replace(".", ",")} vs. Markt
+                    {" "}{turns(r1(impMult) - r1(mMult)).replace("×", "")} vs. Markt
                   </span></td></tr>
-                <tr><td className="lab">Enterprise Value</td><td>{eur(ev)}</td></tr>
                 <tr><td className="lab">− Nettoverschuldung</td><td>−{eur(nd)}</td></tr>
                 <tr><td className="lab">= Equity Value (100 %)</td><td>{eur(eqv100)}</td></tr>
                 {st < 1 && <tr><td className="lab">× Anteil {Math.round(st * 100)} %</td><td>{eur(o.price)}</td></tr>}
                 <tr><td className="lab">= Bruttoerlös</td><td>{eur(o.price)}</td></tr>
                 <tr><td className="lab">− Transaktionskosten {PROC_FEE * 100} %</td><td>−{eur(o.price * PROC_FEE)}</td></tr>
+                {mep && <tr><td className="lab">− Sweet Equity MEP {Math.round(LTIP_SHARE * 100)} %</td>
+                  <td>−{eur(afterFee - net)}</td></tr>}
                 <tr><td className="lab" style={{ fontWeight: 600 }}>= Nettoerlös</td>
                   <td style={{ fontWeight: 700 }}>{eur(net)}</td></tr>
                 <tr><td className="lab">MOIC (Deal)</td>
@@ -3045,7 +3449,7 @@ export function Offers({ item, holding, market, neg, decide }) {
         })}
         <div className="pad" style={{ padding: "4px 16px 8px", fontSize: 11.5, color: "var(--ink2)", lineHeight: 1.5 }}>
           Nachverhandeln: 60 % Chance auf 5–8 % mehr, 25 % Chance, dass der Bieter abspringt und nur das nächste
-          Gebot bleibt. Alle Erlöse abzüglich 3 % Transaktionskosten.
+          Gebot bleibt. Alle Erlöse abzüglich 3 % Transaktionskosten{mep ? ` und ${Math.round(LTIP_SHARE * 100)} % Sweet Equity des MEP` : ""}.
         </div>
         <div style={{ margin: "0 16px 28px" }}>
           <button className="ox" style={{ width: "100%" }} onClick={() => decide(null, "abort")}>
@@ -3108,11 +3512,7 @@ export function Sheet({ sheet, close, onConfirm }) {
     { l: "Transaktionskosten & Abschläge", v: b.cost },
   ];
   if ((b.dist || 0) > 0.05) steps.push({ l: "Rekapitalisierungen während der Haltezeit", v: b.dist });
-  const N = steps.length;
   const totalOut = sheet.price + (b.dist || 0);
-  const total = Math.max(b.entry, totalOut, 1);
-  let run = 0;
-  const H = 26;
 
   return (
     <div className="modal" onClick={close}>
@@ -3130,35 +3530,15 @@ export function Sheet({ sheet, close, onConfirm }) {
         <div className="card">
           <h3 className="disp">Value Bridge</h3>
           <div className="pad">
-            <svg viewBox={`0 0 300 ${H * (N + 1) + 16}`} style={{ width: "100%" }}>
-              {steps.map((s, i) => {
-                const w = (Math.abs(s.v) / total) * 190;
-                const start = i === 0 ? 0 : (run / total) * 190;
-                if (i > 0) run += s.v; else run = s.v;
-                const xx = s.v >= 0 ? start : start + (s.v / total) * 190;
-                return (
-                  <g key={i}>
-                    <text x="0" y={i * H + 12} fontSize="9" style={{ fill: "var(--ink2)" }} fontFamily="Inter">{s.l}</text>
-                    <rect x={100 + Math.max(0, xx)} y={i * H + 4} width={Math.max(1.5, w)} height="12"
-                      style={{ fill: i === 0 ? "var(--ink)" : s.v >= 0 ? "var(--teal)" : "var(--ox)" }} />
-                    <text x="298" y={i * H + 14} fontSize="9" textAnchor="end" style={{ fill: "var(--ink)" }} fontFamily="JetBrains Mono">
-                      {(s.v >= 0 && i > 0 ? "+" : "") + Math.round(s.v)}
-                    </text>
-                  </g>
-                );
-              })}
-              <line x1="100" y1={N * H} x2="298" y2={N * H} style={{ stroke: "var(--rule)" }} />
-              <text x="0" y={N * H + 17} fontSize="9" style={{ fill: "var(--ink)" }} fontFamily="Inter" fontWeight="600">Gesamtrückfluss</text>
-              <rect x="100" y={N * H + 6} width={Math.max(2, (totalOut / total) * 190)} height="14" style={{ fill: "var(--gold)" }} />
-              <text x="298" y={N * H + 17} fontSize="9" textAnchor="end" style={{ fill: "var(--ink)" }} fontFamily="JetBrains Mono" fontWeight="700">
-                {Math.round(totalOut)}
-              </text>
-            </svg>
+            <Waterfall rows={[
+              ...steps.map((st, i) => ({ l: st.l, v: st.v, kind: (i === 0 ? "start" : "step") as "start" | "step" })),
+              { l: "Gesamtrückfluss", v: totalOut, kind: "total" as const },
+            ]} />
             <p style={{ fontSize: 12, color: "var(--ink2)", lineHeight: 1.5, marginTop: 10 }}>
-              Alle Werte in Mio. € Eigenkapital. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
+              Alle Werte auf Ebene des Eigenkapitals. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
               Gesamtrückfluss — Nettoerlös beim Exit zuzüglich aller Rekapitalisierungen, die während der Haltezeit
-              schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge" enthält Transaktionskosten beim
-              Kauf und Verkauf sowie den kanalspezifischen Abschlag — der Teil, den du nie zurückverdienst.
+              schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge“ enthält Transaktionskosten beim
+              Kauf und Verkauf sowie den kanalspezifischen Abschlag.
             </p>
             <button className="solid" style={{ width: "100%", marginTop: 4 }} onClick={close}>Weiter</button>
           </div>

@@ -31,7 +31,7 @@ import {
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
+  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
   liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
@@ -178,7 +178,7 @@ function applyImmediateDecisions(
       return;
     }
 
-    finalizeExit(f, c, final.price, final.buyer, PROC_FEE, extra, dec.keepPct, quarter, news, market);
+    finalizeExit(f, c, final.price, final.buyer, PROC_FEE, extra, dec.keepPct, quarter, news, market, compat);
     queue = queue.filter((it) => it !== item);
   });
 
@@ -328,7 +328,11 @@ function applyImmediateDecisions(
   (decisions.exitStarts || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c || c.proc || c.lockUntil) return;
-    if (c.block && quarter < c.block) return;
+    /* Die Sperre nach einem abgebrochenen Prozess gilt nur für den nächsten
+       Prozess — bilateral bleibt möglich, wie die Karte sagt und wie der
+       Übungsmodus es immer gehalten hat. Bis zum 18.10.2026 verwarf diese
+       Zeile jeden Exit während der Sperre, ohne Meldung. */
+    if (c.block && quarter < c.block && (intent.action === "process" || compat.legacyBlockAllExits)) return;
     const NEG = f.attrs.negotiation;
     if (intent.action === "process") {
       c.proc = { resolveQ: quarter + PROC_Q };
@@ -338,7 +342,7 @@ function applyImmediateDecisions(
     if (intent.action === "bilateral") {
       const mult = dealMultiple(c, market, NEG, quarter) - BIL_DISC;
       const gross = Math.max(0, eqvOf(c, mult));
-      finalizeExit(f, c, gross, "Off-Market-Erwerber", BIL_FEE, "", intent.keepPct, quarter, news, market);
+      finalizeExit(f, c, gross, "Off-Market-Erwerber", BIL_FEE, "", intent.keepPct, quarter, news, market, compat);
       return;
     }
     if (intent.action === "cv") {
@@ -396,9 +400,10 @@ function applyImmediateDecisions(
 function finalizeExit(
   f: RuntimeFund, c: Any, gross: number, buyer: string, feeRate: number, extra: string,
   keepPct: number | undefined, quarter: number, news: Any[], market: Record<string, number>,
+  compat: EngineCompat,
 ) {
   const net = exitNetOf(c, gross, feeRate);
-  const room = recycleRoom(f, net, quarter);
+  const room = recycleRoom(f, net, quarter, compat);
   const keep = room > 0.5 ? clamp(keepPct ?? 0, 0, 1) : 0;
   // Die stehende Kette abgreifen, bevor die Beteiligung das Portfolio verlässt
   const uOut = takeUnrealized(c, market, net);
@@ -409,7 +414,7 @@ function finalizeExit(
      verschwunden, ihre hist-Reihe also nicht mehr abrufbar. */
   f.realized = [...(f.realized as Any[]),
     { name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, gross, net), uOut }];
-  applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter, keep);
+  applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter, keep, compat);
   const mo = dealMoic(c, net);
   pushFeed(news, quarter, mo >= 2 ? "🚀" : mo >= 1 ? "💰" : "💀", mo >= 1 ? "pos" : "neg",
     `Exit ${c.name} an ${buyer}: ${net.toFixed(1)} Mio. € netto${extra}.`, f.slot);
@@ -723,8 +728,17 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
 
   /* 3y — People */
   const newShortlists: { uid: string; name: string; seat: string; cands: Any[] }[] = [];
+  /* maturePeople() stammt aus dem Übungsmodus und schreibt seine Meldungen in
+     dessen Kurzform ({q, e, tone, t}), ohne Fondsplatz. Bis zum 11.10.2026
+     landeten sie so im gemeinsamen Feed: ohne `halfYear`, also in keinem
+     Halbjahr angezeigt, und ohne `slot`, also für alle bestimmt. Abgeschlossene
+     und gescheiterte Maßnahmen und abgeworbene Manager erreichten den Spieler
+     in einer Mehrspielerpartie dadurch nie. Jetzt je Fonds gesammelt und in
+     die Form des Feeds übertragen — als private Meldung dieses Fonds. */
   F.forEach((f) => {
-    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, news, newShortlists, compat));
+    const own: Any[] = [];
+    (f.holdings as Any[]).forEach((c) => maturePeople(rng, c, mk, q, !f.isAi, own, newShortlists, compat));
+    own.forEach((n) => pushFeed(news, q, n.e, n.tone, n.t, f.slot));
   });
   newShortlists.forEach((sl) => {
     const owner = F.find((f) => (f.holdings as Any[]).some((h) => h.uid === sl.uid));
@@ -914,7 +928,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
 
   let finalFunds = F;
   if (q >= PERIODS) {
-    finalFunds = liquidateAll(F, mk, q, news);
+    finalFunds = liquidateAll(F, mk, q, news, compat);
   }
 
   return {
@@ -931,9 +945,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   };
 }
 
-/* Endrangliste nach Halbjahr 20: die bestehende 50:50-Wertung aus IRR und
-   TVPI (scoreOf, unverändert aus lib/engine/engine.ts), absteigend
-   sortiert. Wird nach der letzten Auswertung einmalig in
+/* Endrangliste nach Halbjahr 20: die 50:50-Wertung aus IRR und TVCC
+   (scoreOf in lib/engine/engine.ts), absteigend sortiert. Der TVPI steht
+   zur Information mit dabei, der TVCC erst seit dem 18.10.2026 — ältere
+   Endranglisten haben das Feld nicht. Wird nach der letzten Auswertung einmalig in
    seasons.final_ranking geschrieben. */
 export function computeFinalRanking(state: RuntimeState, halfYear: number) {
   return state.funds
@@ -942,6 +957,7 @@ export function computeFinalRanking(state: RuntimeState, halfYear: number) {
       profileId: f.profileId,
       isAi: f.isAi,
       name: f.name,
+      tvcc: tvccOf(f as Any, state.market, halfYear),
       tvpi: tvpiOf(f as Any, state.market, halfYear),
       irr: irrOf(f as Any, state.market, halfYear),
       score: scoreOf(f as Any, state.market, halfYear),
@@ -949,12 +965,14 @@ export function computeFinalRanking(state: RuntimeState, halfYear: number) {
     .sort((a, b) => b.score - a.score);
 }
 
-function liquidateAll(F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[]): RuntimeFund[] {
+function liquidateAll(
+  F: RuntimeFund[], mk: Record<string, number>, q: number, news: Any[], compat: EngineCompat,
+): RuntimeFund[] {
   return F.map((f) => {
     const g = cloneFund(f);
     // Die Rechnung selbst steht in lib/engine/engine.ts, damit Übungsmodus und
     // Vorschau (tailEndOf) nicht von ihr abweichen können.
-    liquidateHoldings(g, mk, q).forEach(({ c, gross, net, moic }) => {
+    liquidateHoldings(g, mk, q, compat).forEach(({ c, gross, net, moic }) => {
       if (!g.isAi) {
         pushFeed(news, q, moic >= 1 ? "⏳" : "💀", moic >= 1 ? "neu" : "neg",
           `Tail-End-Verwertung: ${c.name} zum Laufzeitende veräußert für ${eur(net)} — ${moic.toFixed(2)}× auf das eingesetzte Eigenkapital.`, g.slot);

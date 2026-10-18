@@ -28,6 +28,15 @@ export interface AccessContext {
   activeUniverse: Universe | null;
 }
 
+/** Eine Zeile aus my_access() (supabase/migrations/20260830100100_access_control.sql). */
+export interface MyAccessRow {
+  display_name: string;
+  access_status: AccessStatus;
+  access_note: string | null;
+  request_message: string | null;
+  active_universe_id: string | null;
+}
+
 interface UniverseRow {
   id: string;
   key: string;
@@ -53,14 +62,14 @@ export async function getAccessContext(): Promise<AccessContext | null> {
   // andere Spieler gesperrt (Spaltenrechte, siehe
   // supabase/migrations/20260830100100_access_control.sql), für den eigenen
   // Zugang aber genau die entscheidende Information.
-  const { data: profileRow } = await supabase.rpc("my_access").maybeSingle();
+  const { data: profileRow } = await supabase.rpc("my_access").maybeSingle<MyAccessRow>();
 
   const profile: AccessProfile | null = profileRow
     ? {
-        displayName: profileRow.display_name as string,
-        accessStatus: profileRow.access_status as AccessStatus,
-        accessNote: (profileRow.access_note as string | null) ?? null,
-        activeUniverseId: (profileRow.active_universe_id as string | null) ?? null,
+        displayName: profileRow.display_name,
+        accessStatus: profileRow.access_status,
+        accessNote: profileRow.access_note ?? null,
+        activeUniverseId: profileRow.active_universe_id ?? null,
       }
     : null;
 

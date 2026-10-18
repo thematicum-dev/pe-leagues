@@ -1,7 +1,10 @@
 import { signOut } from "@/app/auth/actions";
+import Link from "next/link";
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/access/context";
 import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
 import UniverseSwitcher from "./UniverseSwitcher";
+import InviteFriends from "./InviteFriends";
 
 export default async function DashboardPage() {
   // Schranke für den gesamten Spielbereich: angemeldet, Profil vorhanden,
@@ -9,6 +12,13 @@ export default async function DashboardPage() {
   const { supabase, user, profile, universes, activeUniverse } = await requireAccess("/dashboard");
 
   const { data: isAdmin } = await supabase.rpc("is_admin");
+
+  // Anmeldelink zum Weitergeben, auf derselben Adresse, unter der das
+  // Dashboard gerade läuft (Produktion wie Preview)
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+  const signupUrl = `${proto}://${host}/signup`;
 
   // Universen sind eine interne Einteilung. Wer nur in einem spielt, soll
   // davon gar nichts mitbekommen -- erst ab zwei zugeteilten Universen wird
@@ -88,9 +98,9 @@ export default async function DashboardPage() {
             )}
           </div>
           <div className="dashtools">
-            <a href="/leaderboard" className="btn-quiet">
+            <Link href="/leaderboard" className="btn-quiet">
               Rangliste
-            </a>
+            </Link>
             {isAdmin && (
               <a href="/admin" className="btn-quiet">
                 Admin
@@ -135,21 +145,28 @@ export default async function DashboardPage() {
         </div>
 
         <div className="modegrid">
-          <a href="/explain" className="modecard">
+          {/* Link statt <a>: Wechsel innerhalb der App, mit Überblendung
+              (app/template.tsx) statt eines harten Neuladens. */}
+          <Link href="/explain" className="modecard">
             <h3>Einführung</h3>
             <p>
               Geführt durch alle Entscheidungen: eine Beteiligung über zehn Halbjahre,
               ein Coach erklärt jeden Schritt.
             </p>
-          </a>
-          <a href="/practice" className="modecard">
+          </Link>
+          <Link href="/practice" className="modecard">
             <h3>Übungsmodus</h3>
             <p>
               Eine vollständige Solopartie gegen vier Fonds derselben Kohorte — wie im
               Spielmodus, nur ohne Mitspieler.
             </p>
-          </a>
+          </Link>
         </div>
+
+        <div className="dashsection">
+          <h2>Mitspieler</h2>
+        </div>
+        <InviteFriends signupUrl={signupUrl} />
       </div>
     </main>
   );
