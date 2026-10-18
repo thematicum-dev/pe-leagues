@@ -4,28 +4,27 @@ import React, { useState, useMemo, useEffect, useContext, useRef, useSyncExterna
 import { createPortal } from "react-dom";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
-import { createRng } from "@/lib/engine";
 import type { Rng } from "@/lib/engine";
 import {
-  ACC_SPREAD, ADDON_HEADROOM, AI_PLAN, ARCHES, BASE_RATE, BIL_DISC, BIL_FEE, BOOK, CAPITAL,
-  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, CV_DISC, CV_FEE, CV_STAKE, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, EVENTS, FAIL_SUNK, INITS, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE,
-  IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
-  MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
+  ADDON_HEADROOM, BASE_RATE, BIL_DISC, CAPITAL,
+  CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST, END_PRESSURE_FROM,
+  ENTRY_FEE, FAIL_SUNK, INITS, INVEST_PERIOD, 
+  IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_DEAL, LTIP_SHARE, MAX_PROC,
+  MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, 
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
-  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
-  buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
-  dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
-  evOf, exitNetOf, fairOf, feeReserveOf, fitLabel, fitOf, gebote, grossMoicOf, growthPrem, healthOf, hj,
-  impliedMoM, initById, initGain, initRuns, initSuccess, initsOf, investableOf, irrOf,
+  SECTORS, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, 
+  cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCostOf, dealMoic,
+  dealMultiple, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eur,
+  evOf, exitNetOf, fairOf, fitLabel, healthOf, hj,
+  impliedMoM, initGain, initRuns, initSuccess, initsOf, investableOf, 
   isAngle, LBO_YEARS, dealStatements, holdingStatements, ratiosOf, growthOf, bridgeChain, liveHist,
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge, tailEndOf, initDurationOf,
   DEAL_YEARS,
-  isCapped, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople, navValueOf, newDeal,
-  newLandmark, opLeverage, overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  retainerOf, scoreOf, seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
+  isCapped, markMultiple, navValueOf, 
+  overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
+  signBonusOf, tvpiOf, x,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -605,7 +604,7 @@ export const CSS = `
 export { haptic };
 
 // Zahlen springen nicht stumm um, sondern zählen sich sichtbar hoch/runter
-export function AnimatedNumber({ value, format, className, style }) {
+export function AnimatedNumber({ value, format, className = undefined, style = undefined }) {
   const [shown, setShown] = useState(value);
   const [flash, setFlash] = useState("");
   const prev = React.useRef(value);
@@ -632,11 +631,14 @@ export function AnimatedNumber({ value, format, className, style }) {
 }
 
 // Kurzer Konfettiausbruch bei großen Erfolgen — dezent limitiert, kein Dauerfeuer
+const CONFETTI_COLORS = ["#A9863C", "#1F5F5B", "#7A2E2E", "#8478BE", "#E9EDE4"];
 export function Confetti({ seed, rng }: { seed: number; rng: Rng }) {
-  const colors = ["#A9863C", "#1F5F5B", "#7A2E2E", "#8478BE", "#E9EDE4"];
+  /* Neu gewürfelt wird nur mit einem neuen Ausbruch (seed), nicht weil der
+     Aufrufer eine andere Zufallsinstanz durchreicht. */
   const pieces = useMemo(() => Array.from({ length: 26 }, (_, i) => ({
     id: i, l: 2 + rng.rnd() * 96, delay: rng.rnd() * .35, dur: 1.1 + rng.rnd() * .6,
-    c: colors[i % colors.length], rot: Math.round(rng.rnd() * 360),
+    c: CONFETTI_COLORS[i % CONFETTI_COLORS.length], rot: Math.round(rng.rnd() * 360),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [seed]);
   return (
     <div className="confetti" aria-hidden="true">
@@ -1027,7 +1029,7 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
   );
 }
 
-export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, practice }) {
+export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false }) {
   const spot = useContext(CoachCtx);
   const sp = (k) => (spot === k ? " spot" : "");
   const health = healthOf(c, market);
@@ -1046,8 +1048,6 @@ export function Holding({ c, market, neg, quarter, procCount, freeSlots, act, pr
   // Spalten abzüglich der Eröffnungsspalte: so viele Geschäftsjahre stehen im Bericht
   const finYears = statements ? statements.periods.length - 1 : 0;
   const val = navValueOf(c, market);
-  const real = fairOf(c, market, neg);
-  const m = val / c.entryEquity;
   const out = c.cashOut || 0;
   const cost = c.costTotal ?? c.entryEquity;
   const mTot = (val + out) / cost;
@@ -1807,7 +1807,6 @@ export function Stages({ c, compact }) {
   const pl = peopleLvl(c), A = accEff(c), OS = overstretch(c);
   const sc = (c.searches || [])[0];
   const runP = sc ? (sc.waiting ? "Shortlist" : "Search") : null;
-  const runI = c.initP ? "Performance" : c.initA ? "Growth" : null;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
   return (
     <div className="bability">
@@ -2378,13 +2377,14 @@ export function DeploymentChart({ funds, meKey, quarter }) {
 }
 
 /* Sektorallokation auf NAV-Basis — zeigt Klumpenrisiko, das in einer Liste untergeht. */
-export function SectorSplit({ holdings, market, cash }) {
-  const nav = {};
+export function SectorSplit({ holdings, market }) {
+  const nav: Record<string, number> = {};
   holdings.forEach((c) => { nav[c.sector] = (nav[c.sector] || 0) + navValueOf(c, market); });
   const total = Object.values(nav).reduce((a, b) => a + b, 0);
   if (total <= 0) return <div className="quiet">Noch kein investiertes Kapital.</div>;
   const rows = SECNAMES.filter((s) => nav[s] > 0).sort((a, b) => nav[b] - nav[a]);
-  let run = 0;
+  // linke Kante jedes Balkenabschnitts: Summe der Anteile davor
+  const lefts = rows.map((_, k) => rows.slice(0, k).reduce((a, sec) => a + (nav[sec] / total) * 300, 0));
   /* Balken im .pad, Tabelle daneben auf gleicher Rinne — vorher stand die Tabelle
      im .pad und war dadurch doppelt eingerückt.                                  */
   return (
@@ -2392,8 +2392,8 @@ export function SectorSplit({ holdings, market, cash }) {
       <div className="pad" style={{ paddingTop: 4, paddingBottom: 14 }}>
         <svg viewBox="0 0 300 14" style={{ width: "100%", display: "block" }} role="img"
           aria-label="Sektorallokation des Portfolios auf NAV-Basis">
-          {rows.map((sec) => {
-            const w = (nav[sec] / total) * 300, xx = run; run += w;
+          {rows.map((sec, k) => {
+            const w = (nav[sec] / total) * 300, xx = lefts[k];
             return <rect key={sec} x={xx} y="0" width={Math.max(1, w - 1)} height="14" fill={SECCOLOR[sec]} />;
           })}
         </svg>
@@ -2662,7 +2662,7 @@ export const ATTR_FIELDS = [
 ];
 
 export function FundProfileEditor({ attrs, setAttrs, points = FUND_PROFILE_POINTS, onSubmit, submitLabel, submitDisabled = false, footer = null }) {
-  const used = Object.values(attrs).reduce((a, b) => a + b, 0);
+  const used = Object.values<number>(attrs).reduce((a, b) => a + b, 0);
   return (
     <div className="card">
       <h3 className="disp">Fondsprofil</h3>
@@ -3537,7 +3537,7 @@ export function Sheet({ sheet, close, onConfirm }) {
             <p style={{ fontSize: 12, color: "var(--ink2)", lineHeight: 1.5, marginTop: 10 }}>
               Alle Werte auf Ebene des Eigenkapitals. Eingesetztes Eigenkapital plus die Effekte ergeben exakt den
               Gesamtrückfluss — Nettoerlös beim Exit zuzüglich aller Rekapitalisierungen, die während der Haltezeit
-              schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge" enthält Transaktionskosten beim
+              schon an den Fonds geflossen sind. „Transaktionskosten &amp; Abschläge“ enthält Transaktionskosten beim
               Kauf und Verkauf sowie den kanalspezifischen Abschlag.
             </p>
             <button className="solid" style={{ width: "100%", marginTop: 4 }} onClick={close}>Weiter</button>

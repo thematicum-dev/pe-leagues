@@ -26,7 +26,7 @@ import {
 } from "@/lib/engine";
 
 import {
-  TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
+  TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, 
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
   Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
@@ -285,7 +285,7 @@ export default function PeLeagues() {
         // Gerade erworben: im unrealisierten Block des Ausgangsstands noch nicht da
         uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
       };
-      c.baseLoad = seatLoad(c);
+      Object.assign(c, { baseLoad: seatLoad(c) });
       spendFund(f, c.entryEquity, q);
       f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
       f.holdings.push(c);
@@ -580,12 +580,6 @@ export default function PeLeagues() {
   const maxSlots = me ? INIT_SLOTS + Math.floor(me.attrs.operations / 2) : INIT_SLOTS;
   const freeSlots = maxSlots - busySlots;
 
-  function chargeCompany(uid, mult) {
-    setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== uid ? h : chargeOff(h, "mgmt", ebitdaOf(h) * mult)),
-    }));
-  }
-
   function startSearch(c, seat) {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
@@ -724,7 +718,7 @@ export default function PeLeagues() {
     setFeed((p) => [{ q: quarter, e: "📣", tone: "neu", t: `Verkaufsprozess für <b>${c.name}</b> eröffnet. Gebote liegen in ${hj(PROC_Q + 1)} vor.` }, ...p]);
   }
 
-function finalize(c, gross, buyer, feeRate, extra) {
+function finalize(c, gross, buyer, feeRate, extra?) {
     const net = exitNetOf(c, gross, feeRate);
     /* Steht Spielraum zum Einbehalten zur Verfügung, entscheidet der GP — sonst
        wird direkt voll ausgeschüttet und der Dialog erscheint gar nicht.      */
@@ -737,7 +731,6 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
   function settle(c, gross, buyer, feeRate, extra, keep) {
     const net = exitNetOf(c, gross, feeRate);
-    const st = c.st ?? 1;
     const bridge = makeBridge(c, gross, net);
     setUseProceeds(null);
     setFunds((F) => F.map((f, i) => {
@@ -1095,7 +1088,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
             </div>
             <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
-              <SectorSplit holdings={me.holdings} market={market} cash={me.cash} />
+              <SectorSplit holdings={me.holdings} market={market} />
             </div>
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
@@ -1112,7 +1105,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
             <Shelf holdings={me.holdings} market={market} dryPowder={investableOf(me, quarter)} quarter={quarter}
               onPick={(uid) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c) => (
-              <Holding key={c.uid} c={c} market={market} neg={NEG} quarter={quarter} procCount={procCount}
+              <Holding key={c.uid} c={c} market={market} quarter={quarter} procCount={procCount}
                 freeSlots={freeSlots} act={{
                   proc: () => previewExit(c, "proc"), bil: () => previewExit(c, "bil"),
                   cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),

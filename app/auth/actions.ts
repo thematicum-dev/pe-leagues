@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/forms";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -16,7 +17,7 @@ export async function signOut() {
  * sonst ließe sich damit ausspähen, welche Adressen registriert sind (dasselbe
  * Vorgehen wie bei "Passwort vergessen").
  */
-export async function resendConfirmation(_prevState: unknown, formData: FormData) {
+export async function resendConfirmation(_prevState: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) {
     return { error: "Bitte E-Mail-Adresse eingeben." };

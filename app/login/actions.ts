@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/next";
+import type { FormState } from "@/lib/forms";
+import type { MyAccessRow } from "@/lib/access/context";
 
-export async function login(_prevState: unknown, formData: FormData) {
+export async function login(_prevState: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = safeNext(String(formData.get("next") ?? ""));
@@ -38,7 +40,7 @@ export async function login(_prevState: unknown, formData: FormData) {
   // Von Universen ist in den Meldungen bewusst nicht die Rede: Für den
   // wartenden Nutzer ist das eine interne Einteilung, die ihn erst etwas
   // angeht, wenn er tatsächlich in mehreren Universen spielt.
-  const { data: profile } = await supabase.rpc("my_access").maybeSingle();
+  const { data: profile } = await supabase.rpc("my_access").maybeSingle<MyAccessRow>();
 
   if (!profile) {
     redirect("/onboarding");

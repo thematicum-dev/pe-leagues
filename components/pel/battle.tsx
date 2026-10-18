@@ -211,7 +211,8 @@ function Racks({ rnd, id, k = "", glow = false }) {
   const dx = rnd() * 8 - 4;
   /* Drei Schränke von hinten nach vorn. `dim` ist die Tiefenstufe: Sie
      bestimmt Deckkraft und ob überhaupt Licht gezeigt wird. */
-  const cabs = [
+  const cabs: { x: number; w: number; top: number; bot: number; dim: number; rows: number;
+    lit?: boolean[]; wide?: number[] }[] = [
     { x: 44 + dx, w: 42, top: 92, bot: 188, dim: 0.3, rows: 6 },
     { x: 92 + dx, w: 50, top: 74, bot: 194, dim: 0.6, rows: 7 },
     { x: 150 + dx, w: 78, top: 46, bot: 200, dim: 1, rows: 8 + Math.floor(rnd() * 3) },
@@ -508,7 +509,7 @@ function Robot({ rnd, id, k = "", glow = false }) {
       ))}
 
       {/* Gelenke: Ring mit Schraubenkranz — das Zeichen für "Maschine" */}
-      {[[sh, 12, 8], [el, 9.5, 6]].map(([c, r, n], i) => (
+      {([[sh, 12, 8], [el, 9.5, 6]] as [number[], number, number][]).map(([c, r, n], i) => (
         <g key={i}>
           <circle cx={c[0]} cy={c[1]} r={r} fill={`url(#${k}rb)`} stroke={id.lit} strokeWidth="1.8" />
           <circle cx={c[0]} cy={c[1]} r={r * 0.42} fill={id.shade} stroke={id.own} strokeWidth="1" />
@@ -985,7 +986,7 @@ export function StatRow({ items }) {
 }
 
 /* Abschnitt mit Überschrift — "Investment Thesis" und alles, was ihr folgt. */
-export function Section({ title, right = null, children, flush = false }) {
+export function Section({ title, right = null, children = null, flush = false }) {
   return (
     <section className={"bsec" + (flush ? " flush" : "")}>
       {title && (
@@ -1131,7 +1132,7 @@ export function StatRadar({ axes, color, redacted = false, note = null }) {
    und Qualität eine Streuung, und eine Beteiligung wächst über die
    Halteperiode über ihr Einstiegsband hinaus.                                */
 const CATALOG = SECNAMES.flatMap((s) => BOOK[s]);
-const AX_SPAN = (() => {
+const AX_SPAN = ((): Record<string, [number, number]> => {
   let mMax = 0, gMin = 1e9, gMax = -1e9, ebMax = 0, cMin = 1e9, cMax = -1e9;
   for (const a of CATALOG) {
     mMax = Math.max(mMax, a.m[1]);

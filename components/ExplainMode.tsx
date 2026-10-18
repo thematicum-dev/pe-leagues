@@ -362,7 +362,7 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
   // Ohne Datenraum dasselbe Post-Closing-Risiko wie in der Partie
   const hit = !hadDD && rng.rnd() < clamp(0.5 - 0.09 * PRAC_ATTRS.analysis, 0.05, 0.5)
     ? 0.10 + rng.rnd() * 0.14 : 0;
-  const c = {
+  const c: Any = {
     uid: "prac", name: d.name, sector: d.sector, desc: d.desc,
     revenue: d.revenue, margin: d.margin * (1 - hit), quality: d.quality * (1 - hit / 2),
     netDebt: eb * lev, rate: BASE_RATE - 0.25 * PRAC_ATTRS.financing,
@@ -466,7 +466,7 @@ function GuidedRun({ dark, setDark, back }) {
   const [proc, setProc] = useState(null);
   const [offer, setOffer] = useState(null);
   const [prog, setProg] = useState(0);
-  const market = useMemo(practiceMarket, []);
+  const market = useMemo(() => practiceMarket(), []);
   /* Eigene Zufallsinstanz für die Einführung — unabhängig von der Partie,
      damit sich beide nicht denselben Zufallsstrom teilen. reset() legt bei
      jedem Durchlauf wieder denselben festen Startwert fest. */
@@ -489,6 +489,10 @@ function GuidedRun({ dark, setDark, back }) {
     }]);
   }
 
+  /* Einmal beim Einhängen: Startzustand der Einführung setzen. reset() setzt
+     State und die Zufallsinstanz -- als Lazy-Initializer ginge das nicht,
+     weil reset() auch vom Knopf „Übung wiederholen“ aufgerufen wird. */
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { if (!c) reset(); }, []);
   useEffect(() => { window.scrollTo(0, 0); }, [q]);
 
@@ -694,7 +698,7 @@ function GuidedRun({ dark, setDark, back }) {
     COACH.forEach((r) => {
       if (fresh.length >= 2 || seen.indexOf(r.id) >= 0) return;
       let hit = false;
-      try { hit = r.when(ctx); } catch (err) { hit = false; }
+      try { hit = r.when(ctx); } catch { hit = false; }
       if (hit) fresh.push(r);
     });
     fresh.forEach((r) => news.push({ q: nq, e: "🎓", tone: "tip", t: r.t }));
@@ -868,9 +872,15 @@ function GuidedRun({ dark, setDark, back }) {
   /* Der Zähler geht nur vorwärts und überspringt Schritte, die beim Aufrufen
      schon erledigt sind — wer den CFO vor der Benchmarkstudie besetzt, wird
      nicht zurückgeschickt.                                                   */
+  /* Bewusst nach jedem Render und ohne Abhängigkeitsliste: sat() liest den
+     ganzen Spielzustand. Als abgeleiteter Wert ginge es nicht, weil der
+     Zähler nie zurückspringen soll, wenn ein erledigter Schritt später
+     wieder unerfüllt ist. Endet, sobald i === prog. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let i = prog;
     while (i < GUIDE.length && GUIDE[i].sat()) i++;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (i !== prog) setProg(i);
   });
 
@@ -881,7 +891,7 @@ function GuidedRun({ dark, setDark, back }) {
       eyebrow: `Schritt ${prog + 1} — ${g.eyebrow}`, title: g.title, body: g.body() };
   }
 
-  function finishExit(n, nq, sh, early) {
+  function finishExit(n, nq, sh, early?) {
     // Exit über einen strukturierten Prozess: kein Kanalabschlag, damit in der
     // Value Bridge ausschließlich die eigene Arbeit sichtbar wird.
     const gross = Math.max(0, eqvOf(n, dealMultiple(n, market, PRAC_ATTRS.negotiation)));
@@ -1017,7 +1027,7 @@ function GuidedRun({ dark, setDark, back }) {
           </div>
         )}
 
-        <Holding c={c} market={market} neg={PRAC_ATTRS.negotiation} quarter={q}
+        <Holding c={c} market={market} quarter={q}
           procCount={0} freeSlots={over ? 0 : freeSlots} practice
           act={{
             proc: () => {}, bil: () => {}, cv: () => {}, ipo: () => {},
