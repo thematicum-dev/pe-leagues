@@ -1516,19 +1516,21 @@ export const BATTLE_CSS = `
 /* Regler. Der Systemregler übernimmt im dunklen Theme die Fahrbahn des
    Betriebssystems — hell und flächig — und stünde damit als hellster Balken
    über allem anderen. Beide Herstellerpräfixe sind nötig, WebKit und Gecko
-   teilen sich keinen Selektor dafür. */
-.pel .bcard input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
+   teilen sich keinen Selektor dafür. Dieselben Regler stehen in jedem
+   Kartenfuß (.bfoot), auch außerhalb einer Karte — im Dialog zur Verwendung
+   der Erlöse. */
+.pel :is(.bcard, .bfoot) input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
   background:transparent;margin:8px 0 2px;height:20px;cursor:pointer;}
-.pel .bcard input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:var(--rule);}
-.pel .bcard input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:var(--rule);}
-.pel .bcard input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+.pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:var(--rule);}
+.pel :is(.bcard, .bfoot) input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:var(--rule);}
+.pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
   width:19px;height:19px;border-radius:50%;margin-top:-6.5px;background:var(--own);
   border:2px solid var(--card);box-shadow:0 0 0 1px color-mix(in srgb, var(--own) 70%, transparent),
   0 2px 6px rgba(0,0,0,.35);}
-.pel .bcard input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;
+.pel :is(.bcard, .bfoot) input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;
   background:var(--own);border:2px solid var(--card);
   box-shadow:0 0 0 1px color-mix(in srgb, var(--own) 70%, transparent),0 2px 6px rgba(0,0,0,.35);}
-.pel .bcard input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:99px;}
+.pel :is(.bcard, .bfoot) input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:99px;}
 .pel .bdial{margin-top:12px;}
 .pel .bdial + .bdial{margin-top:14px;}
 
