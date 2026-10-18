@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useContext, useRef } from "react";
+import React, { useState, useMemo, useEffect, useContext, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Search, Briefcase, Trophy } from "lucide-react";
 
@@ -420,6 +420,14 @@ export const CSS = `
 .pel .news{margin:12px 16px;border:1px solid var(--rule);background:var(--card);box-shadow:0 1px 0 var(--glow);}
 .pel .news .nh{display:flex;justify-content:space-between;align-items:center;padding:14px 15px 10px;
   border-bottom:1px solid var(--rule);}
+.pel .news.shut .nh{border-bottom:0;padding-bottom:14px;}
+.pel .news .ntoggle{background:none;border:0;border-radius:0;padding:0;cursor:pointer;text-align:left;font-family:inherit;
+  display:inline-flex;align-items:center;}
+.pel .news .ntoggle:hover:not(:disabled){background:none;color:var(--ink);border:0;}
+.pel .news .ntoggle::before{content:"";width:0;height:0;margin-right:8px;flex-shrink:0;
+  border-left:6px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;
+  transform:rotate(90deg);transition:transform .2s ease;}
+.pel .news.shut .ntoggle::before{transform:none;}
 .pel .item{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--rule);
   font-size:13px;line-height:1.45;animation:slide .3s ease-out both;}
 .pel .item:last-child{border-bottom:0;}
@@ -659,15 +667,39 @@ export function Toasts({ items }) {
 
 /* ---------------- Teilkomponenten ---------------- */
 
+/* Eingeklappte Meldungen bleiben eingeklappt: Die Box steht über allen drei
+   Tabs, und die Wahl gilt auch nach dem Neuladen und in den folgenden
+   Halbjahren, bis man sie wieder aufklappt. Im Browser gespeichert; ohne
+   Speicher (privates Fenster) gilt sie nur bis zum Neuladen. */
+const NEWS_KEY = "pel-news-collapsed";
+const newsListeners = new Set<() => void>();
+let newsCollapsedMem = false;
+function readNewsCollapsed() {
+  try { return localStorage.getItem(NEWS_KEY) === "1"; } catch { return newsCollapsedMem; }
+}
+function setNewsCollapsed(v: boolean) {
+  newsCollapsedMem = v;
+  try { if (v) localStorage.setItem(NEWS_KEY, "1"); else localStorage.removeItem(NEWS_KEY); } catch {}
+  newsListeners.forEach((l) => l());
+}
+function subscribeNews(l: () => void) {
+  newsListeners.add(l);
+  return () => { newsListeners.delete(l); };
+}
+
 export function News({ feed, quarter, practice, onBrief = null }: {
   feed: { q: number; e?: string; tone?: string; t: string }[]; quarter: number; practice?: boolean;
   onBrief?: (() => void) | null;
 }) {
   const last = feed.filter((f) => f.q === quarter);
+  const collapsed = useSyncExternalStore(subscribeNews, readNewsCollapsed, () => false);
   return (
-    <div className="news">
+    <div className={"news" + (collapsed ? " shut" : "")}>
       <div className="nh">
-        <span className="eyebrow">Meldungen aus Halbjahr {quarter}</span>
+        <button type="button" className="eyebrow ntoggle" aria-expanded={!collapsed}
+          onClick={() => { haptic("tap"); setNewsCollapsed(!collapsed); }}>
+          Meldungen aus Halbjahr {quarter}
+        </button>
         {onBrief ? (
           /* Der Halbjahresbericht lässt sich jederzeit wieder aufrufen */
           <button className="lnk mono" style={{ fontSize: 11 }} onClick={() => { haptic("tap"); onBrief(); }}>
@@ -677,7 +709,7 @@ export function News({ feed, quarter, practice, onBrief = null }: {
           <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{last.length}</span>
         )}
       </div>
-      {last.length === 0 ? (
+      {collapsed ? null : last.length === 0 ? (
         <div className="quiet">{practice ? "Ruhiges Halbjahr — keine Meldungen. Setze eine Maßnahme auf oder schließe das Halbjahr ab." : "Ruhiges Halbjahr — keine Meldungen. Gib Gebote ab oder schließe das Halbjahr ab."}</div>
       ) : (
         last.map((f, i) => (
@@ -2173,9 +2205,10 @@ export function deploymentByHalfYear(f) {
   return calls.map((c) => (s += c) / CAPITAL);
 }
 
-/* Aufklappbar in den Details eines Fonds der Peer Group: zugeklappt steht nur
-   die Kopfzeile mit den Summen, damit die Liste der Beteiligungen darunter
-   nicht hinter einer Grafik verschwindet. */
+/* In den Details eines Fonds der Peer Group. Beim Aufklappen des Fonds steht
+   die Grafik gleich offen da -- zugeklappt war sie ein zweiter, leicht
+   übersehener Klick. Über die Kopfzeile mit den Summen lässt sie sich
+   einklappen, wenn man nur die Beteiligungen darunter sehen will. */
 export function CashflowChart({ fund, scale }) {
   const [sel, setSel] = useState(null);
   const { calls, dists } = cashflowByHalfYear(fund);
@@ -2200,7 +2233,7 @@ export function CashflowChart({ fund, scale }) {
   const saldo = sumDists - sumCalls;
 
   return (
-    <details className="cfbox">
+    <details className="cfbox" open>
       <summary>
         <span>Abrufe &amp; Ausschüttungen</span>
         <span className="mono">−{cfNum(sumCalls)} / +{cfNum(sumDists)} Mio. €</span>
@@ -2383,8 +2416,12 @@ export function SectorSplit({ holdings, market, cash }) {
 }
 
 /* Portfolioregal: eine Kachel je Beteiligung mit Wertverlauf, Miniatur-Tragwerk und
-   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.     */
-export function Shelf({ holdings, market, cash, quarter, onPick }) {
+   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.
+   dryPowder ist dieselbe Größe wie in der Kopfzeile (investableOf): offenes
+   Commitment plus einbehaltene Erlöse, abzüglich der Reserve für künftige
+   Gebühren. Vorher stand hier f.cash, ohne den Gebührenabzug -- unter
+   demselben Namen ein deutlich höherer Betrag als oben.                      */
+export function Shelf({ holdings, market, dryPowder, quarter, onPick }) {
   return (
     <>
       {holdings.map((c) => {
@@ -2433,7 +2470,7 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
       {holdings.length < MAX_SLOTS && (
         <div className="bslot">
           <b>{MAX_SLOTS - holdings.length === 1 ? "Ein freier Platz" : `${MAX_SLOTS - holdings.length} freie Plätze`}</b>
-          {eur(cash)} Dry Powder · noch {hj(PERIODS - quarter)}
+          {eur(dryPowder)} Dry Powder · noch {hj(PERIODS - quarter)}
         </div>
       )}
     </>
