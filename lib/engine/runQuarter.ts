@@ -178,7 +178,7 @@ function applyImmediateDecisions(
       return;
     }
 
-    finalizeExit(f, c, final.price, final.buyer, PROC_FEE, extra, dec.keepPct, quarter, news, market);
+    finalizeExit(f, c, final.price, final.buyer, PROC_FEE, extra, dec.keepPct, quarter, news, market, compat);
     queue = queue.filter((it) => it !== item);
   });
 
@@ -342,7 +342,7 @@ function applyImmediateDecisions(
     if (intent.action === "bilateral") {
       const mult = dealMultiple(c, market, NEG, quarter) - BIL_DISC;
       const gross = Math.max(0, eqvOf(c, mult));
-      finalizeExit(f, c, gross, "Off-Market-Erwerber", BIL_FEE, "", intent.keepPct, quarter, news, market);
+      finalizeExit(f, c, gross, "Off-Market-Erwerber", BIL_FEE, "", intent.keepPct, quarter, news, market, compat);
       return;
     }
     if (intent.action === "cv") {
@@ -400,9 +400,10 @@ function applyImmediateDecisions(
 function finalizeExit(
   f: RuntimeFund, c: Any, gross: number, buyer: string, feeRate: number, extra: string,
   keepPct: number | undefined, quarter: number, news: Any[], market: Record<string, number>,
+  compat: EngineCompat,
 ) {
   const net = exitNetOf(c, gross, feeRate);
-  const room = recycleRoom(f, net, quarter);
+  const room = recycleRoom(f, net, quarter, compat);
   const keep = room > 0.5 ? clamp(keepPct ?? 0, 0, 1) : 0;
   // Die stehende Kette abgreifen, bevor die Beteiligung das Portfolio verlässt
   const uOut = takeUnrealized(c, market, net);
@@ -413,7 +414,7 @@ function finalizeExit(
      verschwunden, ihre hist-Reihe also nicht mehr abrufbar. */
   f.realized = [...(f.realized as Any[]),
     { name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, gross, net), uOut }];
-  applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter, keep);
+  applyProceeds(f, net, c.costLeft ?? c.entryEquity, quarter, keep, compat);
   const mo = dealMoic(c, net);
   pushFeed(news, quarter, mo >= 2 ? "🚀" : mo >= 1 ? "💰" : "💀", mo >= 1 ? "pos" : "neg",
     `Exit ${c.name} an ${buyer}: ${net.toFixed(1)} Mio. € netto${extra}.`, f.slot);

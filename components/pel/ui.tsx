@@ -2495,8 +2495,8 @@ export function MarketChart({ hist }) {
    gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
 
    `quarter` ist wie überall in den Ansichten die Zahl der ausgewerteten
-   Halbjahre. Verbucht wird der Erlös im Halbjahr danach — dort prüfen
-   applyProceeds() und der Server die Investitionsperiode, also hier auch.
+   Halbjahre. Verbucht wird der Erlös im Halbjahr danach (decQ), und mit
+   diesem Halbjahr rechnen applyProceeds() und der Server.
 
    Aufgebaut wie der Fuß einer Dealkarte (bfoot, bdial, Row) und in der Farbe
    der verkauften Beteiligung: derselbe Regler wie beim Gebot, statt des
@@ -2533,9 +2533,6 @@ export function UseProceeds({ item, me, quarter, settle }) {
           </div>
         </div>
         <div style={{ padding: "12px 16px 0" }}>
-          {decQ > INVEST_PERIOD && (
-            <p className="hint" style={{ margin: "0 0 8px" }}>Die Investitionsperiode ist beendet.</p>
-          )}
           {item.reneg && (
             <p className="hint" style={{ margin: "0 0 8px" }}>
               Der Endpreis steht erst nach der Nachverhandlung fest. Der gewählte Anteil gilt für den

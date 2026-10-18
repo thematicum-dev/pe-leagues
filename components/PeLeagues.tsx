@@ -847,20 +847,16 @@ function finalize(c, gross, buyer, feeRate, extra) {
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
-    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
-       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
-       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
-       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus. Geprüft wird gegen decQ, wie in
-       settle() beim Verbuchen — mit quarter erschien der Regler in Halbjahr 11
-       noch, obwohl der Erlös dort zwingend voll ausgeschüttet wird.          */
+    /* Warum der Verwendungsdialog ausbleiben kann: Recycling ist kumuliert
+       höchstens bis zur Höhe des Commitments möglich (siehe recycleRoom),
+       danach wird zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das
+       Verschwinden des Dialogs wie ein Fehler aus. Bis zum 18.10.2026 endete
+       das Recycling außerdem mit der Investitionsperiode.                    */
     if (ch !== "proc") {
       const room = recycleRoom(me, Math.max(0, net), decQ);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : decQ > INVEST_PERIOD
-          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
-          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+        : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
       rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],

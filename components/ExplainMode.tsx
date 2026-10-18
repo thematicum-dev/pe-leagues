@@ -266,7 +266,7 @@ function Briefing({ dark, setDark, onStart }) {
             <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(BIL_FEE * 100)}–{pct(PROC_FEE * 100)} beim Verkauf je nach Weg</td></tr>
             <tr><td className="lab">Carried Interest</td><td style={{ textAlign: "left" }}>20 % über 8 % Hurdle auf die Abrufe</td></tr>
             <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Halbjahr {PERIODS - END_PRESSURE_FROM + 1} sinkt der erzielbare Preis, bis zu −{x(LIQ_DISC)} am Laufzeitende</td></tr>
-            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar bis Jahr 5, kumuliert max. 100 % des Commitments</td></tr>
+            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar über die ganze Laufzeit, kumuliert max. 100 % des Commitments</td></tr>
             <tr><td className="lab">Investitionsperiode</td><td style={{ textAlign: "left" }}>Jahr 1–5</td></tr>
           </tbody></table>
           <p className="hint" style={{ padding: "13px 16px 16px" }}>

@@ -336,13 +336,17 @@ export interface EngineCompat {
      Halbjahre jeden Exit der Beteiligung, auch den bilateralen — obwohl die
      Karte "Bilateral bleibt möglich" sagte (siehe runQuarter, Exits).       */
   legacyBlockAllExits?: boolean;
+  /* Bis 18.10.2026 durfte ein Exiterlös nur innerhalb der
+     Investitionsperiode (bis Halbjahr INVEST_PERIOD) einbehalten werden,
+     danach wurde zwingend voll ausgeschüttet (siehe recycleRoom).          */
+  legacyRecycleInvestPeriod?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
-  legacyAddonMandate: true, legacyBlockAllExits: true,
+  legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -1341,9 +1345,9 @@ export function navOf(f, market) {
      Due Diligence — wird zuerst aus recycelbaren Erlösen gedeckt, der Rest bei
      den Investoren abgerufen.
    - Verwendung der Erlöse: Bei jedem Exit entscheidest du, wie viel an die
-     Investoren zurückfließt und wie viel im Fonds bleibt. Einbehalten geht nur
-     innerhalb der Investitionsperiode und kumuliert höchstens bis zur Höhe des
-     Commitments; danach wird zwingend voll ausgeschüttet.
+     Investoren zurückfließt und wie viel im Fonds bleibt. Einbehalten geht über
+     die ganze Laufzeit, kumuliert höchstens bis zur Höhe des Commitments;
+     danach wird zwingend voll ausgeschüttet.
    - Damit misst der TVPI den Gesamtwert je abgerufenem Euro, und der IRR misst,
      wann dieses Geld zurückkam. Ein Asset zehn Jahre zu halten ist jetzt teuer.  */
 export const RECYCLE_CAP = 1.0;    // kumuliert höchstens 100 % des Commitments
@@ -1465,11 +1469,18 @@ export function fundEquityIn(f, c, amt: number, quarter: number, opts: { toDebt?
   return ausFonds;
 }
 
-/* Wie viel eines Exiterlöses überhaupt einbehalten werden darf. Zwei Schranken
-   aus dem LPA: nur innerhalb der Investitionsperiode, und kumuliert höchstens
-   bis zur Höhe des Commitments. Außerhalb wird zwingend voll ausgeschüttet.  */
-export function recycleRoom(f, net, quarter) {
-  if (quarter > INVEST_PERIOD) return 0;
+/* Wie viel eines Exiterlöses überhaupt einbehalten werden darf: kumuliert
+   höchstens bis zur Höhe des Commitments, darüber hinaus wird zwingend voll
+   ausgeschüttet.
+
+   Bis zum 18.10.2026 galt zusätzlich, dass nur innerhalb der
+   Investitionsperiode (bis Halbjahr INVEST_PERIOD) einbehalten werden durfte.
+   Die Grenze ist gefallen: Wer spät verkauft, soll den Erlös ebenso in einen
+   Zukauf oder einen neuen Deal stecken können. Die Wiederholung alter
+   Halbjahre rechnet über compat.legacyRecycleInvestPeriod nach der alten
+   Regel.                                                                    */
+export function recycleRoom(f, net, quarter, compat: EngineCompat = {}) {
+  if (compat.legacyRecycleInvestPeriod && quarter > INVEST_PERIOD) return 0;
   return Math.min(net, Math.max(0, CAPITAL * RECYCLE_CAP - (f.recycled || 0)));
 }
 
@@ -1478,10 +1489,10 @@ export function recycleRoom(f, net, quarter) {
    und kostet IRR (der Rückfluss an die Investoren verschiebt sich). Fehlt die
    Angabe, wird voll ausgeschüttet: das ist die Vorgabe, nicht der Automatismus
    von vorher.                                                                 */
-export function applyProceeds(f, net, costBasis, quarter, keep = 0) {
+export function applyProceeds(f, net, costBasis, quarter, keep = 0, compat: EngineCompat = {}) {
   if (!(net > 0)) return;
   f.proceeds = (f.proceeds || 0) + net;
-  const rec = Math.min(recycleRoom(f, net, quarter), net * clamp(keep, 0, 1));
+  const rec = Math.min(recycleRoom(f, net, quarter, compat), net * clamp(keep, 0, 1));
   if (rec > 0) {
     f.recycled = (f.recycled || 0) + rec;
     f.recyc = (f.recyc || 0) + rec;
