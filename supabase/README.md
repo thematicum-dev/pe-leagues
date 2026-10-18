@@ -62,6 +62,12 @@ Einmalig im Supabase-Dashboard einzurichten:
    App (der Link in der Mail baut darauf auf).
 3. Der Server braucht `SUPABASE_SERVICE_ROLE_KEY` als Umgebungsvariable in
    Vercel — dieselbe, die der Admin-Bereich schon verwendet.
+4. Authentication → Emails → **SMTP Settings**: eigener Mailanbieter (z. B.
+   Resend: Host `smtp.resend.com`, Port 465, User `resend`, Passwort =
+   API-Key, Absender auf einer dort verifizierten Domain). Ohne eigenes SMTP
+   stellt Supabase nur an Adressen des eigenen Supabase-Teams zu —
+   Einladungen an beliebige Adressen kämen nicht an. Danach unter
+   Authentication → Rate Limits das stündliche Mail-Limit anpassen.
 
 ## Zugangskontrolle und Universen
 
