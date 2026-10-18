@@ -29,7 +29,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -1090,6 +1090,10 @@ function finalize(c, gross, buyer, feeRate, extra) {
               <TvpiChart hist={tvpiHist} meIdx={0} />
             </div>
             <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={funds} meKey={0} quarter={quarter} />
+            </div>
+            <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
               <SectorSplit holdings={me.holdings} market={market} cash={me.cash} />
             </div>
@@ -1154,7 +1158,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
-                      <CashflowChart fund={f} scale={cfScale} peers={funds} quarter={quarter} />
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c) => {
                         const val = fairOf(c, market, f.attrs.negotiation);

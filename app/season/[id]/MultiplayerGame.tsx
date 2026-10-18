@@ -23,7 +23,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -1410,6 +1410,10 @@ export default function MultiplayerGame({
               <TvpiChart hist={tvpiHist} meIdx={meIdx} />
             </div>
             <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={state.funds} meKey={humanSlot} quarter={quarter} />
+            </div>
+            <div className="card">
               <h3 className="disp">Peer Group</h3>
               {rank.map((f, i) => (
                 <div key={f.slot}>
@@ -1430,7 +1434,7 @@ export default function MultiplayerGame({
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
-                      <CashflowChart fund={f} scale={cfScale} peers={state.funds} quarter={quarter} />
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c: Any) => {
                         const val = fairOf(c, state.market, f.attrs.negotiation);
