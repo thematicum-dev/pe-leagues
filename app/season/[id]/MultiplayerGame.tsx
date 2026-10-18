@@ -1342,7 +1342,7 @@ export default function MultiplayerGame({
                   ? `${me.holdings.filter((c: Any) => healthOf(c, state.market).attention).length} × Handlungsbedarf` : ""}
               </span>
             </div>
-            <Shelf holdings={me.holdings} market={state.market} cash={me.cash} quarter={quarter}
+            <Shelf holdings={me.holdings} market={state.market} dryPowder={investableOf(me, quarter)} quarter={quarter}
               onPick={(uid: string) => { haptic(6); const el = document.getElementById("h_" + uid); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
             {me.holdings.map((c: Any) => {
               const patched = patchHolding(c);
@@ -1431,7 +1431,7 @@ export default function MultiplayerGame({
                       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", columnGap: 12, rowGap: 2, padding: "8px 14px 2px" }}>
                         <span className="eyebrow" style={{ whiteSpace: "nowrap" }}>{f.me ? "Dein Portfolio" : f.name}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(investableOf(f, quarter))} Dry Powder
                         </span>
                       </div>
                       <CashflowChart fund={f} scale={cfScale} />

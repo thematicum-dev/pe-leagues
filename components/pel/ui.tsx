@@ -2416,8 +2416,12 @@ export function SectorSplit({ holdings, market, cash }) {
 }
 
 /* Portfolioregal: eine Kachel je Beteiligung mit Wertverlauf, Miniatur-Tragwerk und
-   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.     */
-export function Shelf({ holdings, market, cash, quarter, onPick }) {
+   Zustandsflagge. Der freie Platz bleibt sichtbar — Deployment-Druck als Lücke.
+   dryPowder ist dieselbe Größe wie in der Kopfzeile (investableOf): offenes
+   Commitment plus einbehaltene Erlöse, abzüglich der Reserve für künftige
+   Gebühren. Vorher stand hier f.cash, ohne den Gebührenabzug -- unter
+   demselben Namen ein deutlich höherer Betrag als oben.                      */
+export function Shelf({ holdings, market, dryPowder, quarter, onPick }) {
   return (
     <>
       {holdings.map((c) => {
@@ -2466,7 +2470,7 @@ export function Shelf({ holdings, market, cash, quarter, onPick }) {
       {holdings.length < MAX_SLOTS && (
         <div className="bslot">
           <b>{MAX_SLOTS - holdings.length === 1 ? "Ein freier Platz" : `${MAX_SLOTS - holdings.length} freie Plätze`}</b>
-          {eur(cash)} Dry Powder · noch {hj(PERIODS - quarter)}
+          {eur(dryPowder)} Dry Powder · noch {hj(PERIODS - quarter)}
         </div>
       )}
     </>
