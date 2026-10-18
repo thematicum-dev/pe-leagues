@@ -1,9 +1,5 @@
--- Zwei Ergänzungen fürs Dashboard: die Bestenliste der Einzeldeals neben der
--- Rangliste und Einladungen an Freunde per E-Mail.
-
--- ---------------------------------------------------------------------------
--- 1. best_deals(): der beste realisierte Deal jeder abgeschlossenen Partie
--- ---------------------------------------------------------------------------
+-- best_deals(): der beste realisierte Deal jeder abgeschlossenen Partie,
+-- als zweite Tabelle neben der Rangliste.
 --
 -- Je Partie genau ein Eintrag: der Deal mit dem höchsten MOIC unter allen
 -- menschlichen Fondsplätzen. Gelesen wird der Endstand (season_state des
@@ -116,50 +112,3 @@ comment on function public.best_deals(uuid) is
 
 revoke all on function public.best_deals(uuid) from public, anon;
 grant execute on function public.best_deals(uuid) to authenticated;
-
--- ---------------------------------------------------------------------------
--- 2. invitations: Einladungen an Freunde
--- ---------------------------------------------------------------------------
---
--- Verschickt wird die Mail von Supabase Auth (auth.admin.inviteUserByEmail,
--- Vorlage "Invite user", siehe supabase/templates/invite.html) aus einer
--- Server Action heraus. Diese Tabelle hält fest, wer wen eingeladen hat --
--- für die Obergrenze je Spieler und Tag und für den Admin, der den Zugang
--- anschließend freigibt.
-create table public.invitations (
-  id uuid primary key default gen_random_uuid(),
-  inviter_id uuid not null references public.profiles (id) on delete cascade,
-  email text not null,
-  message text,
-  created_at timestamptz not null default now(),
-  constraint invitations_email_format check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' and char_length(email) <= 254),
-  constraint invitations_message_length check (message is null or char_length(message) <= 500)
-);
-
-create index invitations_inviter_created_idx on public.invitations (inviter_id, created_at desc);
-
-comment on table public.invitations is
-  'Einladungen per E-Mail: wer wen wann eingeladen hat (Obergrenze je Spieler, Nachvollziehbarkeit für den Admin).';
-
-alter table public.invitations enable row level security;
-
--- Jeder sieht nur die eigenen Einladungen ...
-create policy "invitations_select_own"
-  on public.invitations
-  for select
-  to authenticated
-  using (inviter_id = auth.uid());
-
--- ... und legt sie nur im eigenen Namen an, und nur mit freigegebenem
--- Zugang. Die Obergrenze prüft zusätzlich die Server Action vor dem Versand.
-create policy "invitations_insert_own"
-  on public.invitations
-  for insert
-  to authenticated
-  with check (
-    inviter_id = auth.uid()
-    and exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.access_status = 'approved'
-    )
-  );

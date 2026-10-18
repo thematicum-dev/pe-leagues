@@ -1,40 +1,43 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
-import { inviteFriend, type InviteState } from "./invite-actions";
-import { INVITE_MESSAGE_MAX } from "@/lib/invite/validate";
+import { useEffect, useRef, useState } from "react";
 
-export default function InviteFriends() {
-  const [state, formAction, pending] = useActionState<InviteState, FormData>(inviteFriend, null);
-  const formRef = useRef<HTMLFormElement>(null);
+// Einladen heißt hier: den Anmeldelink weitergeben. Wer sich darüber
+// registriert, durchläuft wie jeder neue Spieler Onboarding und Freigabe.
+export default function InviteFriends({ signupUrl }: { signupUrl: string }) {
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Nach dem Versand ist das Formular wieder leer für die nächste Einladung
   useEffect(() => {
-    if (state?.success) formRef.current?.reset();
-  }, [state]);
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(signupUrl);
+      setCopied(true);
+    } catch {
+      // Ohne Zugriff auf die Zwischenablage (alte Browser, unsicherer
+      // Kontext) wenigstens markieren, damit man selbst kopieren kann
+      inputRef.current?.select();
+    }
+  }
 
   return (
     <div className="dashcard">
-      <h2>Freunde einladen</h2>
-      <p className="dashsub" style={{ margin: "0 0 14px" }}>
-        Dein Freund bekommt eine Einladung per E-Mail mit einem Link zur Registrierung.
+      <p className="invitehint">
+        Du willst Freunde einladen, um mit ihnen eine Runde zu spielen? Sende ihnen folgenden Link
+        zur Anmeldung:
       </p>
-      <form ref={formRef} action={formAction} className="inviteform">
-        <label>
-          E-Mail-Adresse
-          <input type="email" name="email" autoComplete="off" placeholder="freund@example.com" required />
-        </label>
-        <label>
-          <span>Nachricht <span style={{ opacity: 0.7 }}>(optional)</span></span>
-          <textarea name="message" rows={3} maxLength={INVITE_MESSAGE_MAX}
-            placeholder="Lust auf eine Partie gegen mich?" />
-        </label>
-        {state?.error && <p className="autherror">{state.error}</p>}
-        {state?.success && <p className="invitesuccess">{state.success}</p>}
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? "Sende …" : "Einladung senden"}
+      <div className="invitelink">
+        <input ref={inputRef} type="text" readOnly value={signupUrl} aria-label="Anmeldelink"
+          onFocus={(e) => e.currentTarget.select()} />
+        <button type="button" className="btn-primary" onClick={copy}>
+          {copied ? "Kopiert ✓" : "Link kopieren"}
         </button>
-      </form>
+      </div>
     </div>
   );
 }

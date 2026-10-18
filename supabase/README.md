@@ -41,33 +41,7 @@ Dateinamen-Reihenfolge angewendet:
 36. `20260830100200_universe_seasons.sql` – `seasons.universe_id` + universumsweite Sichtbarkeit, `join_season`/`create_and_join_season`/`global_leaderboard` je Universum
 37. `20260830100300_access_admin_functions.sql` – Admin-Funktionen für Freigaben und Universen
 38. `20261012090000_fund_profile_on_join.sql` – Fondsprofil schon beim Beitritt: `join_season`/`create_and_join_season` nehmen optional `p_attrs` an, damit auch der fünfte Spieler, dessen Beitritt die Partie startet, mit seinem Profil spielt
-39. `20261018090000_best_deals_and_invitations.sql` – `best_deals()`: bester realisierter Deal je abgeschlossener Partie eines Universums (Rangliste); `invitations`: Einladungen an Freunde per E-Mail
-
-## Einladungen per E-Mail
-
-Spieler mit freigegebenem Zugang laden im Dashboard Freunde ein
-(`app/dashboard/invite-actions.ts`). Verschickt wird über Supabase Auth
-(`auth.admin.inviteUserByEmail`, service_role) mit der Vorlage
-`supabase/templates/invite.html`; `invitations` hält fest, wer wen wann
-eingeladen hat (höchstens fünf je Spieler und Tag, dieselbe Adresse höchstens
-einmal pro Woche). Eingeladene durchlaufen danach wie alle anderen Onboarding
-und Freigabe durch den Admin.
-
-Einmalig im Supabase-Dashboard einzurichten:
-
-1. Authentication → Email Templates → **Invite user**: Betreff
-   `Du bist zu PE Leagues eingeladen`, Inhalt aus
-   `supabase/templates/invite.html` (ab dem `<div>`).
-2. Authentication → URL Configuration: **Site URL** ist die Adresse der
-   App (der Link in der Mail baut darauf auf).
-3. Der Server braucht `SUPABASE_SERVICE_ROLE_KEY` als Umgebungsvariable in
-   Vercel — dieselbe, die der Admin-Bereich schon verwendet.
-4. Authentication → Emails → **SMTP Settings**: eigener Mailanbieter (z. B.
-   Resend: Host `smtp.resend.com`, Port 465, User `resend`, Passwort =
-   API-Key, Absender auf einer dort verifizierten Domain). Ohne eigenes SMTP
-   stellt Supabase nur an Adressen des eigenen Supabase-Teams zu —
-   Einladungen an beliebige Adressen kämen nicht an. Danach unter
-   Authentication → Rate Limits das stündliche Mail-Limit anpassen.
+39. `20261018090000_best_deals.sql` – `best_deals()`: bester realisierter Deal je abgeschlossener Partie eines Universums (Rangliste)
 
 ## Zugangskontrolle und Universen
 

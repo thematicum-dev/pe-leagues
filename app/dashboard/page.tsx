@@ -1,5 +1,6 @@
 import { signOut } from "@/app/auth/actions";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/access/context";
 import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
 import UniverseSwitcher from "./UniverseSwitcher";
@@ -11,6 +12,13 @@ export default async function DashboardPage() {
   const { supabase, user, profile, universes, activeUniverse } = await requireAccess("/dashboard");
 
   const { data: isAdmin } = await supabase.rpc("is_admin");
+
+  // Anmeldelink zum Weitergeben, auf derselben Adresse, unter der das
+  // Dashboard gerade läuft (Produktion wie Preview)
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+  const signupUrl = `${proto}://${host}/signup`;
 
   // Universen sind eine interne Einteilung. Wer nur in einem spielt, soll
   // davon gar nichts mitbekommen -- erst ab zwei zugeteilten Universen wird
@@ -157,9 +165,8 @@ export default async function DashboardPage() {
 
         <div className="dashsection">
           <h2>Mitspieler</h2>
-          <span className="dashsub">Lade deine Freunde ein, mit denen Du eine Runde spielen möchtest.</span>
         </div>
-        <InviteFriends />
+        <InviteFriends signupUrl={signupUrl} />
       </div>
     </main>
   );
