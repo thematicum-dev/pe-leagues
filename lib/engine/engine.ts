@@ -2498,7 +2498,7 @@ export function lboProjection(
   };
 }
 
-export const impliedMoM = (d, mult, lev, financing, opts: { years?: number; drift?: number } = {}) => {
+export const impliedMoM = (d, mult, lev, financing, opts?: { years?: number; drift?: number }) => {
   const p = lboProjection(d, mult, lev, financing, opts);
   return p ? p.mom : null;
 };
