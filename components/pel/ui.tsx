@@ -43,6 +43,7 @@ export const CSS = `
 .pel { --paper:#F4F6F2; --card:#FFFFFF; --ink:#12201F; --ink2:#6B7B79;
   --rule:#E2E7DF; --ox:#B4443C; --teal:#1B7A6B; --gold:#B08430; --shade:#EDF1EA;
   --zebra:transparent; --panel:#12201F; --onpanel:#F4F6F2; --glow:rgba(18,32,31,.05);
+  --cfin:#0E8C76; --cfout:#C2453B;
   /* Signalfarben für die Kopfleiste. Die Leiste steht in beiden Themes auf
      --panel, also immer auf dunklem Grund — die themeabhängigen --ox/--teal/
      --gold sind im hellen Theme für dunklen Text auf hellem Grund gemacht und
@@ -57,7 +58,8 @@ export const CSS = `
 
 .pel.dark { --paper:#0C1214; --card:#161F22; --ink:#EDF1EE; --ink2:#8E9C9B;
   --rule:#243033; --ox:#E3897F; --teal:#5FC4B1; --gold:#DCB264; --shade:#1C282B;
-  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4); }
+  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4);
+  --cfin:#22A98F; --cfout:#E06A5E; }
 .pel *{box-sizing:border-box;}
 .pel .wrap{max-width:520px;margin:0 auto;padding-bottom:88px;}
 .pel .disp{font-weight:600;letter-spacing:-.025em;line-height:1.15;}
@@ -2113,6 +2115,131 @@ export function TvpiChart({ hist, meIdx }) {
           style={{ fill: "var(--ink2)" }}>HJ {hist.length - 1}</text>
       </svg>
       <p className="hint" style={{ marginTop: 8 }}>Platz {rank} von {n} · {quartileOf(rank, n)}. Quartil</p>
+    </div>
+  );
+}
+
+/* ---------- Kapitalabrufe und Ausschüttungen ----------
+   Die Zahlungsströme zwischen Fonds und Investoren je Halbjahr: Ausschüttungen
+   nach oben, Abrufe nach unten, von einer gemeinsamen Nulllinie. Das ist die
+   Reihe, auf der IRR und DPI stehen, und die Form, in der ein LP seinen Fonds
+   sieht — erst die Abrufe, dann (hoffentlich) die Rückflüsse.
+
+   Abrufe sind jeder Euro, den der Fonds abruft: Kaufpreise, Zuführungen, Due
+   Diligence und Management Fee. Ausschüttungen stehen vor Carry, so wie sie im
+   Fonds gebucht werden; der Carry wird erst in TVPI, TVCC und IRR abgezogen.
+
+   Alle Fonds der Peer Group teilen sich eine Skala (cashflowScale) und dieselbe
+   Zeitachse über die ganze Laufzeit — sonst sähe ein kleiner Abruf bei einem
+   zurückhaltenden Fonds genauso hoch aus wie ein großer bei einem anderen.
+
+   Die beiden Farben (--cfin, --cfout) sind eigene Stufen nahe an --teal und
+   --ox: Die Markenfarben selbst lagen für Flächen unter der Sättigungsgrenze
+   bzw. im dunklen Theme zu hell. Geprüft mit dem Palettenprüfer, hell gegen
+   #FFFFFF, dunkel gegen #161F22, alle Prüfungen bestanden.                   */
+export function cashflowByHalfYear(f) {
+  const calls = new Array(PERIODS + 1).fill(0), dists = new Array(PERIODS + 1).fill(0);
+  const at = (q) => Math.min(PERIODS, Math.max(1, Math.round(q || 0)));
+  (f.calls || []).forEach((c) => { calls[at(c.q)] += c.amt || 0; });
+  (f.dists || []).forEach((d) => { dists[at(d.q)] += d.amt || 0; });
+  return { calls, dists };
+}
+export function cashflowScale(funds) {
+  let up = 0, down = 0;
+  (funds || []).forEach((f) => {
+    const { calls, dists } = cashflowByHalfYear(f);
+    up = Math.max(up, ...dists); down = Math.max(down, ...calls);
+  });
+  return { up, down };
+}
+
+const cfNum = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE");
+
+export function CashflowChart({ fund, scale }) {
+  const [sel, setSel] = useState(null);
+  const { calls, dists } = cashflowByHalfYear(fund);
+  const sumCalls = calls.reduce((a, b) => a + b, 0), sumDists = dists.reduce((a, b) => a + b, 0);
+  if (sumCalls < 0.05 && sumDists < 0.05) return <div className="quiet">Noch keine Kapitalbewegungen.</div>;
+
+  // Skala: gemeinsame Obergrenze der Peer Group, nach oben auf ganze 10 Mio. gerundet
+  const r10 = (v) => Math.max(10, Math.ceil(v / 10) * 10);
+  const up = r10(Math.max(scale?.up || 0, ...dists)), down = r10(Math.max(scale?.down || 0, ...calls));
+  const L = 30, R = 296, T = 6, B = 98;
+  const y0 = T + (B - T) * (up / (up + down));
+  const k = (B - T) / (up + down);
+  const slot = (R - L) / PERIODS, bw = Math.min(9, slot - 2), rr = 2.5;
+  const cx = (i) => L + (i - 0.5) * slot;
+  // Säule mit gerundetem Datenende und gerader Kante an der Nulllinie
+  const barUp = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 - h + r} Q${x0},${y0 - h} ${x0 + r},${y0 - h} H${x0 + bw - r} Q${x0 + bw},${y0 - h} ${x0 + bw},${y0 - h + r} V${y0} Z`; };
+  const barDn = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 + h - r} Q${x0},${y0 + h} ${x0 + r},${y0 + h} H${x0 + bw - r} Q${x0 + bw},${y0 + h} ${x0 + bw},${y0 + h - r} V${y0} Z`; };
+  const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
+  const shown = sel != null ? sel : null;
+  const drawnPct = Math.round((fund.drawn || 0) / CAPITAL * 100);
+
+  /* Grafik und Zeilen auf derselben Rinne wie die Kopfzeile des Panels (14 px);
+     die Tabelle bringt ihre eigene Einrückung mit und steht deshalb außerhalb. */
+  return (
+    <div>
+      <div style={{ padding: "6px 14px 0" }}>
+      <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--ink2)", marginBottom: 4 }}>
+        <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfin)", marginRight: 5, verticalAlign: -1 }} />Ausschüttungen</span>
+        <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfout)", marginRight: 5, verticalAlign: -1 }} />Abrufe</span>
+      </div>
+      <svg viewBox="0 0 300 112" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+        aria-label={`Kapitalabrufe und Ausschüttungen je Halbjahr: ${eur(sumCalls)} abgerufen, ${eur(sumDists)} ausgeschüttet`}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+        {shown != null && <rect x={L + (shown - 1) * slot} y={T} width={slot} height={B - T} style={{ fill: "var(--shade)" }} />}
+        <text x={L - 4} y={T + 6} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>+{up}</text>
+        <text x={L - 4} y={y0 + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>0</text>
+        <text x={L - 4} y={B} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>−{down}</text>
+        <line x1={L} y1={T} x2={R} y2={T} style={{ stroke: "var(--rule)" }} />
+        <line x1={L} y1={B} x2={R} y2={B} style={{ stroke: "var(--rule)" }} />
+        {hjs.map((i) => {
+          const x0 = cx(i) - bw / 2;
+          return (
+            <g key={i}>
+              {dists[i] > 0.05 && <path d={barUp(x0, Math.max(1, dists[i] * k - 1))} style={{ fill: "var(--cfin)" }} />}
+              {calls[i] > 0.05 && <path d={barDn(x0, Math.max(1, calls[i] * k - 1))} style={{ fill: "var(--cfout)" }} />}
+            </g>
+          );
+        })}
+        <line x1={L} y1={y0} x2={R} y2={y0} style={{ stroke: "var(--ink2)" }} strokeWidth="0.75" />
+        {[1, 5, 10, 15, 20].map((i) => (
+          <text key={i} x={cx(i)} y={B + 10} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+            {i === 1 ? "HJ 1" : i}</text>
+        ))}
+        {/* Trefferflächen: das ganze Halbjahr, nicht nur die Säule */}
+        {hjs.map((i) => (
+          /* Auswahl bleibt nach dem Antippen stehen: Bei Touch folgt pointerleave
+             unmittelbar auf den Tap und hätte sie sofort wieder gelöscht. Der
+             Fokusrahmen entfällt, die hinterlegte Spalte zeigt die Auswahl. */
+          <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
+            tabIndex={0} style={{ outline: "none" }} aria-label={`Halbjahr ${i}: ${eur(calls[i])} abgerufen, ${eur(dists[i])} ausgeschüttet`}
+            onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+        ))}
+      </svg>
+      <div className="mono" style={{ fontSize: 11, color: "var(--ink2)", minHeight: 16, marginTop: 2 }}>
+        {shown != null
+          ? <>HJ {shown} · Ausschüttung <b style={{ color: "var(--ink)" }}>+{cfNum(dists[shown])}</b> · Abruf <b style={{ color: "var(--ink)" }}>−{cfNum(calls[shown])}</b> Mio. €</>
+          : "Halbjahr antippen für die Werte · Mio. €"}
+      </div>
+      </div>
+      <table className="ledger" style={{ marginTop: 6 }}><tbody>
+        <tr><td className="lab">Abgerufen ({drawnPct} % der Zusage)</td><td>{eur(sumCalls)}</td></tr>
+        <tr><td className="lab">Ausgeschüttet</td><td>{eur(sumDists)}</td></tr>
+        <tr><td className="lab">Saldo für die Investoren</td><td style={{ fontWeight: 600 }}>{sumDists - sumCalls >= 0 ? "+" : "−"}{eur(Math.abs(sumDists - sumCalls))}</td></tr>
+      </tbody></table>
+      <details style={{ margin: "2px 0 8px" }}>
+        <summary className="hint" style={{ cursor: "pointer", padding: "6px 16px" }}>Werte je Halbjahr</summary>
+        <table className="ledger"><tbody>
+          {hjs.filter((i) => calls[i] > 0.05 || dists[i] > 0.05).map((i) => (
+            <tr key={i}><td className="lab">HJ {i}</td>
+              <td>+{cfNum(dists[i])} / −{cfNum(calls[i])}</td></tr>
+          ))}
+        </tbody></table>
+      </details>
     </div>
   );
 }

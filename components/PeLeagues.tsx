@@ -29,7 +29,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale,
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -986,6 +986,8 @@ function finalize(c, gross, buyer, feeRate, extra) {
   const irr = me ? irrOf(me, market, quarter) : 0;
   const score = me ? scoreOf(me, market, quarter) : 0;
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(funds);
 
   return (
     <div className={"pel" + (dark ? " dark" : "")}><style>{CSS}</style>
@@ -1152,6 +1154,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c) => {
                         const val = fairOf(c, market, f.attrs.negotiation);

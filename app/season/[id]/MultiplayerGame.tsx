@@ -23,7 +23,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -990,6 +990,8 @@ export default function MultiplayerGame({
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(state.funds);
   /* Stand am Ende des zuletzt ausgewerteten Halbjahres, als Bezugspunkt für
      die Veränderungspfeile in der Kopfleiste. prevFund ist derselbe Fonds im
      Zustand davor, bewertet zu den damaligen Marktständen — nicht der heutige
@@ -1428,6 +1430,7 @@ export default function MultiplayerGame({
                           TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c: Any) => {
                         const val = fairOf(c, state.market, f.attrs.negotiation);
