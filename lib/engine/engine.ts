@@ -336,13 +336,19 @@ export interface EngineCompat {
      Halbjahre jeden Exit der Beteiligung, auch den bilateralen — obwohl die
      Karte "Bilateral bleibt möglich" sagte (siehe runQuarter, Exits).       */
   legacyBlockAllExits?: boolean;
+  /* Bis 18.10.2026 durfte ein Exiterlös nur innerhalb der
+     Investitionsperiode (bis Halbjahr INVEST_PERIOD) einbehalten werden,
+     danach wurde zwingend voll ausgeschüttet (siehe recycleRoom). Und am
+     Laufzeitende blieben einbehaltene, nicht reinvestierte Erlöse stehen,
+     statt ausgeschüttet zu werden (siehe releaseRecycled).                 */
+  legacyRecycleInvestPeriod?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
 export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
-  legacyAddonMandate: true, legacyBlockAllExits: true,
+  legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -1341,9 +1347,9 @@ export function navOf(f, market) {
      Due Diligence — wird zuerst aus recycelbaren Erlösen gedeckt, der Rest bei
      den Investoren abgerufen.
    - Verwendung der Erlöse: Bei jedem Exit entscheidest du, wie viel an die
-     Investoren zurückfließt und wie viel im Fonds bleibt. Einbehalten geht nur
-     innerhalb der Investitionsperiode und kumuliert höchstens bis zur Höhe des
-     Commitments; danach wird zwingend voll ausgeschüttet.
+     Investoren zurückfließt und wie viel im Fonds bleibt. Einbehalten geht über
+     die ganze Laufzeit, kumuliert höchstens bis zur Höhe des Commitments;
+     danach wird zwingend voll ausgeschüttet.
    - Damit misst der TVPI den Gesamtwert je abgerufenem Euro, und der IRR misst,
      wann dieses Geld zurückkam. Ein Asset zehn Jahre zu halten ist jetzt teuer.  */
 export const RECYCLE_CAP = 1.0;    // kumuliert höchstens 100 % des Commitments
@@ -1465,11 +1471,18 @@ export function fundEquityIn(f, c, amt: number, quarter: number, opts: { toDebt?
   return ausFonds;
 }
 
-/* Wie viel eines Exiterlöses überhaupt einbehalten werden darf. Zwei Schranken
-   aus dem LPA: nur innerhalb der Investitionsperiode, und kumuliert höchstens
-   bis zur Höhe des Commitments. Außerhalb wird zwingend voll ausgeschüttet.  */
-export function recycleRoom(f, net, quarter) {
-  if (quarter > INVEST_PERIOD) return 0;
+/* Wie viel eines Exiterlöses überhaupt einbehalten werden darf: kumuliert
+   höchstens bis zur Höhe des Commitments, darüber hinaus wird zwingend voll
+   ausgeschüttet.
+
+   Bis zum 18.10.2026 galt zusätzlich, dass nur innerhalb der
+   Investitionsperiode (bis Halbjahr INVEST_PERIOD) einbehalten werden durfte.
+   Die Grenze ist gefallen: Wer spät verkauft, soll den Erlös ebenso in einen
+   Zukauf oder einen neuen Deal stecken können. Die Wiederholung alter
+   Halbjahre rechnet über compat.legacyRecycleInvestPeriod nach der alten
+   Regel.                                                                    */
+export function recycleRoom(f, net, quarter, compat: EngineCompat = {}) {
+  if (compat.legacyRecycleInvestPeriod && quarter > INVEST_PERIOD) return 0;
   return Math.min(net, Math.max(0, CAPITAL * RECYCLE_CAP - (f.recycled || 0)));
 }
 
@@ -1478,10 +1491,10 @@ export function recycleRoom(f, net, quarter) {
    und kostet IRR (der Rückfluss an die Investoren verschiebt sich). Fehlt die
    Angabe, wird voll ausgeschüttet: das ist die Vorgabe, nicht der Automatismus
    von vorher.                                                                 */
-export function applyProceeds(f, net, costBasis, quarter, keep = 0) {
+export function applyProceeds(f, net, costBasis, quarter, keep = 0, compat: EngineCompat = {}) {
   if (!(net > 0)) return;
   f.proceeds = (f.proceeds || 0) + net;
-  const rec = Math.min(recycleRoom(f, net, quarter), net * clamp(keep, 0, 1));
+  const rec = Math.min(recycleRoom(f, net, quarter, compat), net * clamp(keep, 0, 1));
   if (rec > 0) {
     f.recycled = (f.recycled || 0) + rec;
     f.recyc = (f.recyc || 0) + rec;
@@ -1538,6 +1551,18 @@ export function carryOf(f, market, quarter) {
 }
 export function tvpiOf(f, market, quarter) {
   return (totalValueOf(f, market) - carryOf(f, market, quarter)) / drawnOf(f);
+}
+/* TVCC (Total Value to Committed Capital): derselbe Wert nach Carry wie im
+   TVPI, aber je zugesagtem statt je abgerufenem Euro. Der Unterschied ist
+   Kapital, das nie abgerufen wurde: Der TVPI sieht es nicht, der TVCC zählt
+   es als ungenutzte Zusage. Ein Fonds, der ein Drittel seines Commitments in
+   einen guten Deal steckt und den Rest liegen lässt, hat einen glänzenden
+   TVPI und einen mäßigen TVCC — und für die Investoren, die das ganze
+   Commitment vorgehalten haben, ist der TVCC die ehrlichere Zahl. Auch
+   Recycling verbessert den TVCC nur über den Wert, den das wieder eingesetzte
+   Geld schafft, nicht über einen kleineren Nenner.                         */
+export function tvccOf(f, market, quarter) {
+  return (totalValueOf(f, market) - carryOf(f, market, quarter)) / CAPITAL;
 }
 // DPI: was tatsächlich an die Investoren zurückgeflossen ist, je abgerufenem Euro
 export function dpiOf(f, market, quarter) {
@@ -1640,14 +1665,21 @@ export function irrOf(f, market, quarter) {
 
 /* ---------- Wertung ----------
    Je zur Hälfte Multiple und Verzinsung, beide gegen die Marke eines guten
-   Buyout-Fonds normiert: 1,7x TVPI und 18 % IRR ergeben je 1,00 Punkt.
+   Buyout-Fonds normiert: 1,6x TVCC und 18 % IRR ergeben je 1,00 Punkt.
+
+   Seit dem 18.10.2026 zählt als Multiple der TVCC (tvccOf), nicht mehr der
+   TVPI. Der TVPI belohnte, Kapital gar nicht erst abzurufen: Wer wenig
+   investierte und damit gut lag, stand vor einem Fonds, der sein ganzes
+   Commitment ordentlich eingesetzt hat. Der TVPI wird weiter angezeigt, geht
+   aber nicht mehr in die Wertung ein. Die Geschichte der Marken unten
+   bezieht sich bis zur dritten Fassung auf den TVPI.
 
    Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen,
    und werden nach zwei Bedingungen gesetzt:
      1. Die Wertung 1,00 soll das obere Viertel der Kohorte treffen -- das ist
         die Aussage "1,00 = Benchmarkniveau".
      2. Die beiden Marken müssen denselben Fonds beschreiben. Der Median-IRR
-        der Fonds, die um TVPI_BENCH herum liegen, muss also IRR_BENCH sein;
+        der Fonds, die um die Multiple-Marke herum liegen, muss also IRR_BENCH sein;
         sonst verlangt eine Hälfte der Wertung etwas anderes als die andere.
 
    Erste Fassung 2,0x und 15 %: verfehlte beide Bedingungen. Keiner von 600
@@ -1672,19 +1704,31 @@ export function irrOf(f, market, quarter) {
    Rangfolge und der Abstand der Quartile sind davon nicht betroffen, die
    absolute Lage der Marke trägt diese Unschärfe.
 
+   Vierte Fassung, hier, mit dem Wechsel auf den TVCC: 240 Partien mit je
+   fünf Fonds nach demselben Aufbau, unter der Regel, dass Recycling über die
+   ganze Laufzeit geht. Die KI-Fonds rufen ihr Commitment fast vollständig ab
+   (Median 98 %), TVCC und TVPI liegen deshalb nah beieinander: TVCC p25
+   1,20, Median 1,47, p75 1,73. Der Median-IRR der Fonds um TVCC 1,6 liegt
+   bei 17,5 % (um 1,65 bei 18,8 %), 1,6x passt damit zur IRR-Marke von 18 %.
+   Die Wertung verteilt sich praktisch wie mit der dritten Fassung auf
+   derselben Messung (p75 1,14 statt 1,12, Median 0,85 statt 0,84). Dass
+   beide über den 1,00 der dritten Fassung liegen, ist die Unschärfe des
+   nachgebildeten menschlichen Fondsplatzes, siehe oben; neu kalibriert ist
+   hier nur die Multiple-Marke.
+
    Bewusst nicht nachgezogen: Die globale Rangliste liest die Wertung aus den
    gespeicherten Endständen abgeschlossener Partien (global_leaderboard.sql).
    Partien, die vor dieser Umstellung endeten, behalten deshalb ihre nach der
    alten Marke gerechnete Wertung und fallen gegenüber neuen Partien etwas
    niedriger aus. Das ist so entschieden, kein Versehen.
 
-   Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
+   Der Punkt der Zweiteilung: der Multiple allein belohnt Sitzenbleiben, IRR allein
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
    man ein Asset, das noch weiterläuft.                                       */
-export const TVPI_BENCH = 1.7, IRR_BENCH = 0.18;
+export const TVCC_BENCH = 1.6, IRR_BENCH = 0.18;
 export function scoreOf(f, market, quarter) {
-  const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
+  const t = tvccOf(f, market, quarter) / TVCC_BENCH;
   const i = irrOf(f, market, quarter) / IRR_BENCH;
   return 0.5 * clamp(t, -1, 4) + 0.5 * clamp(i, -1, 4);
 }
@@ -2281,7 +2325,7 @@ export const dealMoic = (c, net) => (net + (c.recapOut || 0)) / Math.max(0.01, c
    und die Kopie im Übungsmodus schrieb keine Value Bridge mit: Die
    Endabrechnung einer Übungspartie verlor damit jeden Tail-End-Deal in den
    Restposten "Transaktionskosten", obwohl dort die halbe Partie steckte.   */
-export function liquidateHoldings(f, market, quarter) {
+export function liquidateHoldings(f, market, quarter, compat: EngineCompat = {}) {
   const out = [];
   (f.holdings || []).forEach((c) => {
     // Am Laufzeitende hat der Verkäufer keinen Verhandlungsspielraum
@@ -2296,7 +2340,31 @@ export function liquidateHoldings(f, market, quarter) {
     out.push({ c, gross, net, moic });
   });
   f.holdings = [];
+  if (!compat.legacyRecycleInvestPeriod) releaseRecycled(f, quarter);
   return out;
+}
+
+/* Am Laufzeitende fließt auch zurück, was einbehalten und nicht mehr
+   investiert wurde. TVPI und IRR zählen es ohnehin als Endwert im letzten
+   Halbjahr (totalValueOf, cashflowsOf) — ausgeschüttet war es aber nicht, und
+   der DPI blieb um genau diesen Betrag unter dem TVPI. Seit Recycling über die
+   ganze Laufzeit geht (18.10.2026), ist das der Normalfall: Wer im letzten
+   Halbjahr einbehält, kann nicht mehr investieren. Wie in applyProceeds
+   werden aufgelaufene Gebühren vorher bedient.                             */
+function releaseRecycled(f, quarter) {
+  const amt = f.recyc || 0;
+  if (!(amt > 1e-9)) return;
+  f.recyc = 0;
+  f.cash -= amt;
+  let dist = amt;
+  if ((f.accrued || 0) > 0) {
+    const pay = Math.min(dist, f.accrued);
+    f.accrued -= pay; dist -= pay;
+  }
+  if (dist > 1e-9) {
+    f.dists = [...(f.dists || []), { q: quarter, amt: dist }];
+    f.distTotal = (f.distTotal || 0) + dist;
+  }
 }
 
 /* Dieselbe Verwertung als Vorschau, ohne den Fonds anzufassen: Was bliebe,

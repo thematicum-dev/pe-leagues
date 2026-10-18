@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
-import { CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, SECNAMES, SECTORS } from "../engine";
+import {
+  CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, PERIODS, SECNAMES, SECTORS, dpiOf, tvpiOf,
+} from "../engine";
 import type { EngineCompat } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
 import type { ExitStartIntent, OfferDecisionIntent, RuntimeFund, RuntimeState } from "../turnTypes";
@@ -52,10 +54,11 @@ function mitGeboten() {
   return { state, rng, uid: c.uid as string };
 }
 
-function entscheide(halfYear: number, dec: Omit<OfferDecisionIntent, "holdingUid">) {
+function entscheide(halfYear: number, dec: Omit<OfferDecisionIntent, "holdingUid">, compat?: EngineCompat) {
   const { state, rng, uid } = mitGeboten();
   const vor = state.funds[0] as Any;
-  const out = runQuarter({ state, halfYear, rng, decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, ...dec }] } } });
+  const out = runQuarter({ state, halfYear, rng, compat,
+    decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, ...dec }] } } });
   const nach = out.state.funds[0] as Any;
   const exit = out.state.feed.find((e) => e.slot === 0 && e.text.startsWith("Exit "));
   return {
@@ -83,10 +86,33 @@ describe("Verwendung der Erlöse aus einem Verkaufsprozess", () => {
     expect(r.exit.includes("an Bieter B") || r.exit.includes("Bieter B ist abgesprungen")).toBe(true);
   });
 
-  it("recycelt bis einschließlich des letzten Halbjahres der Investitionsperiode, danach nicht mehr", () => {
-    const drin = entscheide(INVEST_PERIOD, { choice: "accept", offerIndex: 0, keepPct: 1 });
+  /* Bis zum 18.10.2026 endete das Recycling mit der Investitionsperiode.
+     Seitdem gilt nur noch die Obergrenze in Höhe des Commitments; alte
+     Halbjahre rechnet die Wiederholung nach der alten Regel nach. */
+  it("recycelt auch nach der Investitionsperiode", () => {
+    const spaet = entscheide(INVEST_PERIOD + 5, { choice: "accept", offerIndex: 0, keepPct: 1 });
+    expect(spaet.verkauft).toBe(true);
+    expect(spaet.einbehalten).toBeCloseTo(spaet.erloes, 6);
+  });
+
+  /* Wer im letzten Halbjahr einbehält, kann nicht mehr investieren. Die
+     Endabrechnung schüttet das Einbehaltene deshalb aus: Der DPI erreicht den
+     TVPI, und im Fonds bleibt nichts liegen. */
+  it("schüttet am Laufzeitende aus, was einbehalten und nicht mehr investiert wurde", () => {
+    const { state, rng, uid } = mitGeboten();
+    const out = runQuarter({ state, halfYear: PERIODS, rng,
+      decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, choice: "accept", offerIndex: 0, keepPct: 1 }] } } });
+    const f = out.state.funds[0] as Any;
+    expect(f.recycled).toBeGreaterThan(0.5);
+    expect(f.recyc).toBe(0);
+    expect(f.holdings.length).toBe(0);
+    expect(dpiOf(f, out.state.market, PERIODS)).toBeCloseTo(tvpiOf(f, out.state.market, PERIODS), 6);
+  });
+
+  it("rechnet alte Halbjahre mit dem Ende der Investitionsperiode nach", () => {
+    const drin = entscheide(INVEST_PERIOD, { choice: "accept", offerIndex: 0, keepPct: 1 }, LEGACY_COMPAT);
     expect(drin.einbehalten).toBeGreaterThan(0.5);
-    const danach = entscheide(INVEST_PERIOD + 1, { choice: "accept", offerIndex: 0, keepPct: 1 });
+    const danach = entscheide(INVEST_PERIOD + 1, { choice: "accept", offerIndex: 0, keepPct: 1 }, LEGACY_COMPAT);
     expect(danach.verkauft).toBe(true);
     expect(danach.einbehalten).toBe(0);
   });

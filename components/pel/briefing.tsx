@@ -32,6 +32,7 @@ export interface BriefPerf {
   score: number;
   rank: number;
   funds: number;
+  tvcc: number;
   tvpi: number;
   irr: number;
   dpi: number;
@@ -139,15 +140,15 @@ function lede(perf: BriefPerf, prev: BriefPerf | null): string {
   return `${a}, ${b}.`;
 }
 
-function Tile({ label, value, delta, eps, fmt, invert, neutral }: {
+function Tile({ label, value, delta, eps, fmt, invert, neutral, wide }: {
   label: string; value: string; delta: number | null; eps: number; fmt: (v: number) => string;
-  invert?: boolean; neutral?: boolean;
+  invert?: boolean; neutral?: boolean; wide?: boolean;
 }) {
   const show = delta != null && Math.abs(delta) >= eps;
   const up = show && (invert ? delta! < 0 : delta! > 0);
   const cls = !show ? "" : neutral ? "" : up ? " up" : " dn";
   return (
-    <div className="brtile">
+    <div className="brtile" style={wide ? { gridColumn: "1 / -1" } : undefined}>
       <div className="brtl">{label}</div>
       <div className="brtv mono">{value}</div>
       <div className={"brtd mono" + cls}>{show ? `${up ? "▲" : "▼"} ${fmt(Math.abs(delta!))}` : "—"}</div>
@@ -224,15 +225,19 @@ export function HalfYearBriefing({
               fmt={(v) => de(v, 2)} />
             <Tile label="Platz" value={`${perf.rank}/${perf.funds}`} delta={d(perf.rank, prev?.rank)} eps={0.5}
               invert fmt={(v) => String(Math.round(v))} />
-            <Tile label="TVPI" value={`${de(perf.tvpi, 2)}×`} delta={d(perf.tvpi, prev?.tvpi)} eps={0.005}
+            {/* TVCC und IRR bilden die Wertung, TVPI und DPI stehen zur Information */}
+            <Tile label="TVCC" value={`${de(perf.tvcc, 2)}×`} delta={d(perf.tvcc, prev?.tvcc)} eps={0.005}
               fmt={(v) => `${de(v, 2)}×`} />
             <Tile label="IRR" value={`${de(perf.irr * 100, 1)} %`} delta={d(perf.irr, prev?.irr)} eps={0.0005}
               fmt={(v) => `${de(v * 100, 1)} pp`} />
+            <Tile label="TVPI" value={`${de(perf.tvpi, 2)}×`} delta={d(perf.tvpi, prev?.tvpi)} eps={0.005}
+              fmt={(v) => `${de(v, 2)}×`} />
             <Tile label="DPI" value={`${de(perf.dpi, 2)}×`} delta={d(perf.dpi, prev?.dpi)} eps={0.005}
               fmt={(v) => `${de(v, 2)}×`} />
-            {/* Ohne "€": Mit Einheit lief der Wert bei 390 px aus seiner Kachel */}
+            {/* Ohne "€": Mit Einheit lief der Wert bei 390 px aus seiner Kachel.
+                Über die ganze Breite, damit das Raster mit sieben Kacheln aufgeht. */}
             <Tile label="Dry Powder" value={eur(perf.dry).replace(" €", "")} delta={d(perf.dry, prev?.dry)} eps={0.5}
-              neutral fmt={(v) => eur(v).replace(" €", "")} />
+              neutral wide fmt={(v) => eur(v).replace(" €", "")} />
           </div>
         </section>
 

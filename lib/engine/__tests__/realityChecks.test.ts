@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
   CAPITAL, CARRY, COV_DEFAULT, HURDLE, INT_BARRIER, INVEST_PERIOD, LTIP_SHARE, MGMT_FEE,
-  PERIODS, SECNAMES, SECTORS, TAX_RATE, ARCHES, DEFAULT_HUMAN_ATTRS,
+  LEGACY_COMPAT, PERIODS, SECNAMES, SECTORS, TAX_RATE, ARCHES, DEFAULT_HUMAN_ATTRS,
   addonCheck, addonEquityNeeded, bookOff, bridgeStep, buildInit, carryOf, dealMoic, ebitdaOf, exitNetOf,
   feeReserveOf, fundEquityIn, investableOf, liveHist, makeBridge, maturePeople, mepCut,
   navValueOf, offOf, periodFin, recycleRoom, retentionFactor, stepCompany, taxOf, tvpiOf,
@@ -153,10 +153,21 @@ describe("Managementbeteiligung", () => {
 
 /* ---------- 5 — Recycling ---------- */
 describe("Recycling", () => {
-  it("bleibt auf die Investitionsperiode beschränkt — das ist das LPA, kein Fehler", () => {
+  /* Bis zum 18.10.2026 endete das Recycling mit der Investitionsperiode, wie
+     es ein LPA üblicherweise vorsieht. Im Spiel ist die Grenze bewusst
+     gefallen: Auch ein später Erlös soll in einen Zukauf oder neuen Deal
+     fließen können. Nur die Wiederholung alter Halbjahre rechnet noch so. */
+  it("gilt über die ganze Laufzeit, nicht nur in der Investitionsperiode", () => {
     const f = fund({ undrawn: 300, drawn: 200 });
     expect(recycleRoom(f, 100, INVEST_PERIOD)).toBeGreaterThan(0);
-    expect(recycleRoom(f, 100, INVEST_PERIOD + 1)).toBe(0);
+    expect(recycleRoom(f, 100, INVEST_PERIOD + 1)).toBeGreaterThan(0);
+    expect(recycleRoom(f, 100, PERIODS)).toBeGreaterThan(0);
+  });
+
+  it("endet beim Nachrechnen alter Halbjahre weiter mit der Investitionsperiode", () => {
+    const f = fund({ undrawn: 300, drawn: 200 });
+    expect(recycleRoom(f, 100, INVEST_PERIOD, LEGACY_COMPAT)).toBeGreaterThan(0);
+    expect(recycleRoom(f, 100, INVEST_PERIOD + 1, LEGACY_COMPAT)).toBe(0);
   });
 
   it("wirkt auch beim zweiten Exit, solange der Deckel nicht erreicht ist", () => {

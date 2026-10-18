@@ -66,7 +66,7 @@ export function buildFixture(untilHalfYear: number, hold = false, breach = false
       if (willKaufen && state.deals.length) {
         // Beide auf denselben Deal — nur so entsteht eine Überboten-Meldung
         // Im Prozessmodus bietet Platz 1 auf einen anderen Deal: Platz 0 kauft
-        // so früh genug, dass Gebote noch in der Investitionsperiode eingehen.
+        // früh genug, dass schon um Halbjahr 10 Gebote eingehen.
         const x = (state.deals as Any[])[proc && slot === 1 ? Math.min(1, state.deals.length - 1) : 0];
         d.bids = [{ dealId: x.id, multiple: x.askMult * (breach ? 1.1 : slot === 1 ? 1.06 : 1.0),
           leverage: x.levCap * (breach ? 1 : 0.8) }];
@@ -81,8 +81,8 @@ export function buildFixture(untilHalfYear: number, hold = false, breach = false
         const frei = (me.holdings as Any[]).find((h) => !h.initP);
         if (frei) d.initiatives = [{ holdingUid: frei.uid, dim: "plat", id: "opex" }];
       }
-      // Im Prozessmodus ein Halbjahr früher: Sonst gehen die ersten Gebote
-      // erst nach der Investitionsperiode ein und der Erlösdialog entfällt.
+      // Im Prozessmodus ein Halbjahr früher, aus demselben Grund: Die Startwerte
+      // in SKILL.md (hy=10, seed=24) bauen darauf.
       const reif = (me.holdings as Any[]).filter((h) => h.holdQ >= (proc ? 5 : 6) && !h.proc && !h.lockUntil);
       if (reif.length && !hold && !breach) {
         d.exitStarts = proc

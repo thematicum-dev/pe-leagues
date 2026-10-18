@@ -217,9 +217,10 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
               </div>
               <div className="card">
                 <div className="pad" style={{ paddingTop: 16 }}>
-                  {(season.final_ranking as { slot: number; name: string; score: number; tvpi: number; irr: number }[]).map((r) => (
+                  {/* tvcc fehlt in Endranglisten vor dem 18.10.2026 — damals zählte der TVPI */}
+                  {(season.final_ranking as { slot: number; name: string; score: number; tvcc?: number; tvpi: number; irr: number }[]).map((r) => (
                     <p key={r.slot} className="hint" style={{ marginBottom: 6 }}>
-                      <b>{r.name}</b> — TVPI {r.tvpi.toFixed(2)}× · IRR {(r.irr * 100).toFixed(1).replace(".", ",")} %
+                      <b>{r.name}</b> — {r.tvcc != null ? `TVCC ${r.tvcc.toFixed(2)}× · ` : ""}IRR {(r.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {r.tvpi.toFixed(2)}×
                     </p>
                   ))}
                 </div>
