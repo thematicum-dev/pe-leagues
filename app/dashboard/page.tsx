@@ -165,6 +165,7 @@ export default async function DashboardPage() {
 
         <div className="dashsection">
           <h2>Mitspieler</h2>
+          <span className="dashsub">Per Link, jederzeit</span>
         </div>
         <InviteFriends signupUrl={signupUrl} />
       </div>

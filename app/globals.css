@@ -901,14 +901,7 @@ body {
 }
 
 /* Einladungslink im Dashboard: Adresse und Kopierknopf in einer Zeile,
-   auf schmalen Bildschirmen untereinander. Die Karte hat keine Überschrift,
-   der Hinweis bringt deshalb den Abstand nach oben selbst mit. */
-.invitehint {
-  margin: 16px 0 14px;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
+   auf schmalen Bildschirmen untereinander. */
 .invitelink {
   display: flex;
   gap: 8px;
