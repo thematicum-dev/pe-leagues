@@ -22,14 +22,14 @@ import {
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
-  seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvpiOf, x,
+  seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, Track,
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation,
+  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -40,7 +40,8 @@ function perfOf(F, mk, q): BriefPerf {
   const scores = F.map((f) => scoreOf(f, mk, q));
   return {
     score: scores[0], rank: 1 + scores.filter((v, i) => i > 0 && v > scores[0]).length, funds: F.length,
-    tvpi: tvpiOf(me0, mk, q), irr: irrOf(me0, mk, q), dpi: dpiOf(me0, mk, q), dry: investableOf(me0, q),
+    tvcc: tvccOf(me0, mk, q), tvpi: tvpiOf(me0, mk, q), irr: irrOf(me0, mk, q), dpi: dpiOf(me0, mk, q),
+    dry: investableOf(me0, q),
   };
 }
 
@@ -847,20 +848,16 @@ function finalize(c, gross, buyer, feeRate, extra) {
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
-    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
-       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
-       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
-       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus. Geprüft wird gegen decQ, wie in
-       settle() beim Verbuchen — mit quarter erschien der Regler in Halbjahr 11
-       noch, obwohl der Erlös dort zwingend voll ausgeschüttet wird.          */
+    /* Warum der Verwendungsdialog ausbleiben kann: Recycling ist kumuliert
+       höchstens bis zur Höhe des Commitments möglich (siehe recycleRoom),
+       danach wird zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das
+       Verschwinden des Dialogs wie ein Fehler aus. Bis zum 18.10.2026 endete
+       das Recycling außerdem mit der Investitionsperiode.                    */
     if (ch !== "proc") {
       const room = recycleRoom(me, Math.max(0, net), decQ);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : decQ > INVEST_PERIOD
-          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
-          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+        : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
       rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
@@ -948,7 +945,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
   }
 
   const rank = useMemo(() => funds.map((f) => ({
-    ...f, tvpi: tvpiOf(f, market, quarter), dpi: dpiOf(f, market, quarter),
+    ...f, tvcc: tvccOf(f, market, quarter), tvpi: tvpiOf(f, market, quarter), dpi: dpiOf(f, market, quarter),
     irr: irrOf(f, market, quarter),
     gross: grossMoicOf(f, market), score: scoreOf(f, market, quarter),
   })).sort((a, b) => b.score - a.score), [funds, market, quarter]);
@@ -984,10 +981,13 @@ function finalize(c, gross, buyer, feeRate, extra) {
 
   const dpi = me ? dpiOf(me, market, quarter) : 0;
   const gross = me ? grossMoicOf(me, market) : 0;
+  const tvcc = me ? tvccOf(me, market, quarter) : 1;
   const tvpi = me ? tvpiOf(me, market, quarter) : 1;
   const irr = me ? irrOf(me, market, quarter) : 0;
   const score = me ? scoreOf(me, market, quarter) : 0;
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(funds);
 
   return (
     <div className={"pel" + (dark ? " dark" : "")}><style>{CSS}</style>
@@ -1015,7 +1015,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
           </button>
         </div>
         <div className="barrow" style={{ marginTop: 6, fontSize: 10.5, opacity: .55 }}>
-          <span className="mono">TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}×</span>
+          <span className="mono">TVCC {tvcc.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · TVPI {tvpi.toFixed(2)}×</span>
           <span className="mono">Platz {myRank}/{funds.length}{streak >= 2 ? ` · 🔥×${streak}` : ""} · {me.holdings.length}/{MAX_SLOTS} PortCos</span>
         </div>
         {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
@@ -1053,7 +1053,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
             <div className="amt">{score.toFixed(2)}</div>
             <div className="sub">Wertung · Platz {myRank} von 5</div>
             <div className="sub" style={{ marginTop: 6 }}>
-              TVPI {tvpi.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · DPI {dpi.toFixed(2)}× · Brutto-MOIC {gross.toFixed(2)}×
+              TVCC {tvcc.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} % · TVPI {tvpi.toFixed(2)}× · DPI {dpi.toFixed(2)}× · Brutto-MOIC {gross.toFixed(2)}×
             </div>
             <div className="sub" style={{ marginTop: 4, opacity: .7 }}>
               {eur(me.drawn || 0)} von {eur(CAPITAL)} abgerufen · {eur(me.distTotal || 0)} ausgeschüttet
@@ -1088,6 +1088,10 @@ function finalize(c, gross, buyer, feeRate, extra) {
             <div className="card">
               <h3 className="disp">Wertung gegen die Kohorte</h3>
               <TvpiChart hist={tvpiHist} meIdx={0} />
+            </div>
+            <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={funds} meKey={0} quarter={quarter} />
             </div>
             <div className="card">
               <h3 className="disp">Sektoren nach NAV</h3>
@@ -1151,9 +1155,10 @@ function finalize(c, gross, buyer, feeRate, extra) {
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
                         <span className="eyebrow">{f.me ? "Dein Portfolio" : f.arch.style}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVPI {f.tvpi.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c) => {
                         const val = fairOf(c, market, f.attrs.negotiation);

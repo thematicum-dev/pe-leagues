@@ -23,7 +23,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation,
+  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -37,12 +37,12 @@ import {
 } from "./turnDraft";
 import {
   BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, IPO_EBITDA,
-  INVEST_PERIOD, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
+  IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
   SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, ddCostOf, dpiOf,
   eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  navValueOf, recycleRoom, scoreOf, tvpiOf, x,
+  navValueOf, recycleRoom, scoreOf, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -808,23 +808,19 @@ export default function MultiplayerGame({
     if (eqDisc < 1) rows.push([ch === "cv" ? "− Secondary-Abschlag" : "− Emissionsabschlag",
       `−${Math.round((1 - eqDisc) * 100)} %`]);
 
-    /* Warum der Verwendungsdialog ab Halbjahr 11 nicht mehr erscheint: Das LPA
-       lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
-       höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
-       zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus.
+    /* Warum der Verwendungsdialog ausbleiben kann: Recycling ist kumuliert
+       höchstens bis zur Höhe des Commitments möglich (siehe recycleRoom),
+       danach wird zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das
+       Verschwinden des Dialogs wie ein Fehler aus. Bis zum 18.10.2026 endete
+       das Recycling außerdem mit der Investitionsperiode.
 
        Geprüft wird gegen currentHalfYear, das Halbjahr, in dem der Server den
-       Exit verbucht — nicht gegen quarter. Bis zum 18.10.2026 stand hier
-       quarter: In Halbjahr 11 erschien der Regler noch, der Server schüttete
-       den Erlös aber trotzdem voll aus.                                     */
+       Exit verbucht — nicht gegen quarter.                                   */
     if (ch !== "proc") {
       const room = recycleRoom(me, Math.max(0, net), currentHalfYear);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : currentHalfYear > INVEST_PERIOD
-          ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
-          : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
+        : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
       /* PROC_Q + 1: Der Prozess reift in der Auswertung von Halbjahr
@@ -965,7 +961,8 @@ export default function MultiplayerGame({
     () =>
       [...state.funds]
         .map((f) => ({
-          ...f, tvpi: tvpiOf(f, state.market, quarter), dpi: dpiOf(f, state.market, quarter),
+          ...f, tvcc: tvccOf(f, state.market, quarter), tvpi: tvpiOf(f, state.market, quarter),
+          dpi: dpiOf(f, state.market, quarter),
           irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
           score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
         }))
@@ -988,10 +985,13 @@ export default function MultiplayerGame({
 
   const dpi = dpiOf(me, state.market, quarter);
   const gross = grossMoicOf(me, state.market);
+  const tvcc = tvccOf(me, state.market, quarter);
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
   const myRank = rank.findIndex((f) => f.me) + 1;
+  // Gemeinsame Skala der Cashflow-Grafiken in der Peer Group (siehe CashflowChart)
+  const cfScale = cashflowScale(state.funds);
   /* Stand am Ende des zuletzt ausgewerteten Halbjahres, als Bezugspunkt für
      die Veränderungspfeile in der Kopfleiste. prevFund ist derselbe Fonds im
      Zustand davor, bewertet zu den damaligen Marktständen — nicht der heutige
@@ -1014,6 +1014,7 @@ export default function MultiplayerGame({
       .sort((a, b) => b.score - a.score);
     return {
       score: scoreOf(prevFund, mk, q),
+      tvcc: tvccOf(prevFund, mk, q),
       tvpi: tvpiOf(prevFund, mk, q),
       dpi: dpiOf(prevFund, mk, q),
       irr: irrOf(prevFund, mk, q),
@@ -1176,12 +1177,18 @@ export default function MultiplayerGame({
               </div>
             </div>
           </div>
+          {/* Erste Zeile: die beiden Kennzahlen, aus denen die Wertung besteht.
+              Zweite Zeile: TVPI und DPI, zur Information. */}
           <div className="cockkpi mono">
-            <span>TVPI {tvpi.toFixed(2)}×
-              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+            <span>TVCC {tvcc.toFixed(2)}×
+              <Delta value={d(tvcc, prev?.tvcc)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
               <Delta value={d(irr, prev?.irr)} eps={0.0005}
                 format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
+          </div>
+          <div className="cockkpi mono">
+            <span>TVPI {tvpi.toFixed(2)}×
+              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>DPI {dpi.toFixed(2)}×
               <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
@@ -1403,6 +1410,10 @@ export default function MultiplayerGame({
               <TvpiChart hist={tvpiHist} meIdx={meIdx} />
             </div>
             <div className="card">
+              <h3 className="disp">Deployment Rate</h3>
+              <DeploymentChart funds={state.funds} meKey={humanSlot} quarter={quarter} />
+            </div>
+            <div className="card">
               <h3 className="disp">Peer Group</h3>
               {rank.map((f, i) => (
                 <div key={f.slot}>
@@ -1420,9 +1431,10 @@ export default function MultiplayerGame({
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
                         <span className="eyebrow">{f.me ? "Dein Portfolio" : f.name}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVPI {f.tvpi.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
+                      <CashflowChart fund={f} scale={cfScale} />
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
                       {f.holdings.map((c: Any) => {
                         const val = fairOf(c, state.market, f.attrs.negotiation);
@@ -1499,10 +1511,10 @@ export default function MultiplayerGame({
           quarter={quarter}
           items={visibleFeed.filter((f) => f.halfYear === quarter)
             .map((f) => ({ e: f.emoji, tone: f.tone, t: f.text, pub: f.slot == null }))}
-          perf={{ score, rank: myRank, funds: state.funds.length, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
+          perf={{ score, rank: myRank, funds: state.funds.length, tvcc, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
           prev={prev ? {
             score: prev.score, rank: prev.rank, funds: state.funds.length,
-            tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
+            tvcc: prev.tvcc, tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
           } : null}
           todo={{
             shortlists: shortlistAll.length - shortlistCursor,

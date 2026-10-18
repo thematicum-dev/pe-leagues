@@ -13,7 +13,7 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  SECTORS, SIZE_SCALE, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
@@ -43,6 +43,7 @@ export const CSS = `
 .pel { --paper:#F4F6F2; --card:#FFFFFF; --ink:#12201F; --ink2:#6B7B79;
   --rule:#E2E7DF; --ox:#B4443C; --teal:#1B7A6B; --gold:#B08430; --shade:#EDF1EA;
   --zebra:transparent; --panel:#12201F; --onpanel:#F4F6F2; --glow:rgba(18,32,31,.05);
+  --cfin:#0E8C76; --cfout:#C2453B;
   /* Signalfarben für die Kopfleiste. Die Leiste steht in beiden Themes auf
      --panel, also immer auf dunklem Grund — die themeabhängigen --ox/--teal/
      --gold sind im hellen Theme für dunklen Text auf hellem Grund gemacht und
@@ -57,7 +58,8 @@ export const CSS = `
 
 .pel.dark { --paper:#0C1214; --card:#161F22; --ink:#EDF1EE; --ink2:#8E9C9B;
   --rule:#243033; --ox:#E3897F; --teal:#5FC4B1; --gold:#DCB264; --shade:#1C282B;
-  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4); }
+  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4);
+  --cfin:#22A98F; --cfout:#E06A5E; }
 .pel *{box-sizing:border-box;}
 .pel .wrap{max-width:520px;margin:0 auto;padding-bottom:88px;}
 .pel .disp{font-weight:600;letter-spacing:-.025em;line-height:1.15;}
@@ -386,6 +388,13 @@ export const CSS = `
 .pel .tomb .sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);}
 
 .pel .lb{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule);}
+.pel .cfbox{border-top:1px solid var(--rule);margin-top:8px;}
+.pel .cfbox > summary{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 14px;
+  font-size:12px;color:var(--ink);cursor:pointer;list-style:none;}
+.pel .cfbox > summary::-webkit-details-marker{display:none;}
+.pel .cfbox > summary > span:first-child::before{content:"▸";display:inline-block;width:12px;color:var(--ink2);transition:transform .2s ease;}
+.pel .cfbox[open] > summary > span:first-child::before{transform:rotate(90deg);}
+.pel .cfbox > summary > .mono{font-size:11px;color:var(--ink2);white-space:nowrap;}
 .pel .lb .rk{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink2);width:16px;}
 .pel .lb .nm{flex:1;font-size:13px;}
 .pel .lb .mo{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;}
@@ -2117,6 +2126,224 @@ export function TvpiChart({ hist, meIdx }) {
   );
 }
 
+/* ---------- Kapitalabrufe und Ausschüttungen ----------
+   Die Zahlungsströme zwischen Fonds und Investoren je Halbjahr: Ausschüttungen
+   nach oben, Abrufe nach unten, von einer gemeinsamen Nulllinie. Das ist die
+   Reihe, auf der IRR und DPI stehen, und die Form, in der ein LP seinen Fonds
+   sieht — erst die Abrufe, dann (hoffentlich) die Rückflüsse.
+
+   Abrufe sind jeder Euro, den der Fonds abruft: Kaufpreise, Zuführungen, Due
+   Diligence und Management Fee. Ausschüttungen stehen vor Carry, so wie sie im
+   Fonds gebucht werden; der Carry wird erst in TVPI, TVCC und IRR abgezogen.
+
+   Alle Fonds der Peer Group teilen sich eine Skala (cashflowScale) und dieselbe
+   Zeitachse über die ganze Laufzeit — sonst sähe ein kleiner Abruf bei einem
+   zurückhaltenden Fonds genauso hoch aus wie ein großer bei einem anderen.
+
+   Die beiden Farben (--cfin, --cfout) sind eigene Stufen nahe an --teal und
+   --ox: Die Markenfarben selbst lagen für Flächen unter der Sättigungsgrenze
+   bzw. im dunklen Theme zu hell. Geprüft mit dem Palettenprüfer, hell gegen
+   #FFFFFF, dunkel gegen #161F22, alle Prüfungen bestanden.                   */
+export function cashflowByHalfYear(f) {
+  const calls = new Array(PERIODS + 1).fill(0), dists = new Array(PERIODS + 1).fill(0);
+  const at = (q) => Math.min(PERIODS, Math.max(1, Math.round(q || 0)));
+  (f.calls || []).forEach((c) => { calls[at(c.q)] += c.amt || 0; });
+  (f.dists || []).forEach((d) => { dists[at(d.q)] += d.amt || 0; });
+  return { calls, dists };
+}
+export function cashflowScale(funds) {
+  let up = 0, down = 0;
+  (funds || []).forEach((f) => {
+    const { calls, dists } = cashflowByHalfYear(f);
+    up = Math.max(up, ...dists); down = Math.max(down, ...calls);
+  });
+  return { up, down };
+}
+
+const cfNum = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE");
+
+/* Deployment Rate: kumuliert abgerufenes Kapital je Halbjahr in Prozent des
+   Commitments. Gemessen an den Abrufen, also einschließlich Management Fee und
+   Due Diligence — dieselbe Größe, die TVCC und TVPI trennt (TVCC = TVPI ×
+   Deployment Rate). Recycelte Erlöse, die wieder investiert werden, erscheinen
+   hier nicht: Sie werden nicht abgerufen. Index 0 bis PERIODS.             */
+export function deploymentByHalfYear(f) {
+  const { calls } = cashflowByHalfYear(f);
+  let s = 0;
+  return calls.map((c) => (s += c) / CAPITAL);
+}
+
+/* Aufklappbar in den Details eines Fonds der Peer Group: zugeklappt steht nur
+   die Kopfzeile mit den Summen, damit die Liste der Beteiligungen darunter
+   nicht hinter einer Grafik verschwindet. */
+export function CashflowChart({ fund, scale }) {
+  const [sel, setSel] = useState(null);
+  const { calls, dists } = cashflowByHalfYear(fund);
+  const sumCalls = calls.reduce((a, b) => a + b, 0), sumDists = dists.reduce((a, b) => a + b, 0);
+  if (sumCalls < 0.05 && sumDists < 0.05) return null;
+
+  // Skala: gemeinsame Obergrenze der Peer Group, nach oben auf ganze 10 Mio. gerundet
+  const r10 = (v) => Math.max(10, Math.ceil(v / 10) * 10);
+  const up = r10(Math.max(scale?.up || 0, ...dists)), down = r10(Math.max(scale?.down || 0, ...calls));
+  const L = 30, R = 296, T = 6, B = 98;
+  const y0 = T + (B - T) * (up / (up + down));
+  const k = (B - T) / (up + down);
+  const slot = (R - L) / PERIODS, bw = Math.min(9, slot - 2), rr = 2.5;
+  const cx = (i) => L + (i - 0.5) * slot;
+  // Säule mit gerundetem Datenende und gerader Kante an der Nulllinie
+  const barUp = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 - h + r} Q${x0},${y0 - h} ${x0 + r},${y0 - h} H${x0 + bw - r} Q${x0 + bw},${y0 - h} ${x0 + bw},${y0 - h + r} V${y0} Z`; };
+  const barDn = (x0, h) => { const r = Math.min(rr, h, bw / 2);
+    return `M${x0},${y0} V${y0 + h - r} Q${x0},${y0 + h} ${x0 + r},${y0 + h} H${x0 + bw - r} Q${x0 + bw},${y0 + h} ${x0 + bw},${y0 + h - r} V${y0} Z`; };
+  const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
+  const drawnPct = Math.round((fund.drawn || 0) / CAPITAL * 100);
+  const saldo = sumDists - sumCalls;
+
+  return (
+    <details className="cfbox">
+      <summary>
+        <span>Abrufe &amp; Ausschüttungen</span>
+        <span className="mono">−{cfNum(sumCalls)} / +{cfNum(sumDists)} Mio. €</span>
+      </summary>
+      {/* Grafik und Zeilen auf derselben Rinne wie die Kopfzeile des Panels
+          (14 px); die Tabelle bringt ihre eigene Einrückung mit. */}
+      <div style={{ padding: "2px 14px 0" }}>
+        <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--ink2)", marginBottom: 4 }}>
+          <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfin)", marginRight: 5, verticalAlign: -1 }} />Ausschüttungen</span>
+          <span><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "var(--cfout)", marginRight: 5, verticalAlign: -1 }} />Abrufe</span>
+        </div>
+        <svg viewBox="0 0 300 112" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+          aria-label={`Kapitalabrufe und Ausschüttungen je Halbjahr: ${eur(sumCalls)} abgerufen, ${eur(sumDists)} ausgeschüttet`}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+          {sel != null && <rect x={L + (sel - 1) * slot} y={T} width={slot} height={B - T} style={{ fill: "var(--shade)" }} />}
+          <text x={L - 4} y={T + 6} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>+{up}</text>
+          <text x={L - 4} y={y0 + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>0</text>
+          <text x={L - 4} y={B} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>−{down}</text>
+          <line x1={L} y1={T} x2={R} y2={T} style={{ stroke: "var(--rule)" }} />
+          <line x1={L} y1={B} x2={R} y2={B} style={{ stroke: "var(--rule)" }} />
+          {hjs.map((i) => {
+            const x0 = cx(i) - bw / 2;
+            return (
+              <g key={i}>
+                {dists[i] > 0.05 && <path d={barUp(x0, Math.max(1, dists[i] * k - 1))} style={{ fill: "var(--cfin)" }} />}
+                {calls[i] > 0.05 && <path d={barDn(x0, Math.max(1, calls[i] * k - 1))} style={{ fill: "var(--cfout)" }} />}
+              </g>
+            );
+          })}
+          <line x1={L} y1={y0} x2={R} y2={y0} style={{ stroke: "var(--ink2)" }} strokeWidth="0.75" />
+          {[1, 5, 10, 15, 20].map((i) => (
+            <text key={i} x={cx(i)} y={B + 10} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+              {i === 1 ? "HJ 1" : i}</text>
+          ))}
+          {/* Trefferflächen: das ganze Halbjahr, nicht nur die Säule. Die Auswahl
+              bleibt nach dem Antippen stehen — bei Touch folgt pointerleave
+              unmittelbar auf den Tap. Der Fokusrahmen entfällt, die hinterlegte
+              Spalte zeigt die Auswahl. */}
+          {hjs.map((i) => (
+            <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
+              tabIndex={0} style={{ outline: "none" }}
+              aria-label={`Halbjahr ${i}: ${eur(calls[i])} abgerufen, ${eur(dists[i])} ausgeschüttet`}
+              onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+          ))}
+        </svg>
+        <div className="mono" style={{ fontSize: 11, color: "var(--ink2)", minHeight: 16, marginTop: 2 }}>
+          {sel != null
+            ? <>HJ {sel} · Ausschüttung <b style={{ color: "var(--ink)" }}>+{cfNum(dists[sel])}</b> · Abruf <b style={{ color: "var(--ink)" }}>−{cfNum(calls[sel])}</b> Mio. €</>
+            : "Halbjahr antippen für die Werte · Mio. €"}
+        </div>
+      </div>
+      <table className="ledger" style={{ marginTop: 6 }}><tbody>
+        <tr><td className="lab">Abgerufen ({drawnPct} % der Zusage)</td><td>{eur(sumCalls)}</td></tr>
+        <tr><td className="lab">Ausgeschüttet</td><td>{eur(sumDists)}</td></tr>
+        <tr><td className="lab">Saldo für die Investoren</td><td style={{ fontWeight: 600 }}>{saldo >= 0 ? "+" : "−"}{eur(Math.abs(saldo))}</td></tr>
+      </tbody></table>
+      <details style={{ margin: "2px 0 8px" }}>
+        <summary className="hint" style={{ cursor: "pointer", padding: "6px 16px" }}>Werte je Halbjahr</summary>
+        <table className="ledger"><tbody>
+          {hjs.filter((i) => calls[i] > 0.05 || dists[i] > 0.05).map((i) => (
+            <tr key={i}><td className="lab">HJ {i}</td>
+              <td>+{cfNum(dists[i])} / −{cfNum(calls[i])}</td></tr>
+          ))}
+        </tbody></table>
+      </details>
+    </details>
+  );
+}
+
+/* ---------- Deployment Rate der Kohorte ----------
+   Steht unter dem Wertungsverlauf und ist genauso gebaut: der eigene Fonds als
+   kräftige Linie mit Endwert, die übrigen Fonds dünn in Grau. Bis zum
+   ausgewerteten Halbjahr, auf der Zeitachse der ganzen Laufzeit — so sieht man
+   auch, wie viel Zeit zum Einsetzen der Zusage noch bleibt. */
+export function DeploymentChart({ funds, meKey, quarter }) {
+  const [sel, setSel] = useState(null);
+  const keyOf = (f) => f.slot ?? f.id;
+  const upto = Math.min(PERIODS, Math.max(0, quarter));
+  if (upto < 1) return <div className="quiet">Die Deployment Rate entsteht ab dem ersten Halbjahr.</div>;
+  const me = funds.find((f) => keyOf(f) === meKey);
+  const meDep = me ? deploymentByHalfYear(me) : null;
+  const others = funds.filter((f) => keyOf(f) !== meKey).map(deploymentByHalfYear);
+  const L = 30, R = 276, T = 8, B = 76;
+  const hjs = Array.from({ length: PERIODS }, (_, i) => i + 1);
+  const slot = (R - L) / PERIODS;
+  const cx = (i) => L + (i - 0.5) * slot;
+  const dy = (v) => B - Math.min(1, Math.max(0, v)) * (B - T);
+  const path = (arr) => hjs.filter((i) => i <= upto)
+    .map((i, n) => `${n ? "L" : "M"}${cx(i).toFixed(1)},${dy(arr[i]).toFixed(1)}`).join(" ");
+  const avg = (i) => others.length ? others.reduce((s, a) => s + a[i], 0) / others.length : null;
+  const pctS = (v) => `${Math.round(v * 100)} %`;
+  const focus = sel != null && sel <= upto ? sel : upto;
+
+  return (
+    <div className="pad" style={{ paddingTop: 4 }}>
+      <svg viewBox="0 0 300 92" style={{ width: "100%", display: "block", touchAction: "manipulation" }} role="img"
+        aria-label={`Deployment Rate: ${meDep ? pctS(meDep[upto]) : "–"} der Zusage abgerufen nach Halbjahr ${upto}`}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") setSel(null); }}>
+        {sel != null && sel <= upto && <rect x={L + (sel - 1) * slot} y={T} width={slot} height={B - T} style={{ fill: "var(--shade)" }} />}
+        {[[1, "100 %"], [0.5, "50 %"], [0, "0"]].map(([v, t]) => (
+          <g key={t}>
+            <line x1={L} y1={dy(v)} x2={R} y2={dy(v)} style={{ stroke: "var(--rule)" }} />
+            <text x={L - 4} y={dy(v) + 2.5} fontSize="7.5" textAnchor="end" fontFamily="JetBrains Mono" style={{ fill: "var(--ink2)" }}>{t}</text>
+          </g>
+        ))}
+        {others.map((arr, n) => (
+          <path key={n} d={path(arr)} fill="none" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round"
+            style={{ stroke: "var(--ink2)", opacity: .45 }} />
+        ))}
+        {meDep && <>
+          <path d={path(meDep)} fill="none" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" style={{ stroke: "var(--ink)" }} />
+          <circle cx={cx(upto)} cy={dy(meDep[upto])} r="3" strokeWidth="1.5" style={{ fill: "var(--ink)", stroke: "var(--card)" }} />
+          <text x={cx(upto) + 6} y={dy(meDep[upto]) + 3} fontSize="9.5" fontWeight="700" fontFamily="JetBrains Mono"
+            style={{ fill: "var(--ink)" }}>{pctS(meDep[upto])}</text>
+        </>}
+        {[1, 5, 10, 15, 20].map((i) => (
+          <text key={i} x={cx(i)} y={B + 11} fontSize="7.5" textAnchor="middle" fontFamily="Inter" style={{ fill: "var(--ink2)" }}>
+            {i === 1 ? "HJ 1" : i}</text>
+        ))}
+        {/* Trefferflächen je Halbjahr — dieselbe Bedienung wie in der
+            Cashflow-Grafik, die Auswahl bleibt bei Touch stehen. */}
+        {hjs.filter((i) => i <= upto).map((i) => (
+          <rect key={"h" + i} x={L + (i - 1) * slot} y={T} width={slot} height={B - T} fill="transparent"
+            tabIndex={0} style={{ outline: "none" }}
+            aria-label={`Halbjahr ${i}: ${meDep ? pctS(meDep[i]) : "–"} abgerufen${avg(i) != null ? `, Peer Group im Schnitt ${pctS(avg(i))}` : ""}`}
+            onPointerEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)} onBlur={() => setSel(null)} />
+        ))}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, color: "var(--ink2)", marginTop: 6 }}>
+        <span>
+          <i style={{ display: "inline-block", width: 12, height: 2, background: "var(--ink)", marginRight: 5, verticalAlign: 3 }} />dein Fonds
+          <i style={{ display: "inline-block", width: 12, height: 1.5, background: "var(--ink2)", opacity: .5, margin: "0 5px 0 12px", verticalAlign: 3 }} />Peer Group
+        </span>
+        <span className="mono">
+          HJ {focus} · <b style={{ color: "var(--ink)" }}>{meDep ? pctS(meDep[focus]) : "–"}</b>
+          {avg(focus) != null && <> · Ø {pctS(avg(focus))}</>}
+        </span>
+      </div>
+      <p className="hint" style={{ marginTop: 6 }}>Abgerufenes Kapital in % der Zusage, einschließlich Gebühren. TVCC = TVPI × Deployment Rate.</p>
+    </div>
+  );
+}
+
 /* Sektorallokation auf NAV-Basis — zeigt Klumpenrisiko, das in einer Liste untergeht. */
 export function SectorSplit({ holdings, market, cash }) {
   const nav = {};
@@ -2278,11 +2505,15 @@ export const GLOSSARY = {
   },
   score: {
     t: "Wertung",
-    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVPI, zur Hälfte IRR</b>, jeweils gegen
-      eine Marke normiert ({x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
+    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVCC, zur Hälfte IRR</b>, jeweils gegen
+      eine Marke normiert ({x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
       und damit das obere Viertel der Kohorte.</b> Sie beantwortet beide
       Fragen zugleich — wie viel du verdienst und wie lange du dafür brauchst. Ein hoher Multiple nach zehn
-      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.</>,
+      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.
+      <br /><br />
+      <b>TVCC</b> ist der Gesamtwert je <b>zugesagtem</b> Euro, also gemessen am ganzen Commitment von
+      {" "}{eur(CAPITAL)}. Der <b>TVPI</b> misst denselben Wert je <b>abgerufenem</b> Euro und wird weiter
+      angezeigt, zählt aber nicht für die Wertung: Er übersieht Kapital, das nie investiert wurde.</>,
   },
   fit: {
     t: "Eignung",
@@ -2489,14 +2720,15 @@ export function MarketChart({ hist }) {
 /* ---------- Verwendung der Exiterlöse ----------
    Die Entscheidung, die es vorher nicht gab: Was zurück an die Investoren geht
    und was im Fonds bleibt. Einbehalten heißt, dass mehr Kapital je abgerufenem
-   Euro arbeitet — das hebt den TVPI. Es kostet aber IRR, und zwar systematisch:
+   Euro arbeitet — das hebt den TVPI, sofern der nächste Deal mehr verdient als
+   der Fonds bisher. Es kostet aber IRR, und zwar systematisch:
    Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
    Abruf morgen; Einbehalten ergibt beides gar nicht. Der frühere Rückfluss
    gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
 
    `quarter` ist wie überall in den Ansichten die Zahl der ausgewerteten
-   Halbjahre. Verbucht wird der Erlös im Halbjahr danach — dort prüfen
-   applyProceeds() und der Server die Investitionsperiode, also hier auch.
+   Halbjahre. Verbucht wird der Erlös im Halbjahr danach (decQ), und mit
+   diesem Halbjahr rechnen applyProceeds() und der Server.
 
    Aufgebaut wie der Fuß einer Dealkarte (bfoot, bdial, Row) und in der Farbe
    der verkauften Beteiligung: derselbe Regler wie beim Gebot, statt des
@@ -2533,9 +2765,6 @@ export function UseProceeds({ item, me, quarter, settle }) {
           </div>
         </div>
         <div style={{ padding: "12px 16px 0" }}>
-          {decQ > INVEST_PERIOD && (
-            <p className="hint" style={{ margin: "0 0 8px" }}>Die Investitionsperiode ist beendet.</p>
-          )}
           {item.reneg && (
             <p className="hint" style={{ margin: "0 0 8px" }}>
               Der Endpreis steht erst nach der Nachverhandlung fest. Der gewählte Anteil gilt für den
@@ -2543,11 +2772,12 @@ export function UseProceeds({ item, me, quarter, settle }) {
             </p>
           )}
           <p className="hint" style={{ margin: 0 }}>
-            Einbehalten hebt den TVPI und kostet IRR.
+            Einbehalten kostet IRR — den TVPI hebt es nur mit einem guten Folgedeal.
             <Info t="Einbehalten oder ausschütten">
               Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
-              Multiple, verschiebt aber den Rückfluss nach hinten und setzt den Betrag erneut dem Risiko
-              aus — im IRR gewinnt der frühere Rückfluss immer.
+              Multiple, wenn der nächste Deal mehr verdient als der Fonds bisher — verschiebt aber den
+              Rückfluss nach hinten und setzt den Betrag erneut dem Risiko aus. Im IRR gewinnt der frühere
+              Rückfluss immer.
               <br /><br />
               Einbehalten lohnt, wenn ein konkreter Deal ansteht und das offene Commitment knapp ist.
               Ausschütten lohnt, wenn der Dealflow nichts Überzeugendes hergibt.

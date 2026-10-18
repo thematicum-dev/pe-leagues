@@ -39,7 +39,7 @@ describe("Halbjahresbericht", () => {
   });
 
   it("liest die Stimmung aus Meldungen und Wertung", () => {
-    const perf = { score: 1.1, rank: 2, funds: 5, tvpi: 1.2, irr: 0.1, dpi: 0, dry: 100 };
+    const perf = { score: 1.1, rank: 2, funds: 5, tvcc: 1.1, tvpi: 1.2, irr: 0.1, dpi: 0, dry: 100 };
     expect(briefMood([{ e: "🏆", tone: "pos", t: "" }], perf, { ...perf, score: 1.0 })).toBe("pos");
     expect(briefMood([{ e: "☠️", tone: "neg", t: "" }, { e: "🏆", tone: "pos", t: "" }], perf, null)).toBe("neg");
     expect(briefMood([], perf, perf)).toBe("neu");

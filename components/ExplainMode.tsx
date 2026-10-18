@@ -22,7 +22,7 @@ import {
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   BIL_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
-  TVPI_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
+  TVCC_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
@@ -209,12 +209,15 @@ function Briefing({ dark, setDark, onStart }) {
 
         {/* ---------- Wertung ---------- */}
         <div className="secthead"><span className="eyebrow">Wertung</span>
-          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVPI · 50 % IRR</span></div>
+          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVCC · 50 % IRR</span></div>
         <div className="card">
           <Def t="Zwei Kennzahlen, je zur Hälfte">
-            <b>TVPI</b> misst, wie viel du aus jedem abgerufenen Euro gemacht hast. <b>IRR</b> misst, wie
-            schnell er zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
-            {x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Eine Wertung von
+            <b>TVCC</b> misst, wie viel du aus jedem zugesagten Euro gemacht hast — gemessen am ganzen
+            Commitment, auch am Teil, den du nie abgerufen hast. <b>IRR</b> misst, wie schnell das Geld
+            zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
+            {x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Der <b>TVPI</b> (Wert je
+            abgerufenem Euro) wird weiter angezeigt, zählt aber nicht: Wer wenig abruft, sähe dort besser
+            aus, als er für die Investoren ist. Eine Wertung von
             <b> 1,00</b> ist Benchmarkniveau und trifft das obere Viertel der Kohorte; 1,50 erreicht
             kaum einer, unter 0,35 liegt das untere Viertel.
           </Def>
@@ -238,16 +241,16 @@ function Briefing({ dark, setDark, onStart }) {
           </Def>
           <Def t="Bei jedem Exit entscheidest du über die Verwendung">
             Wie viel zurück an die Investoren geht und wie viel im Fonds bleibt, ist deine Entscheidung —
-            innerhalb von zwei Schranken: nur bis Jahr 5, und kumuliert höchstens bis zur Höhe des
-            Commitments. Danach wird zwingend voll ausgeschüttet.
+            über die ganze Laufzeit, aber kumuliert höchstens bis zur Höhe des Commitments. Danach wird
+            zwingend voll ausgeschüttet.
           </Def>
           <Def t="Einbehalten kauft TVPI mit IRR">
-            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple.
-            Es kostet aber systematisch Verzinsung: Ausschütten und später neu abrufen ergibt einen
-            Rückfluss heute und einen Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss
-            gewinnt im IRR immer. Gemessen: durchgehend ausschütten bringt 1,94× bei 17,1 %, durchgehend
-            einbehalten 2,20× bei 15,8 %. Beides ist vertretbar — die Frage ist, ob du einen Deal hast,
-            der das Geld verdient.
+            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple,
+            aber nur, wenn der nächste Deal mehr verdient als der Fonds bisher. Die Verzinsung kostet es
+            dagegen immer: Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
+            Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss gewinnt im IRR immer.
+            Wer einbehält, ohne einen Deal zu haben, der das Geld verdient, verliert deshalb beides —
+            die Frage ist also nie „einbehalten oder nicht“, sondern „wofür“.
           </Def>
           <Def t="Das Commitment ist eine harte Grenze">
             Mehr als {eur(CAPITAL)} kannst du nicht abrufen. Und die Management Fee liegt innerhalb dieser
@@ -266,7 +269,7 @@ function Briefing({ dark, setDark, onStart }) {
             <tr><td className="lab">Transaktionskosten</td><td style={{ textAlign: "left" }}>{pct(ENTRY_FEE * 100)} beim Kauf, {pct(BIL_FEE * 100)}–{pct(PROC_FEE * 100)} beim Verkauf je nach Weg</td></tr>
             <tr><td className="lab">Carried Interest</td><td style={{ textAlign: "left" }}>20 % über 8 % Hurdle auf die Abrufe</td></tr>
             <tr><td className="lab">Exitfenster</td><td style={{ textAlign: "left" }}>ab Halbjahr {PERIODS - END_PRESSURE_FROM + 1} sinkt der erzielbare Preis, bis zu −{x(LIQ_DISC)} am Laufzeitende</td></tr>
-            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar bis Jahr 5, kumuliert max. 100 % des Commitments</td></tr>
+            <tr><td className="lab">Recycling</td><td style={{ textAlign: "left" }}>frei wählbar über die ganze Laufzeit, kumuliert max. 100 % des Commitments</td></tr>
             <tr><td className="lab">Investitionsperiode</td><td style={{ textAlign: "left" }}>Jahr 1–5</td></tr>
           </tbody></table>
           <p className="hint" style={{ padding: "13px 16px 16px" }}>
@@ -732,7 +735,7 @@ function GuidedRun({ dark, setDark, back }) {
     return Math.pow(moic, 2 / holdQ) - 1;
   }
   const pracScore = (moic, holdQ) =>
-    0.5 * clamp(moic / TVPI_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
+    0.5 * clamp(moic / TVCC_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
 
   /* Die eigentliche Lektion beim vorzeitigen Verkauf: Was wäre gewesen, wenn
      man gehalten hätte? Dazu wird die Beteiligung ohne weitere Maßnahmen bis
