@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAccess } from "@/lib/access/context";
 import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
 import UniverseSwitcher from "./UniverseSwitcher";
+import InviteFriends from "./InviteFriends";
 
 export default async function DashboardPage() {
   // Schranke für den gesamten Spielbereich: angemeldet, Profil vorhanden,
@@ -153,6 +154,12 @@ export default async function DashboardPage() {
             </p>
           </Link>
         </div>
+
+        <div className="dashsection">
+          <h2>Mitspieler</h2>
+          <span className="dashsub">Je mehr mitspielen, desto schneller füllen sich die Partien</span>
+        </div>
+        <InviteFriends />
       </div>
     </main>
   );

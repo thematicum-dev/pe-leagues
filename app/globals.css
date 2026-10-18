@@ -899,3 +899,32 @@ body {
     animation: none !important;
   }
 }
+
+/* Einladung im Dashboard: dieselben Felder wie auf den Anmeldeseiten, die
+   Nachricht als mehrzeiliges Feld. */
+.inviteform label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink2);
+  margin-bottom: 14px;
+}
+
+.inviteform input,
+.inviteform textarea {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  background: var(--paper);
+  resize: vertical;
+}
+
+.invitesuccess {
+  color: var(--teal);
+  font-size: 13px;
+  margin: -6px 0 14px;
+}

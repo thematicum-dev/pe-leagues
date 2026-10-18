@@ -1,0 +1,44 @@
+<!--
+  Vorlage "Invite user" für Supabase Auth.
+
+  Einmalig im Supabase-Dashboard eintragen: Authentication -> Email Templates
+  -> "Invite user". Betreff: Du bist zu PE Leagues eingeladen
+  Inhalt: dieser Text ab <div ...> bis zum Ende.
+
+  Der Link geht über /auth/callback mit token_hash (wie die übrigen Mails),
+  damit er auch auf einem anderen Gerät funktioniert; danach vergibt der
+  Eingeladene sein Passwort (/update-password) und landet im Onboarding.
+  {{ .Data.invited_by }} und {{ .Data.invite_message }} setzt
+  app/dashboard/invite-actions.ts beim Versand. Supabase escapt beide.
+-->
+<div style="max-width:520px;margin:0 auto;padding:28px 24px;font-family:Inter,Helvetica,Arial,sans-serif;color:#12201F;background:#FFFFFF;">
+  <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#B08430;font-weight:600;">PE Leagues</div>
+  <h1 style="font-size:24px;line-height:1.25;margin:10px 0 16px;">{{ .Data.invited_by }} lädt dich zu PE Leagues ein</h1>
+
+  {{ if .Data.invite_message }}
+  <div style="border-left:3px solid #B08430;background:#F4F6F2;padding:12px 16px;margin:0 0 20px;font-size:15px;line-height:1.5;white-space:pre-line;">{{ .Data.invite_message }}<br><span style="font-size:13px;color:#6B7B79;">— {{ .Data.invited_by }}</span></div>
+  {{ end }}
+
+  <p style="font-size:15px;line-height:1.55;margin:0 0 12px;">
+    <strong>500 Mio. € Commitment. Invest. Build. Exit. Outperform.</strong>
+  </p>
+  <p style="font-size:15px;line-height:1.55;margin:0 0 12px;">
+    PE Leagues ist ein Private-Equity-Strategiespiel: Du führst einen Buyout-Fonds über zehn Jahre,
+    bietest auf Unternehmen, stellst das Management auf, treibst Maßnahmen und Zukäufe voran und
+    verkaufst zum richtigen Zeitpunkt. Du spielst gegen vier andere Fonds, ein Halbjahr je Zug,
+    und am Ende zählt, was bei deinen Investoren ankommt.
+  </p>
+  <p style="font-size:15px;line-height:1.55;margin:0 0 24px;">
+    Registriere dich über den Button, vergib dein Passwort, und du bist dabei.
+  </p>
+
+  <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=invite&next=/update-password"
+     style="display:inline-block;background:#12201F;color:#F4F6F2;text-decoration:none;font-weight:600;font-size:15px;padding:13px 22px;border-radius:8px;">
+    Jetzt registrieren
+  </a>
+
+  <p style="font-size:12px;line-height:1.5;color:#6B7B79;margin:28px 0 0;">
+    Du kennst {{ .Data.invited_by }} nicht oder willst nicht mitspielen? Dann ignoriere diese Mail einfach —
+    ohne Klick auf den Link wird kein Konto aktiv.
+  </p>
+</div>
