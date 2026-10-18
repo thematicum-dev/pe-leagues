@@ -27,7 +27,9 @@ export default function InviteFriends({ signupUrl }: { signupUrl: string }) {
 
   return (
     <div className="dashcard">
-      <p className="invitehint">
+      {/* Aufbau wie die Karte "Offene Partien": Titel, grauer Hinweis, Aktion */}
+      <h2>Freunde einladen</h2>
+      <p className="dashsub">
         Du willst Freunde einladen, um mit ihnen eine Runde zu spielen? Sende ihnen folgenden Link
         zur Anmeldung:
       </p>
