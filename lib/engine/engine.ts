@@ -1552,6 +1552,18 @@ export function carryOf(f, market, quarter) {
 export function tvpiOf(f, market, quarter) {
   return (totalValueOf(f, market) - carryOf(f, market, quarter)) / drawnOf(f);
 }
+/* TVCC (Total Value to Committed Capital): derselbe Wert nach Carry wie im
+   TVPI, aber je zugesagtem statt je abgerufenem Euro. Der Unterschied ist
+   Kapital, das nie abgerufen wurde: Der TVPI sieht es nicht, der TVCC zählt
+   es als ungenutzte Zusage. Ein Fonds, der ein Drittel seines Commitments in
+   einen guten Deal steckt und den Rest liegen lässt, hat einen glänzenden
+   TVPI und einen mäßigen TVCC — und für die Investoren, die das ganze
+   Commitment vorgehalten haben, ist der TVCC die ehrlichere Zahl. Auch
+   Recycling verbessert den TVCC nur über den Wert, den das wieder eingesetzte
+   Geld schafft, nicht über einen kleineren Nenner.                         */
+export function tvccOf(f, market, quarter) {
+  return (totalValueOf(f, market) - carryOf(f, market, quarter)) / CAPITAL;
+}
 // DPI: was tatsächlich an die Investoren zurückgeflossen ist, je abgerufenem Euro
 export function dpiOf(f, market, quarter) {
   const tv = totalValueOf(f, market);
@@ -1653,14 +1665,21 @@ export function irrOf(f, market, quarter) {
 
 /* ---------- Wertung ----------
    Je zur Hälfte Multiple und Verzinsung, beide gegen die Marke eines guten
-   Buyout-Fonds normiert: 1,7x TVPI und 18 % IRR ergeben je 1,00 Punkt.
+   Buyout-Fonds normiert: 1,6x TVCC und 18 % IRR ergeben je 1,00 Punkt.
+
+   Seit dem 18.10.2026 zählt als Multiple der TVCC (tvccOf), nicht mehr der
+   TVPI. Der TVPI belohnte, Kapital gar nicht erst abzurufen: Wer wenig
+   investierte und damit gut lag, stand vor einem Fonds, der sein ganzes
+   Commitment ordentlich eingesetzt hat. Der TVPI wird weiter angezeigt, geht
+   aber nicht mehr in die Wertung ein. Die Geschichte der Marken unten
+   bezieht sich bis zur dritten Fassung auf den TVPI.
 
    Die Marken sind an der Engine gemessen, nicht aus der Praxis übernommen,
    und werden nach zwei Bedingungen gesetzt:
      1. Die Wertung 1,00 soll das obere Viertel der Kohorte treffen -- das ist
         die Aussage "1,00 = Benchmarkniveau".
      2. Die beiden Marken müssen denselben Fonds beschreiben. Der Median-IRR
-        der Fonds, die um TVPI_BENCH herum liegen, muss also IRR_BENCH sein;
+        der Fonds, die um die Multiple-Marke herum liegen, muss also IRR_BENCH sein;
         sonst verlangt eine Hälfte der Wertung etwas anderes als die andere.
 
    Erste Fassung 2,0x und 15 %: verfehlte beide Bedingungen. Keiner von 600
@@ -1685,19 +1704,31 @@ export function irrOf(f, market, quarter) {
    Rangfolge und der Abstand der Quartile sind davon nicht betroffen, die
    absolute Lage der Marke trägt diese Unschärfe.
 
+   Vierte Fassung, hier, mit dem Wechsel auf den TVCC: 240 Partien mit je
+   fünf Fonds nach demselben Aufbau, unter der Regel, dass Recycling über die
+   ganze Laufzeit geht. Die KI-Fonds rufen ihr Commitment fast vollständig ab
+   (Median 98 %), TVCC und TVPI liegen deshalb nah beieinander: TVCC p25
+   1,20, Median 1,47, p75 1,73. Der Median-IRR der Fonds um TVCC 1,6 liegt
+   bei 17,5 % (um 1,65 bei 18,8 %), 1,6x passt damit zur IRR-Marke von 18 %.
+   Die Wertung verteilt sich praktisch wie mit der dritten Fassung auf
+   derselben Messung (p75 1,14 statt 1,12, Median 0,85 statt 0,84). Dass
+   beide über den 1,00 der dritten Fassung liegen, ist die Unschärfe des
+   nachgebildeten menschlichen Fondsplatzes, siehe oben; neu kalibriert ist
+   hier nur die Multiple-Marke.
+
    Bewusst nicht nachgezogen: Die globale Rangliste liest die Wertung aus den
    gespeicherten Endständen abgeschlossener Partien (global_leaderboard.sql).
    Partien, die vor dieser Umstellung endeten, behalten deshalb ihre nach der
    alten Marke gerechnete Wertung und fallen gegenüber neuen Partien etwas
    niedriger aus. Das ist so entschieden, kein Versehen.
 
-   Der Punkt der Zweiteilung: TVPI allein belohnt Sitzenbleiben, IRR allein
+   Der Punkt der Zweiteilung: der Multiple allein belohnt Sitzenbleiben, IRR allein
    belohnt schnelles Drehen kleiner Deals. Erst zusammen bilden sie die
    Entscheidung ab, um die es in diesem Geschäft wirklich geht — wann verkauft
    man ein Asset, das noch weiterläuft.                                       */
-export const TVPI_BENCH = 1.7, IRR_BENCH = 0.18;
+export const TVCC_BENCH = 1.6, IRR_BENCH = 0.18;
 export function scoreOf(f, market, quarter) {
-  const t = tvpiOf(f, market, quarter) / TVPI_BENCH;
+  const t = tvccOf(f, market, quarter) / TVCC_BENCH;
   const i = irrOf(f, market, quarter) / IRR_BENCH;
   return 0.5 * clamp(t, -1, 4) + 0.5 * clamp(i, -1, 4);
 }

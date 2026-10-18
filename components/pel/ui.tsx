@@ -13,7 +13,7 @@ import {
   IPO_PLACE, IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, QUAL_COEF,
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
-  SECTORS, SIZE_SCALE, TVPI_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
+  SECTORS, SIZE_SCALE, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, anyInit, applyProceeds,
   buildInit, cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCapOf, ddCostOf, dealMoic,
   dealMultiple, dpiOf, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eqvOf, eur,
@@ -2278,11 +2278,15 @@ export const GLOSSARY = {
   },
   score: {
     t: "Wertung",
-    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVPI, zur Hälfte IRR</b>, jeweils gegen
-      eine Marke normiert ({x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
+    d: <>Die Kennzahl, nach der die Kohorte rangiert: <b>zur Hälfte TVCC, zur Hälfte IRR</b>, jeweils gegen
+      eine Marke normiert ({x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)}). <b>1,00 bedeutet Benchmark-Niveau
       und damit das obere Viertel der Kohorte.</b> Sie beantwortet beide
       Fragen zugleich — wie viel du verdienst und wie lange du dafür brauchst. Ein hoher Multiple nach zehn
-      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.</>,
+      Jahren und ein schneller Exit mit weniger Substanz können dieselbe Wertung ergeben.
+      <br /><br />
+      <b>TVCC</b> ist der Gesamtwert je <b>zugesagtem</b> Euro, also gemessen am ganzen Commitment von
+      {" "}{eur(CAPITAL)}. Der <b>TVPI</b> misst denselben Wert je <b>abgerufenem</b> Euro und wird weiter
+      angezeigt, zählt aber nicht für die Wertung: Er übersieht Kapital, das nie investiert wurde.</>,
   },
   fit: {
     t: "Eignung",

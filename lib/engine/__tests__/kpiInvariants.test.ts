@@ -4,7 +4,7 @@ import {
   SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
   fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, bridgeStep, bridgeChain, liveHist,
   tvpiOf, dpiOf, irrOf, scoreOf, cashflowsOf, navOf, totalValueOf, carryOf,
-  IRR_FLOOR, IRR_CAP, TVPI_BENCH, IRR_BENCH, clamp,
+  IRR_FLOOR, IRR_CAP, TVCC_BENCH, IRR_BENCH, clamp, tvccOf,
 } from "../engine";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
@@ -156,7 +156,13 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
 
   // 6 — Die Wertung ist genau die halbe Summe der beiden normierten Kennzahlen
   expect(score, `${where}: Wertung`).toBeCloseTo(
-    0.5 * clamp(tvpi / TVPI_BENCH, -1, 4) + 0.5 * clamp(irr / IRR_BENCH, -1, 4), 9);
+    0.5 * clamp(tvccOf(f, market, hy) / TVCC_BENCH, -1, 4) + 0.5 * clamp(irr / IRR_BENCH, -1, 4), 9);
+
+  // 7 — TVCC ist derselbe Wert wie der TVPI, nur je zugesagtem statt je
+  //     abgerufenem Euro. Abgerufen wird nie mehr als zugesagt, also TVCC ≤ TVPI.
+  const tvcc = tvccOf(f, market, hy);
+  if (b.drawn >= 1) expect(tvcc, `${where}: TVCC = TVPI · Abruf/Zusage`).toBeCloseTo(tvpi * b.drawn / CAPITAL, 9);
+  expect(tvcc, `${where}: TVCC ≤ TVPI`).toBeLessThanOrEqual(tvpi + 1e-9);
 
   // 7 — Das Commitment ist eine harte Grenze
   expect(f.drawn, `${where}: Abruf über Commitment`).toBeLessThanOrEqual(CAPITAL + 1e-6);

@@ -22,7 +22,7 @@ import {
   MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   BIL_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
-  TVPI_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
+  TVCC_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
@@ -209,12 +209,15 @@ function Briefing({ dark, setDark, onStart }) {
 
         {/* ---------- Wertung ---------- */}
         <div className="secthead"><span className="eyebrow">Wertung</span>
-          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVPI · 50 % IRR</span></div>
+          <span className="mono" style={{ fontSize: 11, color: "var(--gold)" }}>50 % TVCC · 50 % IRR</span></div>
         <div className="card">
           <Def t="Zwei Kennzahlen, je zur Hälfte">
-            <b>TVPI</b> misst, wie viel du aus jedem abgerufenen Euro gemacht hast. <b>IRR</b> misst, wie
-            schnell er zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
-            {x(TVPI_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Eine Wertung von
+            <b>TVCC</b> misst, wie viel du aus jedem zugesagten Euro gemacht hast — gemessen am ganzen
+            Commitment, auch am Teil, den du nie abgerufen hast. <b>IRR</b> misst, wie schnell das Geld
+            zurückkam. Beide werden gegen die Marke eines guten Buyout-Fonds normiert —
+            {x(TVCC_BENCH)} und {pct(IRR_BENCH * 100)} ergeben je einen Punkt. Der <b>TVPI</b> (Wert je
+            abgerufenem Euro) wird weiter angezeigt, zählt aber nicht: Wer wenig abruft, sähe dort besser
+            aus, als er für die Investoren ist. Eine Wertung von
             <b> 1,00</b> ist Benchmarkniveau und trifft das obere Viertel der Kohorte; 1,50 erreicht
             kaum einer, unter 0,35 liegt das untere Viertel.
           </Def>
@@ -732,7 +735,7 @@ function GuidedRun({ dark, setDark, back }) {
     return Math.pow(moic, 2 / holdQ) - 1;
   }
   const pracScore = (moic, holdQ) =>
-    0.5 * clamp(moic / TVPI_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
+    0.5 * clamp(moic / TVCC_BENCH, -1, 4) + 0.5 * clamp(pracIrr(moic, holdQ) / IRR_BENCH, -1, 4);
 
   /* Die eigentliche Lektion beim vorzeitigen Verkauf: Was wäre gewesen, wenn
      man gehalten hätte? Dazu wird die Beteiligung ohne weitere Maßnahmen bis

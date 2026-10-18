@@ -215,8 +215,13 @@ const GOLDEN_RESULT = {
      Unverändert: finalRngPosition, drawn, cash, undrawn, nav, die Marktstände
      und die Value Bridge — der Wasserfall verteilt nur, er rechnet nichts neu.
      Die Zinsschranke (INT_BARRIER) greift in dieser Partie nicht: Der Leverage
-     liegt bei 0,75 × levCap, der Zinsaufwand damit unter 30 % des EBITDA. */
-  score: 0.760918,
+     liegt bei 0,75 × levCap, der Zinsaufwand damit unter 30 % des EBITDA.
+     Ein siebtes Mal mit dem Wechsel der Wertung vom TVPI auf den TVCC
+     (TVCC_BENCH 1,6). Bewegt sich nur score: Der Fonds hat 459,6 von 500
+     abgerufen, TVCC = 1,6886 × 459,6 / 500 = 1,552, normiert 0,970 statt
+     0,993 -- die Wertung sinkt um die Hälfte der Differenz, 0,760918 ->
+     0,749304. */
+  score: 0.749304,
   carry: 74.249754,
   landmark: {
     sector: "Consumer",

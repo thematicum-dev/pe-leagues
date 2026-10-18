@@ -42,7 +42,7 @@ import {
   SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, ddCostOf, dpiOf,
   eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initSuccess, initsOf, investableOf, irrOf,
-  navValueOf, recycleRoom, scoreOf, tvpiOf, x,
+  navValueOf, recycleRoom, scoreOf, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -961,7 +961,8 @@ export default function MultiplayerGame({
     () =>
       [...state.funds]
         .map((f) => ({
-          ...f, tvpi: tvpiOf(f, state.market, quarter), dpi: dpiOf(f, state.market, quarter),
+          ...f, tvcc: tvccOf(f, state.market, quarter), tvpi: tvpiOf(f, state.market, quarter),
+          dpi: dpiOf(f, state.market, quarter),
           irr: irrOf(f, state.market, quarter), gross: grossMoicOf(f, state.market),
           score: scoreOf(f, state.market, quarter), me: f.slot === humanSlot,
         }))
@@ -984,6 +985,7 @@ export default function MultiplayerGame({
 
   const dpi = dpiOf(me, state.market, quarter);
   const gross = grossMoicOf(me, state.market);
+  const tvcc = tvccOf(me, state.market, quarter);
   const tvpi = tvpiOf(me, state.market, quarter);
   const irr = irrOf(me, state.market, quarter);
   const score = scoreOf(me, state.market, quarter);
@@ -1010,6 +1012,7 @@ export default function MultiplayerGame({
       .sort((a, b) => b.score - a.score);
     return {
       score: scoreOf(prevFund, mk, q),
+      tvcc: tvccOf(prevFund, mk, q),
       tvpi: tvpiOf(prevFund, mk, q),
       dpi: dpiOf(prevFund, mk, q),
       irr: irrOf(prevFund, mk, q),
@@ -1172,12 +1175,18 @@ export default function MultiplayerGame({
               </div>
             </div>
           </div>
+          {/* Erste Zeile: die beiden Kennzahlen, aus denen die Wertung besteht.
+              Zweite Zeile: TVPI und DPI, zur Information. */}
           <div className="cockkpi mono">
-            <span>TVPI {tvpi.toFixed(2)}×
-              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+            <span>TVCC {tvcc.toFixed(2)}×
+              <Delta value={d(tvcc, prev?.tvcc)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
               <Delta value={d(irr, prev?.irr)} eps={0.0005}
                 format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
+          </div>
+          <div className="cockkpi mono">
+            <span>TVPI {tvpi.toFixed(2)}×
+              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
             <span>DPI {dpi.toFixed(2)}×
               <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
           </div>
@@ -1416,7 +1425,7 @@ export default function MultiplayerGame({
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px 2px" }}>
                         <span className="eyebrow">{f.me ? "Dein Portfolio" : f.name}</span>
                         <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>
-                          TVPI {f.tvpi.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
+                          TVCC {f.tvcc.toFixed(2)}× · IRR {(f.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {f.tvpi.toFixed(2)}× · DPI {f.dpi.toFixed(2)}× · {eur(f.cash)} frei
                         </span>
                       </div>
                       {f.holdings.length === 0 && <div className="quiet" style={{ paddingTop: 4 }}>Keine Beteiligungen.</div>}
@@ -1495,10 +1504,10 @@ export default function MultiplayerGame({
           quarter={quarter}
           items={visibleFeed.filter((f) => f.halfYear === quarter)
             .map((f) => ({ e: f.emoji, tone: f.tone, t: f.text, pub: f.slot == null }))}
-          perf={{ score, rank: myRank, funds: state.funds.length, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
+          perf={{ score, rank: myRank, funds: state.funds.length, tvcc, tvpi, irr, dpi, dry: investableOf(me, quarter) }}
           prev={prev ? {
             score: prev.score, rank: prev.rank, funds: state.funds.length,
-            tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
+            tvcc: prev.tvcc, tvpi: prev.tvpi, irr: prev.irr, dpi: prev.dpi, dry: prev.dryPowder,
           } : null}
           todo={{
             shortlists: shortlistAll.length - shortlistCursor,

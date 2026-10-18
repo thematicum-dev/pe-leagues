@@ -31,7 +31,7 @@ import {
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvpiOf, irrOf, scoreOf, makeBridge,
+  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
   liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
@@ -945,9 +945,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   };
 }
 
-/* Endrangliste nach Halbjahr 20: die bestehende 50:50-Wertung aus IRR und
-   TVPI (scoreOf, unverändert aus lib/engine/engine.ts), absteigend
-   sortiert. Wird nach der letzten Auswertung einmalig in
+/* Endrangliste nach Halbjahr 20: die 50:50-Wertung aus IRR und TVCC
+   (scoreOf in lib/engine/engine.ts), absteigend sortiert. Der TVPI steht
+   zur Information mit dabei, der TVCC erst seit dem 18.10.2026 — ältere
+   Endranglisten haben das Feld nicht. Wird nach der letzten Auswertung einmalig in
    seasons.final_ranking geschrieben. */
 export function computeFinalRanking(state: RuntimeState, halfYear: number) {
   return state.funds
@@ -956,6 +957,7 @@ export function computeFinalRanking(state: RuntimeState, halfYear: number) {
       profileId: f.profileId,
       isAi: f.isAi,
       name: f.name,
+      tvcc: tvccOf(f as Any, state.market, halfYear),
       tvpi: tvpiOf(f as Any, state.market, halfYear),
       irr: irrOf(f as Any, state.market, halfYear),
       score: scoreOf(f as Any, state.market, halfYear),
