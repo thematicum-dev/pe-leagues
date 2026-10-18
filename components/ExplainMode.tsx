@@ -849,7 +849,7 @@ function GuidedRun({ dark, setDark, back }) {
           <Kpi t="MOIC">Was aus jedem eingesetzten Euro geworden ist. Steigt mit der Haltedauer fast immer weiter.</Kpi>
           <Kpi t="IRR">Wie schnell er zurückkam. Sinkt mit jedem Halbjahr, in dem das Kapital gebunden bleibt.</Kpi>
         </dl>
-        <p className="why"><b>Tu jetzt das:</b> Eröffne den Verkaufsprozess. Er dauert {hj(PROC_Q)} — in dieser Zeit läuft das Unternehmen weiter, und du kannst weiter daran arbeiten. Faustregel: Solange der erwartete Wertzuwachs über deiner Zielrendite liegt, halten; darunter verkaufen.</p>
+        <p className="why"><b>Tu jetzt das:</b> Eröffne den Verkaufsprozess. Er dauert {hj(PROC_Q + 1)} — in dieser Zeit läuft das Unternehmen weiter, und du kannst weiter daran arbeiten. Faustregel: Solange der erwartete Wertzuwachs über deiner Zielrendite liegt, halten; darunter verkaufen.</p>
       </>) },
     { id: "wait", spot: "close", sat: () => !!offer || !!over,
       eyebrow: "Prozess läuft", title: "Bis zu den Geboten weiterarbeiten",
@@ -1039,7 +1039,7 @@ function GuidedRun({ dark, setDark, back }) {
             <p className="hint" style={{ marginTop: 4 }}>
               Bei sofortigem Verkauf stünden {offerMoic.toFixed(2).replace(".", ",")}× auf dem Papier —
               {" "}{(pracIrr(offerMoic, q) * 100).toFixed(0).replace("-", "−")} % IRR, Wertung {pracScore(offerMoic, q).toFixed(2).replace(".", ",")}.
-              Ein strukturierter Prozess braucht {hj(PROC_Q)}, bringt aber Wettbewerb unter die Käufer
+              Ein strukturierter Prozess braucht {hj(PROC_Q + 1)}, bringt aber Wettbewerb unter die Käufer
               und damit den besseren Preis als ein bilateraler Zuruf.
             </p>
             <button className={"solid" + (G && G.spot === "proc" ? " spot" : "")}

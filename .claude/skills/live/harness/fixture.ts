@@ -30,8 +30,14 @@ function fund(slot: number, isAi: boolean, archetype: string | null): RuntimeFun
    Kreditgeber verliert. Voll gehebelt gekauft und nur mit Kostenprogrammen
    gefahren — die Startwerte sind gesucht, nicht gestellt: Der Ablauf ist eine
    ganz normale Auswertung. Gebraucht für alles, was ein Totalverlust in den
-   Ansichten auslöst (Value Bridge, Meldungen, Wertung).                     */
-export function buildFixture(untilHalfYear: number, hold = false, breach = false, seed?: number) {
+   Ansichten auslöst (Value Bridge, Meldungen, Wertung).
+
+   `proc`: Exits laufen über den strukturierten Verkaufsprozess, und zwar für
+   alle reifen Beteiligungen zugleich. Gebote, die in der letzten Auswertung
+   eingehen, bleiben offen — die Ansicht zeigt sie dann zur Entscheidung, oft
+   mehrere hintereinander. Gebraucht für Gebote, Nachverhandeln und den
+   Dialog zur Verwendung der Erlöse.                                        */
+export function buildFixture(untilHalfYear: number, hold = false, breach = false, seed?: number, proc = false) {
   const rng = createRng(seed || (breach ? 555 : 4242));
   const market: Record<string, number> = {};
   SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
@@ -59,7 +65,9 @@ export function buildFixture(untilHalfYear: number, hold = false, breach = false
         : (me.holdings as Any[]).length < MAX_SLOTS;
       if (willKaufen && state.deals.length) {
         // Beide auf denselben Deal — nur so entsteht eine Überboten-Meldung
-        const x = (state.deals as Any[])[0];
+        // Im Prozessmodus bietet Platz 1 auf einen anderen Deal: Platz 0 kauft
+        // so früh genug, dass Gebote noch in der Investitionsperiode eingehen.
+        const x = (state.deals as Any[])[proc && slot === 1 ? Math.min(1, state.deals.length - 1) : 0];
         d.bids = [{ dealId: x.id, multiple: x.askMult * (breach ? 1.1 : slot === 1 ? 1.06 : 1.0),
           leverage: x.levCap * (breach ? 1 : 0.8) }];
         if (slot === 0) d.dueDiligence = [x.id];
@@ -73,8 +81,14 @@ export function buildFixture(untilHalfYear: number, hold = false, breach = false
         const frei = (me.holdings as Any[]).find((h) => !h.initP);
         if (frei) d.initiatives = [{ holdingUid: frei.uid, dim: "plat", id: "opex" }];
       }
-      const reif = (me.holdings as Any[]).filter((h) => h.holdQ >= 6 && !h.proc && !h.lockUntil);
-      if (reif.length && !hold && !breach) d.exitStarts = [{ holdingUid: reif[0].uid, action: hy % 2 ? "bilateral" : "ipo" } as Any];
+      // Im Prozessmodus ein Halbjahr früher: Sonst gehen die ersten Gebote
+      // erst nach der Investitionsperiode ein und der Erlösdialog entfällt.
+      const reif = (me.holdings as Any[]).filter((h) => h.holdQ >= (proc ? 5 : 6) && !h.proc && !h.lockUntil);
+      if (reif.length && !hold && !breach) {
+        d.exitStarts = proc
+          ? reif.map((h) => ({ holdingUid: h.uid, action: "process" } as Any))
+          : [{ holdingUid: reif[0].uid, action: hy % 2 ? "bilateral" : "ipo" } as Any];
+      }
       if (state.exitQueue[String(slot)]?.length) {
         d.offerDecisions = state.exitQueue[String(slot)].map((it) => ({
           holdingUid: it.holdingUid, choice: "accept" as const, offerIndex: 0,

@@ -727,7 +727,7 @@ function finalize(c, gross, buyer, feeRate, extra) {
     const net = exitNetOf(c, gross, feeRate);
     /* Steht Spielraum zum Einbehalten zur Verfügung, entscheidet der GP — sonst
        wird direkt voll ausgeschüttet und der Dialog erscheint gar nicht.      */
-    if (recycleRoom(me, net, quarter) > 0.5) {
+    if (recycleRoom(me, net, decQ) > 0.5) {
       setUseProceeds({ c, gross, buyer, feeRate, extra, net });
       return;
     }
@@ -851,18 +851,20 @@ function finalize(c, gross, buyer, feeRate, extra) {
        lässt Recycling nur innerhalb der Investitionsperiode zu und kumuliert
        höchstens bis zur Höhe des Commitments (siehe recycleRoom). Danach wird
        zwingend voll ausgeschüttet. Ohne diesen Hinweis sah das Verschwinden
-       des Dialogs wie ein Fehler aus.                                       */
+       des Dialogs wie ein Fehler aus. Geprüft wird gegen decQ, wie in
+       settle() beim Verbuchen — mit quarter erschien der Regler in Halbjahr 11
+       noch, obwohl der Erlös dort zwingend voll ausgeschüttet wird.          */
     if (ch !== "proc") {
-      const room = recycleRoom(me, Math.max(0, net), quarter);
+      const room = recycleRoom(me, Math.max(0, net), decQ);
       note += room > 0.5
         ? ` Vom Nettoerlös lassen sich bis zu ${eur(room)} einbehalten und erneut investieren.`
-        : quarter > INVEST_PERIOD
+        : decQ > INVEST_PERIOD
           ? " Die Investitionsperiode ist vorbei — der Erlös wird zwingend voll ausgeschüttet, Recycling ist nicht mehr möglich."
           : " Der Recycling-Spielraum ist ausgeschöpft — der Erlös wird voll ausgeschüttet.";
     }
     if (ch === "proc") {
       rows.push([`Transaktionskosten ${PROC_FEE * 100} %`, "M&A-Berater, VDD, Legal"],
-        ["Gebote liegen vor in", hj(PROC_Q)]);
+        ["Gebote liegen vor in", hj(PROC_Q + 1)]);
       if (recap > 0.05) rows.push(["Bereits ausgeschüttet (Recap)", eur(recap)]);
       setSheet({ kind: "confirm", c, ch, rows, net: 0, note, moic: 0, dpiPct: 0 });
       return;
@@ -1251,11 +1253,15 @@ function finalize(c, gross, buyer, feeRate, extra) {
           todo={{ shortlists: shortlist.length, offers: exitQueue.length }}
           onClose={() => setBriefOpen(false)} />
       )}
-      {!briefOpen && !sheet && !initPick && shortlist.length > 0 && (
+      {/* Solange über die Verwendung eines Erlöses entschieden wird, bleiben
+          Shortlist und Gebote weg: Sie stehen weiter unten in der Seite und
+          lägen sonst über dem Verwendungsdialog. Mit zwei Geboten in der
+          Schlange verdeckte das nächste Gebot den Dialog des ersten. */}
+      {!briefOpen && !sheet && !initPick && !useProceeds && shortlist.length > 0 && (
         <Shortlist item={shortlist[0]} holding={me.holdings.find((h) => h.uid === shortlist[0].uid)}
           analysis={me.attrs.analysis} hire={hire} reject={rejectAll} />
       )}
-      {!briefOpen && !sheet && !initPick && shortlist.length === 0 && exitQueue.length > 0 && (
+      {!briefOpen && !sheet && !initPick && !useProceeds && shortlist.length === 0 && exitQueue.length > 0 && (
         <Offers item={exitQueue[0]} holding={me.holdings.find((h) => h.uid === exitQueue[0].uid)}
           market={market} neg={NEG} decide={decideOffer} />
       )}
