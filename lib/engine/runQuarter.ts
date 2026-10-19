@@ -30,7 +30,7 @@ import {
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
-  newDeal, newLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
+  newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
@@ -912,15 +912,16 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   const n = 0.55 * sourcingLead;
   const props = Math.min(3, Math.floor(n) + (rng.rnd() < n % 1 ? 1 : 0));
   const nd: Any[] = [];
-  for (let i = 0; i < 4; i++) nd.push(newDeal(rng, "process", mk));
-  for (let i = 0; i < props; i++) nd.push(newDeal(rng, "prop", mk, sourcingLead));
+  for (let i = 0; i < 4; i++) nd.push(newDeal(rng, "process", mk, 2, compat));
+  for (let i = 0; i < props; i++) nd.push(newDeal(rng, "prop", mk, sourcingLead, compat));
 
   let landmark = input.state.landmark as Any;
   if (q === LM_ANNOUNCE && landmark) {
+    if (!compat.legacyDealSize) landmark = announceLandmark(landmark, mk);
     pushFeed(news, q, "📣", "neu", `Trophy Asset angekündigt: ${landmark.name} kommt in zwei Halbjahren an den Markt.`);
   }
   if (q === LM_DEAL && landmark) {
-    nd.unshift({ ...landmark, askMult: clamp(mk[landmark.sector] * (0.7 + 0.006 * landmark.quality) * 1.06, 5, 19) });
+    nd.unshift({ ...landmark, askMult: landmarkAsk(landmark, mk) });
   }
   if (!landmark && q < LM_ANNOUNCE) {
     landmark = newLandmark(rng, mk);
