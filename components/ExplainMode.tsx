@@ -112,8 +112,9 @@ function Briefing({ dark, setDark, onStart }) {
             die Kreditgeber und dein Eigenkapital ist vollständig verloren.
           </Def>
           <Def t="Trophy Asset">
-            Einmal je Fondsgeneration kommt ein außergewöhnlich großes Ziel auf den Markt. Doppeltes Ticket,
-            ein Jahr Vorlauf zum Sparen, alle bieten mit.
+            Einmal je Fondsgeneration kommt ein außergewöhnliches Ziel auf den Markt: höhere Qualität, ein
+            Ticket am oberen Rand dessen, was ein Fonds in einen Deal steckt, ein Jahr Vorlauf zum Sparen,
+            alle bieten mit.
           </Def>
         </div>
 

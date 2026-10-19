@@ -21,7 +21,7 @@ import {
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
-  navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
+  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -525,10 +525,13 @@ export default function PeLeagues() {
     setMarketHist((p) => [...p, { ...mk }]);
     setTvpiHist((p) => [...p, F.map((fd) => scoreOf(fd, mk, q))]);
     const nd = makeDeals(F[0].attrs.sourcing, mk);
-    if (q === LM_ANNOUNCE && landmark) {
-      news.push({ q, e: "📣", tone: "neu", t: `Trophy Asset angekündigt: <b>${landmark.name}</b> kommt in zwei Halbjahren an den Markt. Halte Pulver trocken.` });
+    let lm = landmark;
+    if (q === LM_ANNOUNCE && lm) {
+      lm = announceLandmark(lm, mk);
+      setLandmark(lm);
+      news.push({ q, e: "📣", tone: "neu", t: `Trophy Asset angekündigt: <b>${lm.name}</b> kommt in zwei Halbjahren an den Markt. Halte Pulver trocken.` });
     }
-    if (q === LM_DEAL && landmark) nd.unshift({ ...landmark, askMult: clamp(mk[landmark.sector] * (0.7 + 0.006 * landmark.quality) * 1.06, 5, 19) });
+    if (q === LM_DEAL && lm) nd.unshift({ ...lm, askMult: landmarkAsk(lm, mk) });
     setDeals(nd);
     setFeed((p) => [...news.reverse(), ...p].slice(0, 60));
     if (resolved.length) setExitQueue((p) => [...p, ...resolved]);

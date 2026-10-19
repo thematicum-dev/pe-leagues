@@ -42,7 +42,7 @@ function countEvents(seed: number, compat: Any, halfYears = 12) {
     const decisions: TurnDecisions = {};
     if (holdings.length < 5 && state.deals.length) {
       const d = state.deals[0] as Any;
-      decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.05, leverage: Math.min(d.levCap, 2.8) }];
+      decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.15, leverage: Math.min(d.levCap, 2.8) }];
     }
     const before = state.feed.length;
     const out = runQuarter({ state, halfYear: hy, decisionsBySlot: { 0: decisions }, rng, compat });

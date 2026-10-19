@@ -8,7 +8,7 @@ import type { Rng } from "@/lib/engine";
 import {
   ADDON_HEADROOM, BASE_RATE, BIL_DISC, CAPITAL,
   CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, FAIL_SUNK, INITS, INVEST_PERIOD, 
+  ENTRY_FEE, FAIL_SUNK, LEV_CARD, INITS, INVEST_PERIOD, 
   IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, 
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
@@ -760,7 +760,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
   const ask = q4(d.askMult);
   const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
   const [mult, setMult] = useState(ask);
-  const [lev, setLev] = useState(q4(Math.min(d.levCap, 3.5)));
+  const [lev, setLev] = useState(q4(Math.min(d.levCap, LEV_CARD)));
   const eb = ebitdaOf(d);
   // Das Equity Ticket enthält die Transaktionskosten — sonst wird ein Gebot an der
   // Liquiditätsgrenze angeboten und fällt beim Auktionsschluss stillschweigend raus.

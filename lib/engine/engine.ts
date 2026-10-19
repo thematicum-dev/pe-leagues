@@ -144,7 +144,7 @@ export const gebote = (n) => (n === 1 ? "1 Gebot" : n + " Gebote");
 export const pct = (v) => (Math.round(v * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 }) + " %";
 export const pctS = (v) => (Math.abs(v) < 0.05 ? "" : v > 0 ? "+" : "−") + pct(Math.abs(v));
 
-export function newDeal(rng: Rng, type: string, market: Record<string, number>, sourcing = 2) {
+export function newDeal(rng: Rng, type: string, market: Record<string, number>, sourcing = 2, compat: EngineCompat = {}) {
   const sector = rng.pick(SECNAMES);
   const a = rng.pick(BOOK[sector]);
   const quality = clamp(rng.band(a.q) + rng.nrm(4), 10, 97);
@@ -170,7 +170,7 @@ export function newDeal(rng: Rng, type: string, market: Record<string, number>, 
      verrutscht.                                                              */
   const growth = rng.band(a.g) + rng.nrm(1);
   const drift = clamp(DRIFT_LOAD * (growth - SECTORS[sector].g - GROWTH_MEAN) + rng.nrm(2.6), -6, 6);
-  return {
+  const d = {
     id: "d" + Math.floor(rng.rnd() * 1e9),
     type, sector, revenue, margin, quality,
     growth, drift,
@@ -185,6 +185,8 @@ export function newDeal(rng: Rng, type: string, market: Record<string, number>, 
     desc: a.d,
     name: rng.pick(P1) + rng.pick(P2) + " " + rng.pick(a.s),
   };
+  // Die Kappung zieht keine Zufallszahl, der Strom bleibt derselbe.
+  return compat.legacyDealSize ? d : fitTicket(d);
 }
 
 export function ebitdaOf(c) { return (c.revenue * c.margin) / 100; }
@@ -346,6 +348,10 @@ export interface EngineCompat {
      Laufzeitende blieben einbehaltene, nicht reinvestierte Erlöse stehen,
      statt ausgeschüttet zu werden (siehe releaseRecycled).                 */
   legacyRecycleInvestPeriod?: boolean;
+  /* Bis 19.10.2026 wurde ein Ziel nicht am Equity Ticket gekappt (siehe
+     TICKET_MAX/fitTicket); einzelne Ziele banden über 80 % des Fonds. Das
+     Trophy Asset behielt bei der Ankündigung seinen Rohumsatz.             */
+  legacyDealSize?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -353,6 +359,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
+  legacyDealSize: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -571,6 +578,37 @@ export const MIN_HOLD = 6;         // Mindesthaltedauer: 3 Jahre
    347 Mio. € gleichzeitig gebunden — der Rest liegt herum und verwässert die
    Rendite. SIZE_SCALE hebt die Umsatzbänder entsprechend an.                  */
 export const SIZE_SCALE = 1.25;
+/* Die Umsatzbänder allein hielten die Tickets aber nach oben nicht im Zaum.
+   Gemessen band ein Ziel zum Angebotspreis im neutralen Markt in 17 % der
+   Fälle mehr als ein Viertel des Fonds, die größten über 400 Mio. € — zwei
+   solche Deals und der Fonds war ausinvestiert. Im heißen Markt traf es fast
+   jedes zweite Ziel, denn das Ticket wächst mit dem Multiple, das Band nicht.
+
+   Ein Fonds sieht in der Praxis nur Ziele, die zu seiner Ticketgröße passen.
+   Deshalb wird die Größe am Equity Ticket gekappt, nicht am Umsatz: Liegt das
+   Ticket zum Angebotspreis mit dem Leverage, den die Karte vorschlägt
+   (LEV_CARD), über TICKET_MAX, wird das Unternehmen kleiner gezogen. Die
+   Kappung ist weich — t / (1 + (t/TICKET_MAX)^n)^(1/n) —, damit kleine Ziele
+   praktisch unverändert bleiben, die Reihenfolge erhalten bleibt und sich im
+   heißen Markt nicht alles auf derselben Größe stapelt. TICKET_MAX liegt mit
+   18 % bewusst unter einem Viertel: Ein Gebot 20 % über dem Angebot mit
+   weniger Leverage bindet bis zu einem Drittel mehr Eigenkapital als die
+   Karte zeigt und bleibt trotzdem unter 125 Mio. €. Ausinvestieren braucht
+   damit mindestens vier Transaktionen. Gemessen über 200 Fonds in ganzen
+   Partien: Median-Ticket unverändert 67 Mio. €, Maximum 112 statt 426, der
+   Kapitalabruf bleibt bei rund 485 Mio. €, kein Fonds kommt mit weniger als
+   fünf Deals aus (vorher genügte einem einer).                              */
+export const TICKET_MAX = CAPITAL * 0.18;
+export const TICKET_SHAPE = 3;
+export const LEV_CARD = 3.5;       // Leverage, mit dem die Deal-Karte ein Gebot vorschlägt
+export const cardTicket = (d) =>
+  ebitdaOf(d) * (d.askMult * (1 + ENTRY_FEE) - Math.min(d.levCap, LEV_CARD));
+export function fitTicket<T extends { revenue: number }>(d: T): T {
+  const t = cardTicket(d);
+  if (!(t > 0)) return d;
+  const fit = t / Math.pow(1 + Math.pow(t / TICKET_MAX, TICKET_SHAPE), 1 / TICKET_SHAPE);
+  return { ...d, revenue: d.revenue * (fit / t) };
+}
 export const MAX_SLOTS = 6;        // gleichzeitige Beteiligungen
 export const COV_HEADROOM = 1.2;   // Covenant-Spielraum über der Einstiegsverschuldung
 export const RESERVE_PROC = 0.85;  // Reservationspreis in der Auktion, Anteil der Preiserwartung
@@ -1245,6 +1283,21 @@ export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: num
 }
 export const LM_ANNOUNCE = 8;      // Ankündigung des Trophy Assets
 export const LM_DEAL = 10;         // Halbjahr, in dem es in den Dealflow kommt
+
+/* Preis des Trophy Assets, wenn es in den Dealflow kommt. Steht als eigene
+   Funktion, weil die Ankündigung (LM_ANNOUNCE) mit demselben Preis die Größe
+   festlegt, die der Teaser zeigt — sonst stünde dort ein anderer Umsatz als
+   zwei Halbjahre später auf der Deal-Karte.                                */
+export const landmarkAsk = (lm, market: Record<string, number>) =>
+  clamp(market[lm.sector] * (0.7 + 0.006 * lm.quality) * 1.06, 5, 19);
+/* Das Trophy Asset bleibt das größte Ziel der Partie, aber auch es muss in
+   ein Viertel des Fonds passen. Gekappt wird bei der Ankündigung zum dann
+   gültigen Preis; bis zum Markteintritt bewegt sich das Multiple nur noch
+   zwei Halbjahre. Mit dem Rohumsatz aus newLandmark (180–290 Mio. €) läge das
+   Ticket im neutralen Markt im Median bei rund 365 Mio. € — ein einziger Deal
+   und der Fonds wäre praktisch voll.                                       */
+export const announceLandmark = (lm, market: Record<string, number>) =>
+  fitTicket({ ...lm, askMult: landmarkAsk(lm, market) });
 
 export function newLandmark(rng: Rng, market: Record<string, number>) {
   const sector = rng.pick(SECNAMES);
