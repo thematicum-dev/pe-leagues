@@ -214,7 +214,7 @@ export const targetMargin = (c) => (c.benchMargin ?? c.margin) + (c.plat - PLAT_
      sind Einmalaufwendungen unterhalb des EBITDA. Sie werden deshalb als
      Cash-Effekt gegen die Nettoverschuldung gebucht, nicht gegen die Marge.  */
   - (c.initA ? (c.initA.drag || 0) * (c.vcRun ? 0.5 : 1) : 0)
-  + (c.marginDrift || 0)
+  + (c.marginDrift || 0) + mgmtFx(c).margin
   + (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.3 : 0);
 /* Verfall oberhalb des Branchenniveaus. Bis zur Benchmark ist ein Reifegrad ein
    Bestandskonto — eine konsolidierte Beschaffung verschwindet nicht wieder.
@@ -352,6 +352,14 @@ export interface EngineCompat {
      TICKET_MAX/fitTicket); einzelne Ziele banden über 80 % des Fonds. Das
      Trophy Asset behielt bei der Ankündigung seinen Rohumsatz.             */
   legacyDealSize?: boolean;
+  /* Bis 19.10.2026 bestand die Shortlist aus drei festen Schablonen mit einem
+     Rating (siehe makeCandidates), und die KI-Fonds besetzten Positionen mit
+     einem gewürfelten Rating statt aus einem Deck.                         */
+  legacyCandidates?: boolean;
+  /* Bis 19.10.2026 wirkte das Management nur über Programme. Seither setzt
+     das Closing `mx` auf der Beteiligung, und die Kompetenzen wirken laufend
+     (siehe mgmtFx).                                                        */
+  legacyMgmt?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -359,7 +367,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
-  legacyDealSize: true,
+  legacyDealSize: true, legacyCandidates: true, legacyMgmt: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -406,9 +414,9 @@ export function chargeOff(h, key: string, amt: number) {
    Abschriften derselben Formel würden früher oder später auseinanderlaufen. */
 export const capexPctOf = (c) => Math.max(0.5, (c.benchCapex ?? 4) * (1 - 0.07 * (c.plat - PLAT_BENCH))
   + accEff(c) * 0.6 + sumInit(c, "cx")
-  - (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.5 : 0));
+  - (c.sector === "Industrials" && c.r3.skill >= 3 ? 0.5 : 0) + mgmtFx(c).capex);
 export const nwcPctOf = (c) => Math.max(-10, (c.benchNwc ?? 15) - (c.plat - PLAT_BENCH) * 2.5
-  + accEff(c) * 2 + sumInit(c, "nwcRun") + (c.nwcFix || 0));
+  + accEff(c) * 2 + sumInit(c, "nwcRun") + (c.nwcFix || 0) + mgmtFx(c).nwc);
 /* Gebundenes Working Capital in Mio. €. Für eine Beteiligung, die den Bestand
    noch nicht mitführt (Partie vor dem 30.08.2026), ergibt sich er aus Quote
    und Umsatz — genau der Wert, mit dem sie gestartet wäre.                 */
@@ -418,7 +426,8 @@ export function stepCompany(rng: Rng, c, market, ops, compat: EngineCompat = {})
   const A = accEff(c), OS = overstretch(c);
   const opsMult = 1 + 0.1 * ops;
   // Wachstum relativ zum Sektorniveau: Stufe 2 = branchenüblich
-  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * ACC_GROWTH_PP * opsMult + rng.nrm(GROWTH_NOISE);
+  const gAnn = SECTORS[c.sector].g + (c.drift || 0) + (A - ACC_BENCH) * ACC_GROWTH_PP * opsMult + mgmtFx(c).growth
+    + rng.nrm(GROWTH_NOISE);
   const rev0 = c.revenue;
   c.revenue = Math.max(4, c.revenue * (1 + gAnn / 200));
 
@@ -661,7 +670,9 @@ export const LEV_FREE = 3.0;       // Verschuldungsgrad, bis zu dem die Basismar
 export const LEV_STEP = 0.85;      // Aufschlag in Prozentpunkten je Turn darüber
 export const rateOf = (c, eb) => {
   const lev = c.netDebt / Math.max(0.5, eb != null ? eb : ebitdaOf(c));
-  return c.rate + Math.max(0, lev - LEV_FREE) * LEV_STEP;
+  return c.rate + Math.max(0, lev - LEV_FREE) * LEV_STEP + mgmtFx(c).rate
+    // Lender-erfahrene CFO: bessere Konditionen, solange sie im Amt ist
+    - (c.cfo && c.cfo.skill > 0 && c.cfo.trait === "lender" ? 0.25 : 0);
 };
 /* Vergütung in Mio. € p.a. Marktanker ist der Branchenveteran auf Rating 2,5:
    bei 10 Mio. € EBITDA verdient der CEO 0,50, der CFO 0,30 und die Fachrolle 0,30.
@@ -701,7 +712,7 @@ export const ROLE3 = {
 export const INTERIM = 2.2;             // Budgetlinie einer von Anfang an offenen Position
 export const INTERIM_PREMIUM = 1.25;    // Interim ist teurer als der Vorgänger
 export const vacate = (s) => ({ skill: 0, was: Math.max(s.skill, INTERIM) });
-export const seatPay = (s, seat, eb) => s.skill > 0 ? payOf(seat, s.skill, eb)
+export const seatPay = (s, seat, eb) => s.skill > 0 ? payOf(seat, s.skill, eb) * (s.payF ?? 1)
   : payOf(seat, s.was ?? INTERIM, eb) * INTERIM_PREMIUM;
 
 export const POACH = 0.0008;                        // Abwerbung: seltenes Randrisiko
@@ -716,9 +727,88 @@ export const peopleLvl = (c) => (c.ceo.skill + c.cfo.skill + c.r3.skill) / 3;
 // Eine Fachposition kann den CEO nicht überholen — A-Player berichten nicht an C-Player
 export const cappedSkill = (c, seat) => seat === "ceo" ? c.ceo.skill : Math.min(c[seat].skill, c.ceo.skill + 1.5);
 export const isCapped = (c, seat) => seat !== "ceo" && c[seat].skill > c.ceo.skill + 1.5;
+/* ---------- Kompetenzprofile ----------
+   Bis zum 19.10.2026 trug jede Position eine einzige Zahl, und jedes Programm
+   einer Position rechnete mit ihr. Damit gab es bei der Besetzung nur eine
+   Frage — gut gegen teuer —, und welches Profil eine Beteiligung braucht,
+   spielte keine Rolle.
+
+   Jetzt trägt eine Position drei Kompetenzen, in dem Vokabular, in dem
+   Executive Search und Management Due Diligence im PE-Umfeld sprechen. Jedes
+   Programm hängt an genau einer davon; der CEO wirkt über die Kompetenz der
+   Programmfamilie mit (Operational Excellence auf Performance, Growth auf
+   Growth), seine Leadership deckelt die Fachpositionen. `skill` bleibt als
+   Assessment-Score stehen — der Durchschnitt der drei — und trägt Gehalt,
+   Abwerbung, People-Reifegrad und alles, was nicht nach Programm fragt.
+
+   Eine Position ohne `prof` rechnet mit `skill` für alle drei Kompetenzen und
+   damit exakt wie vorher. So bleiben Amtsinhaber, ältere Beteiligungen und
+   bereits ausgewertete Halbjahre unverändert.                             */
+export const COMPETENCIES = {
+  ceo: ["Operational Excellence", "Growth", "Leadership"],
+  cfo: ["Performance Improvement", "Cash & Working Capital", "Finance Transformation"],
+  r3: ["Commercial Excellence", "Market Expansion", "M&A Integration"],
+};
+// Welche Kompetenz der Fachposition ein Programm braucht
+export const PROGRAM_COMP = { opex: 0, nwc: 1, erp: 2, ai: 2, pen: 0, exp: 1, ma: 2 };
+export const compOf = (s, i) => (s.skill > 0 ? (s.prof ? s.prof[i] : s.skill) : 0);
+const leadOf = (c) => compOf(c.ceo, 2);
+// Ein Co-Investor wirkt wie ein laufendes MEP: eigenes Geld im Unternehmen
+const mepOf = (c, seat) => !!(c.ltip || c.ceo.trait === "coinvest" || (seat !== "ceo" && c[seat].trait === "coinvest"));
 // Effektives Rating: gedeckelte Fachposition plus halber CEO, plus MEP-Bonus
-export const effSkill = (c, seat) => cappedSkill(c, seat) + 0.5 * c.ceo.skill + (c.ltip ? 0.5 : 0)
+const legacyEff = (c, seat) => cappedSkill(c, seat) + 0.5 * c.ceo.skill + (c.ltip ? 0.5 : 0)
   + (seat === "cfo" && c.sector === "Software" ? 0.5 * cappedSkill(c, "r3") : 0);
+/* Mit Programm: die Kompetenz, die das Programm braucht, gedeckelt durch die
+   Leadership des CEO, plus die halbe CEO-Kompetenz der Programmfamilie. Ohne
+   Programm (Anzeige, Altpfade) das bisherige effektive Rating.            */
+export const effSkill = (c, seat, id?: string) => {
+  if (!id || PROGRAM_COMP[id] == null || seat === "ceo") return legacyEff(c, seat);
+  const fam = compOf(c.ceo, INITS.plat.some((k) => k.id === id) ? 0 : 1);
+  const own = Math.min(compOf(c[seat], PROGRAM_COMP[id]), leadOf(c) + 1.5);
+  return own + 0.5 * fam + (mepOf(c, seat) ? 0.5 : 0)
+    + (seat === "cfo" && c.sector === "Software" ? 0.5 * cappedSkill(c, "r3") : 0);
+};
+
+/* ---------- Laufende Wirkung des Managements ----------
+   Bis hierhin wirkte das Management ausschließlich über die Erfolgsquote der
+   Programme. Gemessen hatte das zwei Folgen: Ein Durchschnittsteam erzeugte
+   mit Programmen kaum mehr als passives Halten, und wer nicht aktiv wurde,
+   hatte vom besten Team gar nichts. In der Praxis ist es umgekehrt — ein
+   Turnaround-CEO verbessert die Marge auch ohne eigenes Programm, eine
+   Treasury-CFO senkt die Kapitalbindung im Tagesgeschäft.
+
+   Jede Kompetenz bewegt deshalb laufend ihren Werttreiber, solange die Person
+   im Amt ist. Drei Regeln halten das im Rahmen:
+   - Gewichtet mit dem Bedarf des Cases, über dieselbe Eignung (fitOf), die
+     der Maßnahmenpicker zeigt. Wer Marge verbessern soll, wo sie schon über
+     Branchenniveau liegt, bewegt wenig.
+   - Um MGMT_CENTER zentriert und nach oben bei +MGMT_UP gedeckelt. Eine
+     Lücke an der falschen Stelle kostet Wert, ein Star bringt laufend nicht
+     mehr als ein sehr guter Profi.
+   - Eine vakante Position wirkt wie ein Interim auf MGMT_INTERIM.
+
+   Kalibriert über 500 Cases, gleicher Kaufpreis, fünf Jahre: Zwischen
+   passender und falscher Besetzung bei gleichem Assessment-Score liegen
+   0,65x MOIC statt 0,26x — etwa so viel wie 2,5 Turns Kaufpreis.
+
+   Gilt nur für Beteiligungen mit `mx`. Das Feld setzt das Closing seit dem
+   19.10.2026; ältere Beteiligungen und die Wiederholung alter Halbjahre
+   (EngineCompat.legacyMgmt) rechnen ohne.                                 */
+export const MGMT_K = 1.5, MGMT_CENTER = 2.5, MGMT_UP = 1.5, MGMT_INTERIM = 2.0;
+const NO_FX = { margin: 0, growth: 0, nwc: 0, rate: 0, capex: 0 };
+export function mgmtFx(c) {
+  if (!c || !c.mx || !c.ceo) return NO_FX;
+  const up = (s, i) => Math.min(MGMT_UP, (s.skill > 0 ? compOf(s, i) : MGMT_INTERIM) - MGMT_CENTER);
+  const f = (id) => fitOf(id, c);
+  const growthNeed = clamp((SECTORS[c.sector].g + (c.drift || 0)) / 6, 0.2, 1.6);
+  return {
+    margin: MGMT_K * (0.45 * up(c.ceo, 0) * f("opex") + 0.35 * up(c.cfo, 0) * f("opex") + 0.30 * up(c.r3, 0) * f("pen")),
+    growth: MGMT_K * (0.55 * up(c.ceo, 1) * growthNeed + 0.55 * up(c.r3, 1) * f("exp")),
+    nwc: -MGMT_K * 1.0 * up(c.cfo, 1) * f("nwc"),
+    rate: -MGMT_K * 0.10 * up(c.cfo, 1),
+    capex: -MGMT_K * 0.25 * up(c.cfo, 2) * f("erp"),
+  };
+}
 /* Risiko hängt nicht an der Dimension, sondern daran, ob eine Maßnahme im
    Zugriff des Managements liegt oder auf Adoption durch Dritte angewiesen ist.
    "rel"  — Kosten, Working Capital, Pricing. Liefern zuverlässig (80–90 %) und
@@ -799,7 +889,7 @@ export const INITS = {
       sm: 0.03, dm: 1, gm: 1.7, oneOff: 0.18, cx: 2.0, capexFix: -0.5, nwcFix: -1.5, failCost: 0.35 },
     { id: "ai", n: "KI-gestützte Prozessautomatisierung", cls: "tr", d: "Angebotserstellung, Planung und Service automatisieren. Größter Hebel im Katalog, dafür der anspruchsvollste.",
       sm: -0.02, dm: 0, gm: 2.2, oneOff: 0.15, cx: 1.0, capexFix: -0.9, failCost: 0.30,
-      req: (c) => effSkill(c, "cfo") >= 4, reqT: "Effektives CFO-Rating mindestens 4" },
+      req: (c) => effSkill(c, "cfo", "ai") >= 4, reqT: "Effektive Finance Transformation mindestens 4" },
   ],
   acc: [
     { id: "pen", n: "Pricing & Cross-Selling", cls: "rel", d: "Bestandskunden ausbauen, Preise durchsetzen. Kurzer Payback, begrenzte Höhe.",
@@ -983,7 +1073,7 @@ export function addonFailParts(c, opts = {} as AddonOpts) {
   const ask = opts.ask ?? 0;
   // Geboten wird höchstens die Preisvorstellung — mehr zu zahlen kauft nichts.
   const mult = Math.min(opts.mult ?? ask, ask);
-  const skill = effSkill(c, "r3") * (c.onboard > 0 ? 0.7 : 1);
+  const skill = effSkill(c, "r3", "ma") * (c.onboard > 0 ? 0.7 : 1);
   return [
     { k: "size", t: "Zielgröße", v: ADDON_SIZE_SLOPE * (addEb / Math.max(0.5, eb) - ADDON_REF_SHARE) },
     { k: "price", t: "Gebot unter Preisvorstellung", v: ADDON_PRICE_SLOPE * Math.max(0, ask - mult) },
@@ -1090,7 +1180,7 @@ export function initDurationOf(c, dim, id) {
   if (!spec) return null;
   if (spec.ma) return 0;
   const seat = dim === "plat" ? "cfo" : "r3";
-  const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
+  const E = effSkill(c, seat, id) * (c.onboard > 0 ? 0.7 : 1);
   return Math.max(1, initDur(E) + (spec.dm || 0) + repeatMalus(initRuns(c, id)).dm);
 }
 
@@ -1109,7 +1199,9 @@ export function buildInit(
   const rep = repeatMalus(runs);
   if (spec.req && !spec.req(c)) return null;
   const seat = dim === "plat" ? "cfo" : "r3";
-  const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
+  const E = effSkill(c, seat, id) * (c.onboard > 0 ? 0.7 : 1);
+  // Risk-Taker: mehr Mut bei marktabhängigen Programmen, teurere Fehlschläge
+  const risk = c[seat].skill > 0 && c[seat].trait === "risk" && spec.cls === "hard";
   /* Der Zukauf rechnet sein Risiko aus dem Mandat des Spielers (Zielgröße und
      Höchstgebot), jede andere Maßnahme aus Rating und Risikoklasse. Beides
      ohne Ziehung — die Reihenfolge des Zufallsstroms bleibt damit dieselbe
@@ -1125,7 +1217,7 @@ export function buildInit(
   const chk = spec.ma ? addonCheck(c, market, { ...mandate, runs, legacy }) : null;
   const p = spec.ma && !legacy
     ? clamp(1 - chk.fail, 0.05, 0.98)
-    : clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0), 0.1, 0.97);
+    : clamp(initSuccess(E, spec.cls) + (spec.sm || 0) + rep.sm + (spec.ma ? addonRisk(c) : 0) + (risk ? 0.05 : 0), 0.1, 0.97);
   const ok = rng.rnd() < p;
   const sp = spec.spread ? spec.spread[0] + rng.rnd() * (spec.spread[1] - spec.spread[0])
     : dim === "acc" ? ACC_SPREAD[0] + rng.rnd() * (ACC_SPREAD[1] - ACC_SPREAD[0]) : 1;
@@ -1185,7 +1277,7 @@ export function buildInit(
       * ceilingFactor(dim === "plat" ? c.plat : c.acc), ok };
   }
   return { spec, dur, p, ok, debt, chk, slot: dim === "plat" ? "initP" : "initA",
-    init: { dim, id, name: spec.n, doneQ: quarter + dur, ...patch } };
+    init: { dim, id, name: spec.n, doneQ: quarter + dur, ...patch, ...(risk ? { failMult: 1.5 } : {}) } };
 }
 
 /* Maßnahmenpräferenz der KI-Fonds. Jeder Archetyp arbeitet seine eigene Liste
@@ -1207,7 +1299,15 @@ export function makeSeats(rng: Rng, d) {
     r3: { skill: rng.rnd() < 0.45 ? 0 : r(1, 3) },
   };
 }
-export function makeCandidates(rng: Rng) {
+/* Die Shortlist bis zum 19.10.2026: immer dieselben drei Schablonen mit einem
+   Rating. Steht für die Wiederholung alter Halbjahre (EngineCompat.
+   legacyCandidates) — die neue Shortlist zieht andere Zufallszahlen.      */
+export interface ManagerCard {
+  label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string;
+  arch?: string; name?: string; g?: "f" | "m"; age?: number; origin?: string; pic?: number; trait?: string;
+  prof?: number[]; shownProf?: number[];
+}
+function legacyCandidates(rng: Rng): ManagerCard[] {
   const draw = (mid, sp) => clamp(mid + (rng.rnd() * 2 - 1) * sp, 1, 5);
   return [
     { label: "Der Branchenveteran", shown: 2.5, span: 0.5, skill: draw(2.5, 0.5), dev: false, poach: 1,
@@ -1218,6 +1318,166 @@ export function makeCandidates(rng: Rng) {
       note: "Zweite Reihe, erste eigene Führungsrolle. +0,25 Rating je Halbjahr bis 4,5." },
   ];
 }
+
+/* ---------- Archetypen der Shortlist ----------
+   Je Position sechs Suchprofile, wie sie ein PE-Headhunter vorstellt: drei
+   Spezialisten mit klarer Stärke und klarer Lücke, dazu Branchen-Insider,
+   Serial PE und Step-up. Die drei Spezialisten liegen beim Assessment-Score
+   um 3,0 und kosten damit gleich viel; welcher sich lohnt, entscheidet allein
+   der Case. `p` sind die drei Kompetenzen in der Reihenfolge von
+   COMPETENCIES, `span` die Assessment-Bandbreite vor Referenzen.
+
+   Die CFO-Profile lehnen sich an die vier PE-CFO-Archetypen von BDO an
+   (Turnaround Specialist, Exit Strategist, Buy-and-Builder, Standard-Setter),
+   die CEO-Profile an die gängigen Suchprofile für Portfolio-CEOs.          */
+export const MANAGER_ARCHES: Record<string, ManagerArch[]> = {
+  ceo: [
+    { key: "turnaround", n: ["Turnaround-CEO", "Turnaround-CEO"], p: [4.5, 1.8, 3.0], span: 0.5,
+      note: "Hat zwei Restrukturierungen im Mittelstand geführt. Holt Marge, Wachstum ist nicht das Thema." },
+    { key: "scaleup", n: ["Scale-up-CEO", "Scale-up-CEO"], p: [1.8, 4.5, 3.0], span: 0.5,
+      note: "Hat ein Unternehmen in neue Märkte und auf die doppelte Größe geführt. Kosten laufen nebenher." },
+    { key: "buildup", n: ["Buy-&-Build-CEO", "Buy-&-Build-CEO"], p: [2.6, 3.6, 3.6], span: 0.5,
+      note: "Führt durch Zukäufe und hält das Top-Team zusammen. Hebt den Deckel für alle." },
+    { key: "insider", n: ["Branchen-Insider", "Branchen-Insiderin"], p: [2.6, 2.5, 2.4], span: 0.5,
+      note: "Zwanzig Jahre im Segment. Marktgehalt, keine Überraschungen, kein Sprung." },
+    { key: "serial", n: ["Serial PE-CEO", "Serial PE-CEO"], p: [4.6, 4.5, 4.6], span: 0.5, poach: 2,
+      note: "Mehrere Sponsor-Zyklen und Exits. Sofort auf Topniveau, teuer, wird selbst abgeworben." },
+    { key: "stepup", n: ["Step-up-Kandidat", "Step-up-Kandidatin"], p: [2.0, 2.0, 2.2], span: 1.5, dev: true,
+      note: "Erste CEO-Rolle, aus der zweiten Reihe. +0,25 je Halbjahr bis 4,5." },
+  ],
+  cfo: [
+    { key: "turnaround", n: ["Turnaround-CFO", "Turnaround-CFO"], p: [4.6, 2.8, 1.6], span: 0.5,
+      note: "Kostenprogramme in drei Familienunternehmen. Hält von Systemprojekten wenig." },
+    { key: "treasury", n: ["Treasury-CFO", "Treasury-CFO"], p: [2.8, 4.6, 1.6], span: 0.5,
+      note: "Working Capital, Banken, Covenants. Setzt Liquidität frei, wo andere sie suchen." },
+    { key: "standard", n: ["Standard-Setter", "Standard-Setterin"], p: [2.2, 2.2, 4.6], span: 0.5,
+      note: "Baut Reporting, Controlling und Systeme auf. ERP und KI sind ihr Terrain." },
+    { key: "insider", n: ["Branchen-Insider", "Branchen-Insiderin"], p: [2.6, 2.5, 2.4], span: 0.5,
+      note: "Kennt jeden Lieferanten im Umkreis. Marktgehalt, keine Überraschungen." },
+    { key: "serial", n: ["PE-erfahrener CFO", "PE-erfahrene CFO"], p: [4.5, 4.6, 4.5], span: 0.5, poach: 2,
+      note: "Exit-erprobt, kennt Lender und Sponsor. Teuer, wird selbst abgeworben." },
+    { key: "stepup", n: ["Step-up-Kandidat", "Step-up-Kandidatin"], p: [2.0, 2.2, 2.4], span: 1.5, dev: true,
+      note: "Head of Controlling, erste CFO-Rolle. +0,25 je Halbjahr bis 4,5." },
+  ],
+  r3: [
+    { key: "commercial", n: ["Commercial Leader", "Commercial Leader"], p: [4.6, 2.6, 1.8], span: 0.5,
+      note: "Pricing, Key Accounts, Cross-Selling. Kurzer Payback, kein Freund großer Sprünge." },
+    { key: "builder", n: ["Market Builder", "Market Builder"], p: [2.4, 4.6, 2.0], span: 0.5,
+      note: "Hat zwei Auslandsmärkte aufgebaut. Go-to-Market ist ihr Handwerk, Integration nicht." },
+    { key: "integration", n: ["Integration Lead", "Integration Lead"], p: [2.0, 2.4, 4.6], span: 0.5,
+      note: "Hat sechs Zukäufe integriert. Senkt das Scheiterungsrisiko von Add-ons deutlich." },
+    { key: "insider", n: ["Branchen-Insider", "Branchen-Insiderin"], p: [2.6, 2.5, 2.4], span: 0.5,
+      note: "Solide überall, keine Lücke, kein Sprung." },
+    { key: "serial", n: ["Serial PE-Executive", "Serial PE-Executive"], p: [4.5, 4.6, 4.5], span: 0.5, poach: 2,
+      note: "Stark in allem, teuer, wird selbst abgeworben." },
+    { key: "stepup", n: ["Step-up-Kandidat", "Step-up-Kandidatin"], p: [2.5, 2.4, 2.0], span: 1.5, dev: true,
+      note: "Zweite Reihe, erste eigene Führungsrolle. +0,25 je Halbjahr bis 4,5." },
+  ],
+};
+
+/* Eigenschaften: je Karte eine, mit Vor- und Nachteil, wie sie in einem
+   Referenzgespräch auftaucht. `w` ist das Ziehungsgewicht, `seat` schränkt
+   auf eine Position ein. Die Wirkung steht jeweils an der Stelle, an der sie
+   greift (Verweis in `fx`).                                               */
+export const MANAGER_TRAITS: Record<string, { n: string; w: number; t: string; seat?: string }> = {
+  bind:     { n: "Hohe Bindung", w: 3, t: "Abwerbungsrisiko halbiert" },
+  day1:     { n: "Day-1-ready", w: 3, t: "Keine Einarbeitung: volles Tempo ab dem ersten Halbjahr" },
+  flight:   { n: "Flight Risk", w: 2, t: "+0,3 auf alle Kompetenzen, doppeltes Abwerbungsrisiko" },
+  sponsor:  { n: "Sponsor-erfahren", w: 2, t: "Kennt Equity Story und Vendor DD: Exit-Multiple +3 % (als CEO oder CFO)" },
+  mentor:   { n: "Talentförderer", w: 2, seat: "ceo", t: "Step-up-Kandidaten im Team wachsen +0,1 je Halbjahr schneller" },
+  coinvest: { n: "Co-Investor", w: 1, t: "Investiert eigenes Geld: wirkt wie ein MEP, Fixum 10 % niedriger" },
+  risk:     { n: "Risk-Taker", w: 1, t: "+5 pp bei marktabhängigen Programmen, Fehlschläge kosten 1,5 × Sunk Cost" },
+  lender:   { n: "Lender-erfahren", w: 1, seat: "cfo", t: "Bessere Bankkonditionen: Zinsmarge −25 bp" },
+  network:  { n: "Starkes Netzwerk", w: 1, t: "Search-Mandate in dieser Beteiligung liefern ein Halbjahr schneller" },
+};
+export const ORIGINS = ["Konzern", "Mittelstand", "Beratung", "Scale-up", "Private Equity"];
+const FIRST = {
+  f: ["Katrin", "Mira", "Lea", "Sabine", "Julia", "Anna", "Nadine", "Claudia", "Elif", "Sophie", "Hanna", "Petra", "Ayşe", "Laura", "Miriam", "Franziska"],
+  m: ["Jonas", "Thomas", "Markus", "Stefan", "Daniel", "Florian", "Mehmet", "Andreas", "Tobias", "Christian", "Felix", "Matthias", "Lukas", "Ralf", "Kemal", "Sebastian"],
+};
+const LAST = ["Albers", "Okafor", "Hoffmann", "Brandl", "Wieland", "Keller", "Richter", "Yilmaz", "Bauer", "Lorenz", "Vogt", "Sommer",
+  "Haas", "Schuster", "Kaya", "Winter", "Berger", "Frank", "Lehmann", "Krüger", "Seidel", "Novak", "Arslan", "Hartmann"];
+export const PORTRAITS = 16;   // Porträts je Geschlecht im Pool (public/manager)
+
+/* Eine Kandidatenkarte. Die gezeigten Kompetenzen streuen um den Archetyp,
+   die wahren um die gezeigten — so weit, wie die Assessment-Bandbreite
+   reicht. Das wahre Profil zeigt sich in der Probezeit.                  */
+interface ManagerArch { key: string; n: string[]; p: number[]; span: number; note: string; dev?: boolean; poach?: number }
+function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
+  const g: "f" | "m" = rng.rnd() < 0.5 ? "f" : "m";
+  const pool = Object.entries(MANAGER_TRAITS).filter(([, t]) => !t.seat || t.seat === seat);
+  let r = rng.rnd() * pool.reduce((sum, [, t]) => sum + t.w, 0);
+  const trait = (pool.find(([, t]) => (r -= t.w) < 0) || pool[0])[0];
+  const lift = trait === "flight" ? 0.3 : 0;
+  const shownProf = a.p.map((v) => Math.round(clamp(v + (rng.rnd() * 2 - 1) * 0.3 + lift, 1, 5) * 10) / 10);
+  const prof = shownProf.map((v) => clamp(v + (rng.rnd() * 2 - 1) * a.span, 1, 5));
+  const mean = (xs) => xs.reduce((x, y) => x + y, 0) / xs.length;
+  const age = a.key === "stepup" ? 32 + Math.floor(rng.rnd() * 9)
+    : a.key === "insider" ? 50 + Math.floor(rng.rnd() * 13) : 40 + Math.floor(rng.rnd() * 19);
+  const origin = a.key === "serial" ? (rng.rnd() < 0.7 ? "Private Equity" : "Konzern") : rng.pick(ORIGINS.slice(0, 4));
+  const poach = (a.poach || 1) * (trait === "flight" ? 2 : trait === "bind" ? 0.5 : 1);
+  return {
+    label: a.n[g === "f" ? 1 : 0], arch: a.key,
+    name: rng.pick(FIRST[g]) + " " + rng.pick(LAST), g, age, origin, pic: Math.floor(rng.rnd() * PORTRAITS),
+    shown: Math.round(mean(shownProf) * 10) / 10, span: a.span, shownProf,
+    skill: mean(prof), prof, dev: !!a.dev, poach, trait, note: a.note,
+  };
+}
+
+/* Die Shortlist als Deck: alle drei Spezialisten der Position — damit liegt
+   immer mindestens ein Profil für den größten Bedarf des Cases auf dem
+   Tisch —, dazu zwei aus Branchen-Insider, Serial PE und Step-up. Serial PE
+   ist die seltene Karte. Reihenfolge gemischt.                            */
+export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}): ManagerCard[] {
+  if (compat.legacyCandidates) return legacyCandidates(rng);
+  const A = MANAGER_ARCHES[seat] || MANAGER_ARCHES.cfo;
+  const spec = A.slice(0, 3);
+  const pick = [...spec];
+  const rest = [A[3], A[5]];
+  if (rng.rnd() < 0.4) pick.push(A[4], rng.pick(rest));
+  else pick.push(...rest);
+  for (let i = pick.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.rnd() * (i + 1));
+    [pick[i], pick[j]] = [pick[j], pick[i]];
+  }
+  return pick.map((a) => managerCard(rng, seat, a));
+}
+
+/* Aus einer Kandidatenkarte wird ein Amtsinhaber. Eine Stelle für alle
+   Wege — Mehrspieler, Übungsmodus, Erklärmodus, KI-Fonds —, damit keiner ein
+   Feld vergisst. Karten der alten Shortlist tragen kein Profil und werden
+   wie bisher zu einem Rating.                                             */
+export function seatFromCand(cand, q?: number) {
+  const base = { skill: cand.skill, dev: !!cand.dev, poach: cand.poach ?? 1 };
+  if (!cand.prof) return base;
+  return {
+    ...base, prof: [...cand.prof], shownProf: [...(cand.shownProf || cand.prof)],
+    arch: cand.arch, label: cand.label, name: cand.name, g: cand.g, age: cand.age, origin: cand.origin,
+    pic: cand.pic, trait: cand.trait, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
+    ...(q != null ? { hiredQ: q } : {}),
+  };
+}
+/* Wie ein KI-Fonds aus dem Deck draftet: Nähe des Assessment-Scores zu
+   seinem Anspruch (teurer als nötig ist auch schlecht) plus die Kompetenz,
+   auf die sein Stil setzt — der operative Fonds die Kostenseite, der
+   Leverage-Fonds Cash und Integration, der Origination-Fonds das Wachstum.
+   Gerechnet auf dem gezeigten Profil: Die KI sieht nicht mehr als der
+   Spieler. Ohne Deck hätte die Kohorte nie eine Spezialistin im Team und
+   fiele zurück, sobald Profile laufend wirken.                           */
+const BOT_PREF: Record<string, Record<string, number>> = {
+  ops: { ceo: 0, cfo: 0, r3: 0 }, fin: { ceo: 2, cfo: 1, r3: 2 },
+  sourcing: { ceo: 1, cfo: 0, r3: 1 }, all: { ceo: 2, cfo: 0, r3: 0 },
+};
+export function botDraft(rng: Rng, key: string, seat: string, amb: number) {
+  const pref = (BOT_PREF[key] || BOT_PREF.all)[seat] ?? 0;
+  const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown;
+  return makeCandidates(rng, seat).reduce((best, k) => (score(k) > score(best) ? k : best));
+}
+// Einarbeitung nach der Verpflichtung: Day-1-ready braucht keine
+export const onboardOf = (cand) => (cand && cand.trait === "day1" ? 0 : 1);
+// Starkes Netzwerk: Search-Mandate dieser Beteiligung liefern ein Halbjahr schneller
+export const searchLagOf = (c) => (["ceo", "cfo", "r3"].some((k) => c[k] && c[k].skill > 0 && c[k].trait === "network") ? 0 : 1);
+
 /* ---------- Due Diligence ----------
    Kosten fallen an, sobald der Auftrag erteilt ist — ob der Deal zustande kommt
    oder nicht. Alles andere wäre keine Entscheidung: Wenn Prüfung beim Zuschlag
@@ -1388,8 +1648,13 @@ export function endPressure(q) {
   return LIQ_DISC * (END_PRESSURE_FROM - left) / END_PRESSURE_FROM;
 }
 
+/* Sponsor-erfahrene CEOs und CFOs kennen den Verkaufsprozess von der anderen
+   Seite: Equity Story, Management-Präsentation, Vendor Due Diligence. Das
+   wirkt im Exit wie anderthalb Punkte Verhandlungsgeschick mehr.          */
+export const sponsorNegOf = (c) =>
+  (c && ((c.ceo && c.ceo.skill > 0 && c.ceo.trait === "sponsor") || (c.cfo && c.cfo.skill > 0 && c.cfo.trait === "sponsor")) ? 1.5 : 0);
 export function dealMultiple(c, market, neg, q?) {
-  return Math.max(2, markMultiple(c, market) * (1 + 0.02 * neg) - endPressure(q));
+  return Math.max(2, markMultiple(c, market) * (1 + 0.02 * (neg + sponsorNegOf(c))) - endPressure(q));
 }
 export const evOf = (c, mult) => ebitdaOf(c) * mult;
 export const eqvOf = (c, mult) => (evOf(c, mult) - c.netDebt) * (c.st ?? 1);
@@ -1846,7 +2111,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
            Periodenschluss eine neue gezogen, solange nicht entschieden war —
            man konnte die Kandidatenratings beliebig oft neu würfeln, indem man
            die Entscheidung vor sich her schob.                                */
-        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng) });
+        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng, se.seat, compat) });
         still.push({ ...se, waiting: true });
       }
       else c[se.seat] = { skill: Math.max(c[se.seat].skill, 3) };
@@ -1908,7 +2173,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
         if (spec && spec.nwcFix) c.nwcFix = (c.nwcFix || 0) + spec.nwcFix;
         if (spec && spec.capexFix) c.benchCapex = Math.max(0.5, (c.benchCapex ?? 4) + spec.capexFix);
       } else {
-        const sunk = ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK);
+        const sunk = ebitdaOf(c) * (spec && spec.failCost != null ? spec.failCost : FAIL_SUNK) * (IN.failMult || 1);
         c.netDebt += sunk; bookOff(c, "restr", sunk);
         if (spec && spec.failMargin) c.marginDrift = (c.marginDrift || 0) + spec.failMargin;
       }
@@ -1938,7 +2203,14 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
       if (me) news.push({ q, e: "👋", tone: "neg", t: `<b>${c.name}</b>: Der Gründer-CEO zieht sich zurück. Die Position ist vakant.` });
       return;
     }
-    if (c[k].dev && c[k].skill < 4.5) c[k] = { ...c[k], skill: Math.min(4.5, c[k].skill + 0.25) };
+    if (c[k].dev && c[k].skill < 4.5) {
+      // Talentförderer im CEO-Sessel beschleunigen die Entwicklung der übrigen Positionen
+      const step = 0.25 + (k !== "ceo" && c.ceo.skill > 0 && c.ceo.trait === "mentor" ? 0.1 : 0);
+      c[k] = c[k].prof
+        ? { ...c[k], prof: c[k].prof.map((v) => Math.min(4.5, v + step)) }
+        : { ...c[k], skill: Math.min(4.5, c[k].skill + step) };
+      if (c[k].prof) c[k].skill = c[k].prof.reduce((x, y) => x + y, 0) / 3;
+    }
     if (rng.rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * retentionFactor(c, mk)) {
       const nm = k === "ceo" ? "CEO" : k === "cfo" ? "CFO" : ROLE3[c.sector].n;
       c[k] = vacate(c[k]);

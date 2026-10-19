@@ -26,7 +26,7 @@ import {
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
-  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x,
+  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf,
 } from "@/lib/engine";
 
 import {
@@ -381,6 +381,7 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
     entryEV: eb * mult, entryFees: eb * mult * ENTRY_FEE,
     cashOut: 0, recapOut: 0, done: [],
     hist: [{ rev: d.revenue, eb, nd: eb * lev, mg: d.margin, ql: d.quality, eq: eb * mult - eb * lev, mult, st: 1, out: 0 }],
+    mx: true,   // laufende Wirkung des Managements, wie im Spiel
   };
   c.entryEquity = eb * mult - eb * lev + eb * mult * ENTRY_FEE;
   c.costTotal = c.entryEquity; c.costLeft = c.entryEquity;
@@ -511,7 +512,7 @@ function GuidedRun({ dark, setDark, back }) {
     haptic(8);
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     patch({ ...chargeOff(c, "mgmt", retainerOf(seat, ebitdaOf(c))),
-      searches: [...(c.searches || []), { seat, readyQ: decQ + 1 }] });
+      searches: [...(c.searches || []), { seat, readyQ: decQ + searchLagOf(c) }] });
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
 
@@ -522,16 +523,16 @@ function GuidedRun({ dark, setDark, back }) {
     patch({
       ...chargeOff(c, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(c))
         + (had ? severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)) : 0)),
-      [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach }, onboard: 1,
+      [item.seat]: seatFromCand(cand, q), onboard: onboardOf(cand),
       searches: (c.searches || []).filter((se) => se.seat !== item.seat),
     });
     setSl((p) => p.slice(1));
-    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
+    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
   }
 
   function reject(item) {
     patch({ ...chargeOff(c, "mgmt", retainerOf(item.seat, ebitdaOf(c)) * 0.5),
-      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se) });
+      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + searchLagOf(c) } : se) });
     setSl((p) => p.slice(1));
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }

@@ -937,7 +937,10 @@ export default function MultiplayerGame({
   function hireStage(item: Any, cand: Any) {
     haptic(10);
     const idx = item.candidates.indexOf(cand);
-    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : "development";
+    /* Plätze 0 bis 2 unter ihren alten Namen: Die versteht auch eine
+       Auswertung, die das Deck mit fünf Karten noch nicht kennt. */
+    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : idx === 2 ? "development"
+      : (`c${idx}` as HireChoice);
     setHireDecisions((arr) => [...arr, { holdingUid: item.holdingUid, seat: item.seat, choice }]);
     setShortlistCursor((i) => i + 1);
   }

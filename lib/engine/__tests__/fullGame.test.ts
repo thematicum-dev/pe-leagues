@@ -176,16 +176,16 @@ function round(v: number) { return Math.round(v * 1e6) / 1e6; }
 /* Sollwert, erzeugt vor dem Umbau durch denselben Spielverlauf gegen den
    damaligen Code (globaler SEED, bare rnd()/nrm()/pick()/band()). */
 const GOLDEN_RESULT = {
-  finalRngPosition: 2986756629,
+  finalRngPosition: 3130379959,
   holdingsCount: 2,
   realizedCount: 5,
-  cash: 77.59444,
-  undrawn: 77.59444,
-  drawn: 422.40556,
-  nav: 229.461106,
-  tvpi: 1.644254,
-  dpi: 1.109689,
-  irr: 0.094505,
+  cash: 74.124762,
+  undrawn: 74.124762,
+  drawn: 425.875238,
+  nav: 308.041622,
+  tvpi: 1.17506,
+  dpi: 0.451745,
+  irr: 0.030018,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
@@ -229,31 +229,37 @@ const GOLDEN_RESULT = {
      — vorher hielt die Beispielbeteiligung ein Ticket, das allein ein Sechstel
      des Fonds band, und lieferte 97 Mio. € EBITDA-Beitrag; jetzt 27. Das
      Landmark-Objekt ist der Rohwert aus newLandmark — gekappt wird es erst
-     bei der Ankündigung (announceLandmark), die diese Partie nicht spielt. */
-  score: 0.696603,
-  carry: 11.252011,
+     bei der Ankündigung (announceLandmark), die diese Partie nicht spielt.
+     Ein neuntes Mal mit dem Manager-Draft: Die Shortlist ist ein Deck aus
+     fünf Kandidatenkarten mit Kompetenzprofil (makeCandidates) und zieht
+     dafür mehr Zufallszahlen als die alten drei Schablonen. Ab dem ersten
+     Search-Mandat in Halbjahr 3 läuft der ganze Strom anders, Markt und
+     Landmark eingeschlossen. Die laufende Wirkung des Managements greift
+     hier nicht — die Beteiligungen dieser Partie tragen kein `mx`. */
+  score: 0.396152,
+  carry: 0,
   landmark: {
-    sector: "Services",
-    revenue: 200.751518,
-    margin: 19.883744,
-    askMult: 12.831593,
-    name: "Brenseil Servicetechnik Gruppe",
+    sector: "Consumer",
+    revenue: 252.471716,
+    margin: 20.747994,
+    askMult: 11.584941,
+    name: "Kaltgau Vitalstoffe Gruppe",
   },
-  healthMoic: 1.376543,
+  healthMoic: 2.744605,
   healthCount: 2,
   bridge: {
-    entry: 69.674035,
-    ebitda: 26.849504,
-    mult: -10.47944,
-    delev: 15.802745,
+    entry: 87.120752,
+    ebitda: 100.508221,
+    mult: -113.05072,
+    delev: 27.55094,
     exit: 90,
   },
   marketFinal: {
-    Industrials: 7.742424,
-    Healthcare: 10.026113,
-    Software: 13.929235,
-    Services: 10.265666,
-    Consumer: 11.2,
+    Industrials: 5.578602,
+    Healthcare: 8.020534,
+    Software: 15.818841,
+    Services: 13.434415,
+    Consumer: 8.799181,
   },
   firstHoldingUid: "c5",
 };

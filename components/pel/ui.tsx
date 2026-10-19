@@ -24,7 +24,7 @@ import {
   DEAL_YEARS,
   isCapped, markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x,
+  signBonusOf, tvpiOf, x, COMPETENCIES, MANAGER_TRAITS, seatFromCand,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -2985,11 +2985,14 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           const dur = initDurationOf(c, dim, k.id);
           const chk = k.ma ? addonCheck(c, market, { ...mandate, runs }) : null;
           const risk = k.ma ? failBreakdown(chk) : null;
-          // Dieselbe Zeile, die buildInit() beim Start rechnet
+          /* Dieselbe Zeile, die buildInit() beim Start rechnet — mit der
+             Kompetenz, die genau dieses Programm braucht (PROGRAM_COMP). */
+          const Ek = effSkill(c, seat, k.id) * (c.onboard > 0 ? 0.7 : 1);
+          const riskTaker = c[seat].skill > 0 && c[seat].trait === "risk" && k.cls === "hard";
           const p = k.ma ? clamp(1 - chk.fail, 0.05, 0.98)
-            : clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm, 0.1, 0.97);
+            : clamp(initSuccess(Ek, k.cls) + (k.sm || 0) + rep.sm + (riskTaker ? 0.05 : 0), 0.1, 0.97);
           const FI = fitLabel(k.id, c);
-          const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
+          const g = initGain(Ek) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
           const noFin = k.ma && !chk.ok;
           /* Wie viel des Reifegradgewinns die Beteiligung überhaupt tragen kann.
              Growth wirkt nur bis min(People + 1, Performance + 1) — accEff();
@@ -3205,6 +3208,47 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   );
 }
 
+/* Kompetenzprofil einer Kandidatenkarte, solange es die Wisch-Ansicht noch
+   nicht gibt: Person, die drei Kompetenzen als Assessment-Bandbreite, die
+   Eigenschaft und die Erfolgsquote der Programme dieser Position — gerechnet
+   wie buildInit(), mit dem gezeigten Profil statt des wahren. */
+function CandProfile({ k, item, holding, precise }) {
+  const span = precise ? 0.5 : k.span;
+  const names = COMPETENCIES[item.seat];
+  const tr = MANAGER_TRAITS[k.trait];
+  const sim = holding ? { ...holding, [item.seat]: { ...seatFromCand(k), prof: k.shownProf, skill: k.shown }, onboard: 0 } : null;
+  const progs = item.seat === "ceo" ? [] : INITS[item.seat === "cfo" ? "plat" : "acc"].filter((p) => p.id !== "ma");
+  return (
+    <div className="pad" style={{ paddingTop: 6, fontSize: 12.5, lineHeight: 1.5 }}>
+      <div style={{ color: "var(--ink2)" }}>{k.name} · {k.age} · Herkunft {k.origin}</div>
+      {names.map((n, i) => {
+        const v = k.shownProf[i];
+        return (
+          <div key={n} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span>{n}</span>
+            <span className="mono">{Math.max(1, v - span).toFixed(1)}–{Math.min(5, v + span).toFixed(1)}</span>
+          </div>
+        );
+      })}
+      {tr && <div style={{ marginTop: 4 }}><b>{tr.n}</b> · <span style={{ color: "var(--ink2)" }}>{tr.t}</span></div>}
+      {sim && progs.length > 0 && (
+        <div style={{ marginTop: 4, color: "var(--ink2)" }}>
+          {progs.map((p) => {
+            const E = effSkill(sim, item.seat, p.id);
+            const q = clamp(initSuccess(E, p.cls) + (p.sm || 0) + (k.trait === "risk" && p.cls === "hard" ? 0.05 : 0), 0.1, 0.97);
+            return <span key={p.id} style={{ marginRight: 10 }}>{p.n.split(" ")[0]} {Math.round(q * 100)} %</span>;
+          })}
+        </div>
+      )}
+      {item.seat === "ceo" && (
+        <div style={{ marginTop: 4, color: "var(--ink2)" }}>
+          Wirkt halb auf alle Performance-Programme (Operational Excellence) und alle Growth-Programme (Growth); Leadership deckelt die Fachpositionen.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Shortlist({ item, holding, analysis, hire, reject }) {
   const eb = holding ? ebitdaOf(holding) : 0;
   const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[holding ? holding.sector : "Software"].n;
@@ -3227,17 +3271,18 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
               <div className="pad" style={{ paddingTop: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: 15, fontWeight: 600 }}>{k.label}</span>
-                  <span className="mono" style={{ fontSize: 17 }}>Rating {lo.toFixed(1)}–{hi.toFixed(1)}</span>
+                  <span className="mono" style={{ fontSize: 17 }}>{k.prof ? "Assessment" : "Rating"} {lo.toFixed(1)}–{hi.toFixed(1)}</span>
                 </div>
               </div>
+              {k.prof && <CandProfile k={k} item={item} holding={holding} precise={precise} />}
               <table className="ledger fix"><tbody>
                 <tr><td className="lab">Signing Bonus</td><td>{eur(signBonusOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Gehalt p.a.</td><td>{eur(payOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Effektives Rating unter diesem CEO</td>
                   <td style={{ color: cap < k.shown ? "var(--ox)" : "var(--ink)" }}>
                     {Math.min(k.shown, cap).toFixed(1)}{cap < k.shown ? ` — auf ${cap.toFixed(1)} gedeckelt` : ""}</td></tr>
-                <tr><td className="lab">Erfolgsquote rel. / transf. / markt.</td>
-                  <td>{["rel", "tr", "hard"].map((cl) => Math.round(initSuccess(Math.min(k.shown, cap) + 0.5 * ceoSk, cl) * 100)).join(" / ")} %</td></tr>
+                {!k.prof && <tr><td className="lab">Erfolgsquote rel. / transf. / markt.</td>
+                  <td>{["rel", "tr", "hard"].map((cl) => Math.round(initSuccess(Math.min(k.shown, cap) + 0.5 * ceoSk, cl) * 100)).join(" / ")} %</td></tr>}
                 <tr><td className="lab">Entwicklungspotenzial</td><td>{k.dev ? "+0,25 je Halbjahr bis 4,5" : "stabil"}</td></tr>
                 <tr><td className="lab">Retention-Risiko</td>
                   <td>{(POACH * k.shown * k.shown * k.poach * 100).toFixed(1)} % je HJ</td></tr>

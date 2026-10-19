@@ -29,6 +29,7 @@ import {
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
+  botDraft, seatFromCand, onboardOf, searchLagOf,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
@@ -66,13 +67,14 @@ function botOf(f: RuntimeFund) {
   return f.isAi ? archetypeByKey(f.archetype as Any) : null;
 }
 
-/* Neue Bewerberliste ist bereits deterministisch positioniert:
-   makeCandidates() liefert immer [Veteran, A-Player, Entwicklungsprofil] in
-   fester Reihenfolge. Der Client kann eine Wahl deshalb gefahrlos per festem
-   Label referenzieren, obwohl die tatsächlichen Ratings gewürfelt sind. */
+/* Die Wahl referenziert eine Karte über ihre Position in der gespeicherten
+   Shortlist. Die alte Liste hatte genau drei feste Plätze, deren Namen
+   ("veteran", "aplayer", "development") weiter für die Plätze 0 bis 2 gelten;
+   das Deck mit fünf Karten spricht die Plätze als "c0" bis "c4" an.      */
 function candidateByChoice(item: ShortlistItem, choice: HireIntent["choice"]) {
-  const idx = choice === "veteran" ? 0 : choice === "aplayer" ? 1 : choice === "development" ? 2 : -1;
-  return idx >= 0 ? item.candidates[idx] : null;
+  const idx = choice === "veteran" ? 0 : choice === "aplayer" ? 1 : choice === "development" ? 2
+    : /^c[0-9]$/.test(String(choice)) ? Number(String(choice).slice(1)) : -1;
+  return idx >= 0 ? item.candidates[idx] ?? null : null;
 }
 
 function pushFeed(news: Any[], q: number, emoji: string, tone: "neu" | "pos" | "neg", text: string, slot?: number) {
@@ -191,7 +193,7 @@ function applyImmediateDecisions(
     if (dec.choice === "reject") {
       const abort = retainerOf(dec.seat, ebitdaOf(c)) * 0.5;
       c.netDebt += abort; bookOff(c, "mgmt", abort);
-      c.searches = (c.searches || []).map((se: Any) => (se.seat === dec.seat ? { seat: dec.seat, readyQ: quarter + 1 } : se));
+      c.searches = (c.searches || []).map((se: Any) => (se.seat === dec.seat ? { seat: dec.seat, readyQ: quarter + searchLagOf(c) } : se));
       pushFeed(news, quarter, "🔍", "neu", `${c.name}: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.`, f.slot);
       list = list.filter((it) => it !== item);
       return;
@@ -200,13 +202,15 @@ function applyImmediateDecisions(
     if (!cand) return;
     const had = c[dec.seat].skill > 0;
     const prevSkill = c[dec.seat].skill;
-    c[dec.seat] = { skill: cand.skill, dev: cand.dev, poach: cand.poach };
+    c[dec.seat] = seatFromCand(cand, quarter);
     c.searches = (c.searches || []).filter((se: Any) => se.seat !== dec.seat);
-    c.onboard = 1;
+    c.onboard = onboardOf(cand);
     const hireCost = signBonusOf(dec.seat, cand.skill, ebitdaOf(c)) + (had ? severanceOf(dec.seat, prevSkill, ebitdaOf(c)) : 0);
     c.netDebt += hireCost; bookOff(c, "mgmt", hireCost);
     const nm = dec.seat === "ceo" ? "CEO" : dec.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    pushFeed(news, quarter, "🤝", "pos", `${c.name}: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}.`, f.slot);
+    pushFeed(news, quarter, "🤝", "pos", cand.name
+      ? `${c.name}: ${cand.name} ist neuer ${nm} (${cand.label}). Das wahre Profil zeigt sich in der Probezeit.`
+      : `${c.name}: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}.`, f.slot);
     list = list.filter((it) => it !== item);
   });
 
@@ -240,7 +244,7 @@ function applyImmediateDecisions(
     if ((c.searches || []).some((se: Any) => se.seat === s.seat)) return;
     const retainer = retainerOf(s.seat, ebitdaOf(c));
     c.netDebt += retainer; bookOff(c, "mgmt", retainer);
-    c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + 1 }];
+    c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + searchLagOf(c) }];
     const nm = s.seat === "ceo" ? "CEO" : s.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     pushFeed(news, quarter, "🔍", "neu", `${c.name}: Search-Mandat für einen neuen ${nm} erteilt.`, f.slot);
   });
@@ -635,6 +639,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
          den Ersatzweg für Partien ohne das Feld zurück und brächte ihre ganze
          Kette als Umgliederung mit. */
       uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
+      // Laufende Wirkung des Managements (mgmtFx), seit 19.10.2026
+      ...(compat.legacyMgmt ? {} : { mx: true }),
     };
     c.baseLoad = seatLoad(c);
     spendFund(f, c.entryEquity, q, undefined);
@@ -660,12 +666,26 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const seat = (["ceo", "cfo", "r3"] as const).find((s2) => c[s2].skill < amb - 0.5);
       if (seat && rng.rnd() < 0.8) {
         const eb = ebitdaOf(c);
-        const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
-        const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+        if (compat.legacyCandidates) {
+          const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
+          const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+            + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
+          c.netDebt += cost; bookOff(c, "mgmt", cost);
+          c[seat] = { skill: sk };
+          c.onboard = 1;
+          return;
+        }
+        /* Die KI-Fonds draften aus demselben Deck wie der Spieler, nach ihrem
+           Stil: der operative Fonds die Kostenseite, der Leverage-Fonds Cash
+           und Integration, der Origination-Fonds das Wachstum. Ohne Deck
+           hätte die Kohorte nie eine Spezialistin im Team und fiele gegen den
+           Spieler zurück, sobald Profile laufend wirken.                   */
+        const cand: Any = botDraft(rng, k, seat, amb);
+        const cost = retainerOf(seat, eb) + signBonusOf(seat, cand.skill, eb)
           + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
         c.netDebt += cost; bookOff(c, "mgmt", cost);
-        c[seat] = { skill: sk };
-        c.onboard = 1;
+        c[seat] = seatFromCand(cand, q);
+        c.onboard = onboardOf(cand);
         return;
       }
       if (!c.ltip && rng.rnd() < 0.5) c.ltip = true;
@@ -748,6 +768,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       holdingUid: sl.uid, name: sl.name, seat: sl.seat as Any,
       candidates: sl.cands.map((cd: Any) => ({
         label: cd.label, shown: cd.shown, span: cd.span, skill: cd.skill, dev: cd.dev, poach: cd.poach, note: cd.note,
+        ...(cd.prof ? {
+          arch: cd.arch, name: cd.name, g: cd.g, age: cd.age, origin: cd.origin, pic: cd.pic, trait: cd.trait,
+          prof: cd.prof, shownProf: cd.shownProf,
+        } : {}),
       })),
     }];
   });

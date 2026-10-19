@@ -21,7 +21,7 @@ import {
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
-  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
+  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -284,6 +284,7 @@ export default function PeLeagues() {
         hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
         // Gerade erworben: im unrealisierten Block des Ausgangsstands noch nicht da
         uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
+        mx: true,   // laufende Wirkung des Managements (mgmtFx)
       };
       Object.assign(c, { baseLoad: seatLoad(c) });
       spendFund(f, c.entryEquity, q);
@@ -317,12 +318,13 @@ export default function PeLeagues() {
         const seat = ["ceo", "cfo", "r3"].find((s2) => c[s2].skill < amb - 0.5);
         if (seat && rng.rnd() < 0.8) {
           const eb = ebitdaOf(c);
-          const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
-          const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+          // Dasselbe Deck und dieselbe Draft-Regel wie im Mehrspielerpfad
+          const cand = botDraft(rng, k, seat, amb);
+          const cost = retainerOf(seat, eb) + signBonusOf(seat, cand.skill, eb)
             + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
           c.netDebt += cost; bookOff(c, "mgmt", cost);
-          c[seat] = { skill: sk };
-          c.onboard = 1;
+          c[seat] = seatFromCand(cand, q);
+          c.onboard = onboardOf(cand);
           return;
         }
         if (!c.ltip && rng.rnd() < 0.5) c.ltip = true;
@@ -587,7 +589,7 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", retainerOf(seat, ebitdaOf(h))),
-        searches: [...(h.searches || []), { seat, readyQ: decQ + 1 }],
+        searches: [...(h.searches || []), { seat, readyQ: decQ + searchLagOf(h) }],
       }),
     }));
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
@@ -604,14 +606,14 @@ export default function PeLeagues() {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(h))
           + (had ? severanceOf(item.seat, h[item.seat].skill, ebitdaOf(h)) : 0)),
-        [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach },
-        searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: 1,
+        [item.seat]: seatFromCand(cand, quarter),
+        searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: onboardOf(cand),
       }),
     }));
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
     setFeed((p) => [{
       q: quarter, e: "🤝", tone: "pos",
-      t: `<b>${c.name}</b>: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}`,
+      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}`,
     }, ...p]);
   }
 
@@ -622,7 +624,7 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", retainerOf(item.seat, ebitdaOf(h)) * 0.5),
-        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se),
+        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + searchLagOf(h) } : se),
       }),
     }));
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
