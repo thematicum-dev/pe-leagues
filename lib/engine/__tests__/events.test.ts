@@ -66,7 +66,10 @@ describe("Zufallsereignisse während der Halteperiode", () => {
   it("trifft eine Beteiligung seltener als nach dem alten Stand", () => {
     let neu = { events: 0, holdingHalves: 0 };
     let alt = { events: 0, holdingHalves: 0 };
-    for (let seed = 0; seed < 12; seed++) {
+    /* 30 Startwerte: Mit zwölf lag die Streuung der Quote (rund ±1,5 pp) in
+       der Größenordnung des Abstands, und jede Verschiebung des
+       Zufallsstroms an anderer Stelle konnte den Test kippen.            */
+    for (let seed = 0; seed < 30; seed++) {
       const a = countEvents(4000 + seed, {});
       const b = countEvents(4000 + seed, LEGACY_COMPAT);
       neu = { events: neu.events + a.events, holdingHalves: neu.holdingHalves + a.holdingHalves };

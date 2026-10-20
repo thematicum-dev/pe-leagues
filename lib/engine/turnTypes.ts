@@ -107,11 +107,12 @@ export interface ExitQueueItem {
 
 /* Eine Kandidatenkarte. Die Felder ab `arch` trägt nur das Deck seit dem
    19.10.2026: Archetyp, Person, Herkunft, Porträtnummer, Eigenschaft, das
-   gezeigte und das wahre Kompetenzprofil (siehe makeCandidates). */
+   gezeigte und das wahre Kompetenzprofil (siehe makeCandidates), seit dem
+   20.10.2026 auch die Haltung hell/dunkel (siehe chemOf). */
 export interface ShortlistCandidate {
   label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string;
   arch?: string; name?: string; g?: "f" | "m"; age?: number; origin?: string; pic?: number; trait?: string;
-  prof?: number[]; shownProf?: number[];
+  prof?: number[]; shownProf?: number[]; side?: "hell" | "dunkel";
 }
 
 /* Eine offene Kandidaten-Shortlist für eine zu besetzende Position (hire()/

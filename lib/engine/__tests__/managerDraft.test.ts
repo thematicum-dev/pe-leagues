@@ -4,7 +4,7 @@ import {
   ENTRY_FEE, COV_FLOOR, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
-  effSkill, mgmtFx, makeCandidates, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
+  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,7 +206,7 @@ describe("Eigenschaften", () => {
    Einstiegsmarge enthält ein Team auf Marktniveau). Gemessen mit derselben
    Spielweise wie bei der Kalibrierung: Der Spieler wählt je Werkbank das
    Programm mit dem besten Produkt aus Eignung und Erfolgsquote. */
-function playCase(seed: number, team: (c: Any) => Record<string, number[]>, mx = true) {
+function playCase(seed: number, team: (c: Any) => Record<string, number[]>, mx = true, sides: string[] = []) {
   const rng = createRng(seed);
   const market: Record<string, number> = {};
   SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
@@ -224,7 +224,7 @@ function playCase(seed: number, team: (c: Any) => Record<string, number[]>, mx =
   };
   c.baseLoad = seatLoad(c);
   const T = team(c);
-  const seats = () => { for (const k of ["ceo", "cfo", "r3"]) c[k] = { skill: mean(T[k]), prof: [...T[k]], poach: 0 }; };
+  const seats = () => ["ceo", "cfo", "r3"].forEach((k, i) => (c[k] = { skill: mean(T[k]), prof: [...T[k]], poach: 0, ...(sides[i] ? { side: sides[i] } : {}) }));
   seats();
   const p = (seat: string, k: Any) => Math.min(0.97, initSuccess(effSkill(c, seat, k.id), k.cls) + (k.sm || 0));
   for (let q = 1; q <= 10; q++) {
@@ -276,5 +276,79 @@ describe("Management entscheidet den Case", () => {
     expect(miss).toBeLessThan(mid);
     expect(mid).toBeLessThan(fit);
     expect(fit).toBeLessThan(top);
+  });
+});
+
+
+/* Chemie im Top-Team: helle und dunkle Charaktere. */
+describe("Chemie", () => {
+  const team = (a: string, b: string, d: string, over: Any = {}) => holding({
+    mx: true, ceo: { skill: 3, side: a }, cfo: { skill: 3, side: b }, r3: { skill: 3, side: d }, ...over,
+  });
+
+  it("ist eingespielt, wenn alle drei gleich ticken, und reibt, sobald beide Haltungen im Team sitzen", () => {
+    expect(chemOf(team("hell", "hell", "hell"))).toBe(CHEM);
+    expect(chemOf(team("dunkel", "dunkel", "dunkel"))).toBe(CHEM);
+    expect(chemOf(team("hell", "dunkel", "hell"))).toBe(-CHEM);
+    // Eine Vakanz und sonst gleich: neutral; eine Vakanz und gemischt: Reibung
+    expect(chemOf(team("hell", "hell", "hell", { r3: { skill: 0 } }))).toBe(0);
+    expect(chemOf(team("hell", "dunkel", "hell", { r3: { skill: 0 } }))).toBe(-CHEM);
+  });
+
+  it("bleibt neutral ohne mx und mit einer Position ohne Haltung", () => {
+    expect(chemOf(team("hell", "dunkel", "hell", { mx: false }))).toBe(0);
+    expect(chemOf(team("hell", "dunkel", "hell", { cfo: { skill: 3 } }))).toBe(0);
+  });
+
+  it("verschiebt jede Kompetenz um CHEM, in Programmen und in der laufenden Wirkung", () => {
+    const on = team("hell", "hell", "hell"), off = team("hell", "dunkel", "hell"), zero = team("hell", "hell", "hell", { cfo: { skill: 3 } });
+    // Fachposition plus halbe CEO-Kompetenz der Familie
+    expect(effSkill(on, "cfo", "opex") - effSkill(zero, "cfo", "opex")).toBeCloseTo(1.5 * CHEM, 12);
+    expect(effSkill(off, "cfo", "opex") - effSkill(zero, "cfo", "opex")).toBeCloseTo(-1.5 * CHEM, 12);
+    expect(mgmtFx(on).nwc).toBeLessThan(mgmtFx(zero).nwc);
+    expect(mgmtFx(off).nwc).toBeGreaterThan(mgmtFx(zero).nwc);
+  });
+
+  it("wirkt in der laufenden Wirkung auch oberhalb des Deckels", () => {
+    const star = (side: string) => holding({ mx: true, ceo: { skill: 3, side: "hell" }, cfo: { skill: 5, prof: [5, 5, 5], side }, r3: { skill: 3, side: "hell" } });
+    expect(mgmtFx(star("hell")).nwc).toBeLessThan(mgmtFx(star("dunkel")).nwc);
+  });
+
+  it("gibt Amtsinhabern eine feste Haltung, ohne eine Zufallszahl zu ziehen", () => {
+    const a = createRng(5), b = createRng(5);
+    const s1: Any = makeSeats(a, { name: "Musterwerk GmbH" });
+    const s2: Any = makeSeats(b, { name: "Musterwerk GmbH" });
+    expect(s1).toEqual(s2);
+    expect(a.rnd()).toBe(b.rnd());
+    for (const k of ["ceo", "cfo", "r3"]) if (s1[k].skill > 0) expect(["hell", "dunkel"]).toContain(s1[k].side);
+  });
+
+  it("zieht helle und dunkle Karten im Deck und gibt die Haltung an den Amtsinhaber weiter", () => {
+    const rng = createRng(11);
+    const all = Array.from({ length: 40 }, () => makeCandidates(rng, "cfo")).flat();
+    const dark = all.filter((k) => k.side === "dunkel").length / all.length;
+    expect(dark).toBeGreaterThan(0.35);
+    expect(dark).toBeLessThan(0.65);
+    expect((seatFromCand(all[0]) as Any).side).toBe(all[0].side);
+  });
+
+  it("lässt die KI-Fonds bei gleicher Karte die passende Haltung wählen", () => {
+    const c = team("dunkel", "dunkel", "dunkel", { cfo: { skill: 0 } });
+    const picks = Array.from({ length: 60 }, (_, i) => botDraft(createRng(i + 1), "all", "cfo", 3.6, c));
+    const ref = Array.from({ length: 60 }, (_, i) => botDraft(createRng(i + 1), "all", "cfo", 3.6));
+    const share = (xs: Any[]) => xs.filter((k) => k.side === "dunkel").length / xs.length;
+    expect(share(picks)).toBeGreaterThan(share(ref) + 0.15);
+  });
+
+  it("trennt eingespielte Teams und Reibung spürbar, ohne die passende Besetzung zu überholen", () => {
+    const N = 250;
+    const avg = (t: Any, sides: string[]) => mean(Array.from({ length: N }, (_, i) => playCase((i + 1) * 7717, t, true, sides)));
+    const same = ["hell", "hell", "hell"], mixed = ["hell", "dunkel", "hell"];
+    const fitOn = avg(specialists(true), same), fitOff = avg(specialists(true), mixed);
+    const missOn = avg(specialists(false), same);
+    // Kalibriert auf rund 0,25x beim passgenauen Team
+    expect(fitOn - fitOff).toBeGreaterThan(0.15);
+    expect(fitOn - fitOff).toBeLessThan(0.4);
+    expect(fitOff).toBeGreaterThan(missOn);
   });
 });

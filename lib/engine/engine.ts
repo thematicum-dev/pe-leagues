@@ -752,7 +752,60 @@ export const COMPETENCIES = {
 // Welche Kompetenz der Fachposition ein Programm braucht
 export const PROGRAM_COMP = { opex: 0, nwc: 1, erp: 2, ai: 2, pen: 0, exp: 1, ma: 2 };
 export const compOf = (s, i) => (s.skill > 0 ? (s.prof ? s.prof[i] : s.skill) : 0);
-const leadOf = (c) => compOf(c.ceo, 2);
+
+/* ---------- Chemie im Top-Team ----------
+   Jede Führungskraft hat eine Haltung: hell (baut auf, hält Leute, spielt
+   fair mit Belegschaft und Lieferanten) oder dunkel (harte Hand, holt Kosten
+   und Cash heraus, nutzt jeden Hebel). Keine ist besser; es zählt allein, ob
+   das Team gleich tickt.
+   - Alle drei Positionen besetzt und gleich ausgerichtet: eingespielt, jede
+     Kompetenz wirkt um CHEM besser.
+   - Unter den Besetzten beide Haltungen: Reibung, jede Kompetenz wirkt um
+     CHEM schlechter.
+   - Sonst (eine Vakanz, der Rest gleich): neutral.
+   Die Verschiebung gilt in beiden Kanälen: für die Erfolgsquote der
+   Programme (effSkill), dort auch für die Leadership des CEO und damit für
+   den Deckel, und für die laufende Wirkung (mgmtFx), dort nach dem Deckel
+   MGMT_UP, damit sie bei den Stärken einer Spezialistin nicht verpufft. Die
+   Haltung hängt nicht am Archetyp: Gerade die Spezialistin, die der Case
+   braucht, passt oft nicht zum CEO.
+
+   Kalibriert über 250 Cases wie bei mgmtFx: Zwischen eingespieltem Team und
+   Reibung liegen 0,25–0,35x MOIC. Die passende Besetzung bleibt die erste
+   Frage (0,6x); passgenau mit Reibung liegt noch klar vor fehlbesetzt und
+   eingespielt.
+
+   Gilt nur für Beteiligungen mit `mx`. Eine besetzte Position ohne Haltung
+   (Karten der alten Shortlist) macht die Chemie neutral.                 */
+export const CHEM = 0.25;
+export const SIDES = { hell: "Hell", dunkel: "Dunkel" };
+export function chemOf(c): number {
+  if (!c || !c.mx || !c.ceo) return 0;
+  const on = ["ceo", "cfo", "r3"].map((k) => c[k]).filter((s) => s && s.skill > 0);
+  if (on.some((s) => !s.side)) return 0;
+  const sides = new Set(on.map((s) => s.side));
+  if (sides.size > 1) return -CHEM;
+  return on.length === 3 ? CHEM : 0;
+}
+export const CHEM_LABEL = (v: number) => (v > 0 ? "Eingespielt" : v < 0 ? "Reibung" : "Neutral");
+/* Haltung der Amtsinhaber beim Closing: aus dem Namen der Beteiligung und der
+   Position abgeleitet statt gewürfelt, damit das Closing keine Zufallszahl
+   mehr zieht und alle Wege (Mehrspieler, Übungsmodus) dieselbe Haltung
+   sehen. */
+export function sideOf(key: string): "hell" | "dunkel" {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  return (h >>> 0) % 2 ? "dunkel" : "hell";
+}
+export function seatSides(c, key: string) {
+  for (const k of ["ceo", "cfo", "r3"]) {
+    if (c[k] && c[k].skill > 0 && !c[k].side) c[k] = { ...c[k], side: sideOf(key + ":" + k) };
+  }
+  return c;
+}
+// Kompetenz einer Position im Team, mit Chemie
+const compIn = (c, seat, i) => compOf(c[seat], i) + (c[seat].skill > 0 ? chemOf(c) : 0);
+const leadOf = (c) => compIn(c, "ceo", 2);
 // Ein Co-Investor wirkt wie ein laufendes MEP: eigenes Geld im Unternehmen
 const mepOf = (c, seat) => !!(c.ltip || c.ceo.trait === "coinvest" || (seat !== "ceo" && c[seat].trait === "coinvest"));
 // Effektives Rating: gedeckelte Fachposition plus halber CEO, plus MEP-Bonus
@@ -763,8 +816,8 @@ const legacyEff = (c, seat) => cappedSkill(c, seat) + 0.5 * c.ceo.skill + (c.lti
    Programm (Anzeige, Altpfade) das bisherige effektive Rating.            */
 export const effSkill = (c, seat, id?: string) => {
   if (!id || PROGRAM_COMP[id] == null || seat === "ceo") return legacyEff(c, seat);
-  const fam = compOf(c.ceo, INITS.plat.some((k) => k.id === id) ? 0 : 1);
-  const own = Math.min(compOf(c[seat], PROGRAM_COMP[id]), leadOf(c) + 1.5);
+  const fam = compIn(c, "ceo", INITS.plat.some((k) => k.id === id) ? 0 : 1);
+  const own = Math.min(compIn(c, seat, PROGRAM_COMP[id]), leadOf(c) + 1.5);
   return own + 0.5 * fam + (mepOf(c, seat) ? 0.5 : 0)
     + (seat === "cfo" && c.sector === "Software" ? 0.5 * cappedSkill(c, "r3") : 0);
 };
@@ -798,15 +851,18 @@ export const MGMT_K = 1.5, MGMT_CENTER = 2.5, MGMT_UP = 1.5, MGMT_INTERIM = 2.0;
 const NO_FX = { margin: 0, growth: 0, nwc: 0, rate: 0, capex: 0 };
 export function mgmtFx(c) {
   if (!c || !c.mx || !c.ceo) return NO_FX;
-  const up = (s, i) => Math.min(MGMT_UP, (s.skill > 0 ? compOf(s, i) : MGMT_INTERIM) - MGMT_CENTER);
+  const chem = chemOf(c);
+  const up = (k, i) => c[k].skill > 0
+    ? Math.min(MGMT_UP, compOf(c[k], i) - MGMT_CENTER) + chem
+    : MGMT_INTERIM - MGMT_CENTER;
   const f = (id) => fitOf(id, c);
   const growthNeed = clamp((SECTORS[c.sector].g + (c.drift || 0)) / 6, 0.2, 1.6);
   return {
-    margin: MGMT_K * (0.45 * up(c.ceo, 0) * f("opex") + 0.35 * up(c.cfo, 0) * f("opex") + 0.30 * up(c.r3, 0) * f("pen")),
-    growth: MGMT_K * (0.55 * up(c.ceo, 1) * growthNeed + 0.55 * up(c.r3, 1) * f("exp")),
-    nwc: -MGMT_K * 1.0 * up(c.cfo, 1) * f("nwc"),
-    rate: -MGMT_K * 0.10 * up(c.cfo, 1),
-    capex: -MGMT_K * 0.25 * up(c.cfo, 2) * f("erp"),
+    margin: MGMT_K * (0.45 * up("ceo", 0) * f("opex") + 0.35 * up("cfo", 0) * f("opex") + 0.30 * up("r3", 0) * f("pen")),
+    growth: MGMT_K * (0.55 * up("ceo", 1) * growthNeed + 0.55 * up("r3", 1) * f("exp")),
+    nwc: -MGMT_K * 1.0 * up("cfo", 1) * f("nwc"),
+    rate: -MGMT_K * 0.10 * up("cfo", 1),
+    capex: -MGMT_K * 0.25 * up("cfo", 2) * f("erp"),
   };
 }
 /* Risiko hängt nicht an der Dimension, sondern daran, ob eine Maßnahme im
@@ -1293,11 +1349,12 @@ export const AI_PLAN = {
 export function makeSeats(rng: Rng, d) {
   const r = (lo, hi) => lo + Math.floor(rng.rnd() * (hi - lo + 1));
   const retiring = d.flag === "Nachfolgesituation";
-  return {
+  // Haltung der Amtsinhaber ohne Zufallszahl (siehe sideOf); wirkt erst mit `mx`
+  return seatSides({
     ceo: { skill: retiring ? r(3, 4) : r(1, 4), retiring },
     cfo: { skill: rng.rnd() < 0.35 ? 0 : r(1, 3) },
     r3: { skill: rng.rnd() < 0.45 ? 0 : r(1, 3) },
-  };
+  }, d.name);
 }
 /* Die Shortlist bis zum 19.10.2026: immer dieselben drei Schablonen mit einem
    Rating. Steht für die Wiederholung alter Halbjahre (EngineCompat.
@@ -1305,7 +1362,7 @@ export function makeSeats(rng: Rng, d) {
 export interface ManagerCard {
   label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string;
   arch?: string; name?: string; g?: "f" | "m"; age?: number; origin?: string; pic?: number; trait?: string;
-  prof?: number[]; shownProf?: number[];
+  prof?: number[]; shownProf?: number[]; side?: "hell" | "dunkel";
 }
 function legacyCandidates(rng: Rng): ManagerCard[] {
   const draw = (mid, sp) => clamp(mid + (rng.rnd() * 2 - 1) * sp, 1, 5);
@@ -1416,11 +1473,12 @@ function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
     : a.key === "insider" ? 50 + Math.floor(rng.rnd() * 13) : 40 + Math.floor(rng.rnd() * 19);
   const origin = a.key === "serial" ? (rng.rnd() < 0.7 ? "Private Equity" : "Konzern") : rng.pick(ORIGINS.slice(0, 4));
   const poach = (a.poach || 1) * (trait === "flight" ? 2 : trait === "bind" ? 0.5 : 1);
+  const side = rng.rnd() < 0.5 ? "hell" : "dunkel";
   return {
     label: a.n[g === "f" ? 1 : 0], arch: a.key,
     name: rng.pick(FIRST[g]) + " " + rng.pick(LAST), g, age, origin, pic: Math.floor(rng.rnd() * PORTRAITS),
     shown: Math.round(mean(shownProf) * 10) / 10, span: a.span, shownProf,
-    skill: mean(prof), prof, dev: !!a.dev, poach, trait, note: a.note,
+    skill: mean(prof), prof, dev: !!a.dev, poach, trait, side, note: a.note,
   };
 }
 
@@ -1453,7 +1511,7 @@ export function seatFromCand(cand, q?: number) {
   return {
     ...base, prof: [...cand.prof], shownProf: [...(cand.shownProf || cand.prof)],
     arch: cand.arch, label: cand.label, name: cand.name, g: cand.g, age: cand.age, origin: cand.origin,
-    pic: cand.pic, trait: cand.trait, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
+    pic: cand.pic, trait: cand.trait, side: cand.side, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
     ...(q != null ? { hiredQ: q } : {}),
   };
 }
@@ -1463,14 +1521,17 @@ export function seatFromCand(cand, q?: number) {
    Leverage-Fonds Cash und Integration, der Origination-Fonds das Wachstum.
    Gerechnet auf dem gezeigten Profil: Die KI sieht nicht mehr als der
    Spieler. Ohne Deck hätte die Kohorte nie eine Spezialistin im Team und
-   fiele zurück, sobald Profile laufend wirken.                           */
+   fiele zurück, sobald Profile laufend wirken. Mit Beteiligung achtet die
+   KI auch auf die Chemie: Eine Karte, die das Team eingespielt macht, zählt
+   mehr, eine, die Reibung bringt, weniger.                               */
 const BOT_PREF: Record<string, Record<string, number>> = {
   ops: { ceo: 0, cfo: 0, r3: 0 }, fin: { ceo: 2, cfo: 1, r3: 2 },
   sourcing: { ceo: 1, cfo: 0, r3: 1 }, all: { ceo: 2, cfo: 0, r3: 0 },
 };
-export function botDraft(rng: Rng, key: string, seat: string, amb: number) {
+export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
   const pref = (BOT_PREF[key] || BOT_PREF.all)[seat] ?? 0;
-  const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown;
+  const chem = (k: ManagerCard) => (c ? 1.2 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
+  const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown + chem(k);
   return makeCandidates(rng, seat).reduce((best, k) => (score(k) > score(best) ? k : best));
 }
 // Einarbeitung nach der Verpflichtung: Day-1-ready braucht keine

@@ -24,7 +24,7 @@ import {
   DEAL_YEARS,
   isCapped, markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, COMPETENCIES, MANAGER_TRAITS, seatFromCand,
+  signBonusOf, tvpiOf, x, COMPETENCIES, MANAGER_TRAITS, seatFromCand, chemOf, CHEM, CHEM_LABEL, SIDES,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -1236,7 +1236,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
                 className={("bseat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
                   + (k === "cfo" ? sp("hire") : "")).trim()}
                 disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
-                <div className="rn">{nm}</div>
+                <div className="rn">{nm}{sk > 0 && c[k].side ? ` · ${SIDES[c[k].side]}` : ""}</div>
                 <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
                 <div className="rn2">{searching ? (se.waiting ? "Shortlist" : "läuft") : sk <= 0 ? "vakant"
                   : isCapped(c, k) ? `wirkt ${cappedSkill(c, k).toFixed(1)}` : eur(payOf(k, sk, eb))}</div>
@@ -1244,6 +1244,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
             );
           })}
         </div>
+        {c.mx && <ChemLine c={c} />}
       </Section>
 
       <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
@@ -3208,6 +3209,27 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   );
 }
 
+/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen. */
+const signed = (v: number) => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(".", ",");
+function ChemLine({ c }) {
+  const v = chemOf(c);
+  const why = v > 0 ? `alle drei ${c.ceo.side === "hell" ? "hell" : "dunkel"}: jede Kompetenz wirkt ${signed(CHEM)}`
+    : v < 0 ? `helle und dunkle Charaktere im Team: jede Kompetenz wirkt ${signed(-CHEM)}`
+      : "erst mit drei gleich ausgerichteten Positionen eingespielt";
+  return (
+    <p className="hint" style={{ margin: "6px 16px 0", color: v < 0 ? "var(--ox)" : undefined }}>
+      Chemie: <b>{CHEM_LABEL(v)}</b> · {why}
+      <Info t="Chemie im Top-Team">
+        Jede Führungskraft ist hell (baut auf, hält Leute, spielt fair) oder dunkel (harte Hand, holt
+        Kosten und Cash heraus). Keine Haltung ist besser. Sind alle drei Positionen besetzt und gleich
+        ausgerichtet, wirkt jede Kompetenz um {CHEM.toFixed(2).replace(".", ",")} besser. Sitzen helle
+        und dunkle Charaktere zusammen, um {CHEM.toFixed(2).replace(".", ",")} schlechter. Mit einer
+        Vakanz und sonst gleicher Haltung ist die Chemie neutral.
+      </Info>
+    </p>
+  );
+}
+
 /* Kompetenzprofil einer Kandidatenkarte, solange es die Wisch-Ansicht noch
    nicht gibt: Person, die drei Kompetenzen als Assessment-Bandbreite, die
    Eigenschaft und die Erfolgsquote der Programme dieser Position — gerechnet
@@ -3231,6 +3253,12 @@ function CandProfile({ k, item, holding, precise }) {
         );
       })}
       {tr && <div style={{ marginTop: 4 }}><b>{tr.n}</b> · <span style={{ color: "var(--ink2)" }}>{tr.t}</span></div>}
+      {k.side && (
+        <div style={{ marginTop: 4 }}>
+          <b>Haltung {SIDES[k.side]}</b>
+          {sim && sim.mx && <span style={{ color: chemOf(sim) < 0 ? "var(--ox)" : "var(--ink2)" }}> · mit diesem Team: {CHEM_LABEL(chemOf(sim))}</span>}
+        </div>
+      )}
       {sim && progs.length > 0 && (
         <div style={{ marginTop: 4, color: "var(--ink2)" }}>
           {progs.map((p) => {
@@ -3298,6 +3326,7 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
           Das wahre Rating steht erst beim Antritt fest. Eine Fachposition wirkt höchstens bis CEO-Rating +1,5 —
           ein A-Player unter einem schwachen CEO verpufft. Einen Amtsinhaber zu ersetzen kostet zwölf
           Monatsgehälter Abfindung, danach ein Halbjahr Einarbeitung mit gebremstem Tempo.
+          {holding && holding.mx ? " Die Haltung entscheidet über die Chemie: Drei gleich ausgerichtete Positionen sind eingespielt, helle und dunkle Charaktere im selben Team bringen Reibung." : ""}
         </div>
         <div style={{ margin: "0 16px 28px" }}>
           <button className="ox" style={{ width: "100%" }} onClick={() => reject(item)}>

@@ -319,7 +319,7 @@ export default function PeLeagues() {
         if (seat && rng.rnd() < 0.8) {
           const eb = ebitdaOf(c);
           // Dasselbe Deck und dieselbe Draft-Regel wie im Mehrspielerpfad
-          const cand = botDraft(rng, k, seat, amb);
+          const cand = botDraft(rng, k, seat, amb, c);
           const cost = retainerOf(seat, eb) + signBonusOf(seat, cand.skill, eb)
             + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
           c.netDebt += cost; bookOff(c, "mgmt", cost);

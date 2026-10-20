@@ -680,7 +680,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
            und Integration, der Origination-Fonds das Wachstum. Ohne Deck
            hätte die Kohorte nie eine Spezialistin im Team und fiele gegen den
            Spieler zurück, sobald Profile laufend wirken.                   */
-        const cand: Any = botDraft(rng, k, seat, amb);
+        const cand: Any = botDraft(rng, k, seat, amb, c);
         const cost = retainerOf(seat, eb) + signBonusOf(seat, cand.skill, eb)
           + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
         c.netDebt += cost; bookOff(c, "mgmt", cost);
@@ -770,7 +770,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         label: cd.label, shown: cd.shown, span: cd.span, skill: cd.skill, dev: cd.dev, poach: cd.poach, note: cd.note,
         ...(cd.prof ? {
           arch: cd.arch, name: cd.name, g: cd.g, age: cd.age, origin: cd.origin, pic: cd.pic, trait: cd.trait,
-          prof: cd.prof, shownProf: cd.shownProf,
+          prof: cd.prof, shownProf: cd.shownProf, side: cd.side,
         } : {}),
       })),
     }];
