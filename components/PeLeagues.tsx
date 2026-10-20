@@ -606,7 +606,7 @@ export default function PeLeagues() {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(h))
           + (had ? severanceOf(item.seat, h[item.seat].skill, ebitdaOf(h)) : 0)),
-        [item.seat]: seatFromCand(cand, quarter),
+        [item.seat]: seatFromCand(cand, decQ),   // wie runQuarter: das Halbjahr der Entscheidung
         searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: onboardOf(cand),
       }),
     }));
@@ -1240,7 +1240,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
       )}
       {initPick && me.holdings.find((h) => h.uid === initPick.uid) && (
         <InitPicker c={me.holdings.find((h) => h.uid === initPick.uid)} dim={initPick.dim} market={market}
-          investable={investableOf(me, quarter)}
+          investable={investableOf(me, quarter)} quarter={quarter}
           start={(id, mandate) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, mandate); setInitPick(null); }}
           close={() => setInitPick(null)} />
       )}

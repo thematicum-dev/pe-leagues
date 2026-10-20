@@ -1408,7 +1408,7 @@ export const MANAGER_ARCHES: Record<string, ManagerArch[]> = {
     { key: "treasury", n: ["Treasury-CFO", "Treasury-CFO"], p: [2.8, 4.6, 1.6], span: 0.5,
       note: "Working Capital, Banken, Covenants. Setzt Liquidität frei, wo andere sie suchen." },
     { key: "standard", n: ["Standard-Setter", "Standard-Setterin"], p: [2.2, 2.2, 4.6], span: 0.5,
-      note: "Baut Reporting, Controlling und Systeme auf. ERP und KI sind ihr Terrain." },
+      note: "Baut Reporting, Controlling und Systeme auf. ERP und KI sind das eigene Terrain." },
     { key: "insider", n: ["Branchen-Insider", "Branchen-Insiderin"], p: [2.6, 2.5, 2.4], span: 0.5,
       note: "Kennt jeden Lieferanten im Umkreis. Marktgehalt, keine Überraschungen." },
     { key: "serial", n: ["PE-erfahrener CFO", "PE-erfahrene CFO"], p: [4.5, 4.6, 4.5], span: 0.5, poach: 2,
@@ -1418,9 +1418,9 @@ export const MANAGER_ARCHES: Record<string, ManagerArch[]> = {
   ],
   r3: [
     { key: "commercial", n: ["Commercial Leader", "Commercial Leader"], p: [4.6, 2.6, 1.8], span: 0.5,
-      note: "Pricing, Key Accounts, Cross-Selling. Kurzer Payback, kein Freund großer Sprünge." },
+      note: "Pricing, Key Accounts, Cross-Selling. Kurzer Payback, hält wenig von großen Sprüngen." },
     { key: "builder", n: ["Market Builder", "Market Builder"], p: [2.4, 4.6, 2.0], span: 0.5,
-      note: "Hat zwei Auslandsmärkte aufgebaut. Go-to-Market ist ihr Handwerk, Integration nicht." },
+      note: "Hat zwei Auslandsmärkte aufgebaut. Go-to-Market ist das eigene Handwerk, Integration nicht." },
     { key: "integration", n: ["Integration Lead", "Integration Lead"], p: [2.0, 2.4, 4.6], span: 0.5,
       note: "Hat sechs Zukäufe integriert. Senkt das Scheiterungsrisiko von Add-ons deutlich." },
     { key: "insider", n: ["Branchen-Insider", "Branchen-Insiderin"], p: [2.6, 2.5, 2.4], span: 0.5,
@@ -1515,6 +1515,36 @@ export function seatFromCand(cand, q?: number) {
     ...(q != null ? { hiredQ: q } : {}),
   };
 }
+/* ---------- Probezeit ----------
+   Das wahre Profil steht mit dem Antritt fest und rechnet in der Engine vom
+   ersten Halbjahr an. Zu sehen ist es erst nach der Probezeit: bis zum
+   Halbjahr nach der Verpflichtung (hiredQ + PROBATION) zeigt die Oberfläche
+   das Profil aus dem Assessment, danach das wahre. `q` und `hiredQ` sind
+   Halbjahre der Entscheidung (halfYear in runQuarter, quarter + 1 in der
+   Oberfläche). So bleibt eine
+   Fehlbesetzung eine Weile unentdeckt, und Referenzen (Analyse) lohnen sich.
+   Reine Ansicht: viewOf() ändert nichts an der Rechnung.                  */
+export const PROBATION = 1;
+const meanOf = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+export const inProbation = (s, q) => !!(s && s.skill > 0 && s.shownProf && s.hiredQ != null && q != null
+  && q <= s.hiredQ + PROBATION);
+// Das Halbjahr, in dem die Probezeit gerade endet und das wahre Profil aufgedeckt wird
+export const revealedNow = (s, q) => !!(s && s.skill > 0 && s.shownProf && s.hiredQ != null && q != null
+  && q === s.hiredQ + PROBATION + 1);
+export function viewOf(c, q) {
+  if (!c || q == null) return c;
+  const open = ["ceo", "cfo", "r3"].filter((k) => inProbation(c[k], q));
+  if (!open.length) return c;
+  const v = { ...c };
+  for (const k of open) v[k] = { ...c[k], prof: [...c[k].shownProf], skill: meanOf(c[k].shownProf) };
+  return v;
+}
+/* Seltenheit nach Assessment-Score, in derselben Rahmensprache wie die
+   Zielunternehmen: Bronze unter 2,5, Silber bis 3,5, Gold bis 4,5, darüber
+   Legende. */
+export const TIERS = { bronze: "Bronze", silber: "Silber", gold: "Gold", legende: "Legende" };
+export const tierOf = (score: number) => (score < 2.5 ? "bronze" : score < 3.5 ? "silber" : score < 4.5 ? "gold" : "legende");
+
 /* Wie ein KI-Fonds aus dem Deck draftet: Nähe des Assessment-Scores zu
    seinem Anspruch (teurer als nötig ist auch schlecht) plus die Kompetenz,
    auf die sein Stil setzt — der operative Fonds die Kostenseite, der

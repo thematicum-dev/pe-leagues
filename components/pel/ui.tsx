@@ -14,7 +14,7 @@ import {
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, 
-  cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCostOf, dealMoic,
+  cagrOf, cagrPrem, ceilingFactor, clamp, ddCostOf, dealMoic,
   dealMultiple, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eur,
   evOf, exitNetOf, fairOf, fitLabel, healthOf, hj,
   impliedMoM, initGain, initRuns, initSuccess, initsOf, investableOf, 
@@ -22,9 +22,9 @@ import {
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge, tailEndOf, initDurationOf,
   DEAL_YEARS,
-  isCapped, markMultiple, navValueOf, 
+  markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, COMPETENCIES, MANAGER_TRAITS, seatFromCand, chemOf, CHEM, CHEM_LABEL, SIDES,
+  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, viewOf,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -32,6 +32,7 @@ import {
 } from "./battle";
 import { haptic } from "./haptics";
 import { BRIEFING_CSS } from "./briefing";
+import { DRAFT_CSS, Draft, SeatCard, seatName } from "./draft";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -596,7 +597,7 @@ export const CSS = `
 .pel .kpil{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);}
 .pel .kpiv{font-size:16px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .kpiv.teal{color:var(--teal);} .pel .kpiv.ox{color:var(--ox);}
-` + BATTLE_CSS + BRIEFING_CSS;
+` + BATTLE_CSS + BRIEFING_CSS + DRAFT_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
@@ -1083,6 +1084,9 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const grow = (v, dig = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dig).replace(".", ",")}`;
   const cagr = cagrOf(c);
   const seatDefs = [["ceo", "CEO"], ["cfo", "CFO"], ["r3", ROLE3[c.sector].n]];
+  /* Während der Probezeit zeigt die Führung das Assessment, nicht das wahre
+     Profil (viewOf). Gezählt wird im Halbjahr der Entscheidung, quarter + 1. */
+  const seatView = viewOf(c, quarter + 1);
   /* Dieselbe Identität wie im Dealflow: Ein Zielobjekt, das man kauft, behält
      Farbe, Monogramm und Bild — die Karte wechselt den Stapel, nicht das
      Gesicht. */
@@ -1229,18 +1233,11 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       <Section title="Führung" right={`${(c.done || []).length} Programme`} flush>
         <div className="bseats">
           {seatDefs.map(([k, nm]) => {
-            const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
-            const searching = !!se;
+            const se = (c.searches || []).find((z) => z.seat === k);
             return (
-              <button key={k}
-                className={("bseat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
-                  + (k === "cfo" ? sp("hire") : "")).trim()}
-                disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
-                <div className="rn">{nm}{sk > 0 && c[k].side ? ` · ${SIDES[c[k].side]}` : ""}</div>
-                <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
-                <div className="rn2">{searching ? (se.waiting ? "Shortlist" : "läuft") : sk <= 0 ? "vakant"
-                  : isCapped(c, k) ? `wirkt ${cappedSkill(c, k).toFixed(1)}` : eur(payOf(k, sk, eb))}</div>
-              </button>
+              <SeatCard key={k} c={c} view={seatView} seat={k} nm={nm} quarter={quarter} eb={eb}
+                searching={!!se} se={se} className={k === "cfo" ? sp("hire") : ""}
+                onClick={() => { haptic(8); act.search(k); }} />
             );
           })}
         </div>
@@ -2448,6 +2445,10 @@ export function Shelf({ holdings, market, dryPowder, quarter, onPick }) {
               </span>
               <span className="bshelfmeta">
                 {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ · {SECLABEL[c.sector]}</span>
+                {/* Teamstufe (chemOf): nur wo sie wirkt, also ab dem Closing mit mx */}
+                {c.mx && chemOf(c) !== 0 && (
+                  <span style={{ color: chemOf(c) > 0 ? "var(--teal)" : "var(--ox)" }}> · Team: {CHEM_LABEL(chemOf(c))}</span>
+                )}
               </span>
             </span>
             <svg viewBox="0 0 56 24" className="bshelfspark" role="img"
@@ -2935,7 +2936,11 @@ export function failBreakdown(chk) {
   return { teile: teile.filter((t) => t.pp !== 0), geklemmt };
 }
 
-export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
+export function InitPicker({ c: real, dim, market, start, close, investable = 0, quarter = null }) {
+  /* Während der Probezeit rechnet die Anzeige mit dem Assessment der neuen
+     Führungskraft (viewOf): Das wahre Profil wirkt schon, ist aber noch nicht
+     zu sehen. Gestartet wird über start() und damit gegen den wahren Stand. */
+  const c = viewOf(real, quarter == null ? null : quarter + 1);
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   const eb = ebitdaOf(c);
@@ -3230,56 +3235,17 @@ function ChemLine({ c }) {
   );
 }
 
-/* Kompetenzprofil einer Kandidatenkarte, solange es die Wisch-Ansicht noch
-   nicht gibt: Person, die drei Kompetenzen als Assessment-Bandbreite, die
-   Eigenschaft und die Erfolgsquote der Programme dieser Position — gerechnet
-   wie buildInit(), mit dem gezeigten Profil statt des wahren. */
-function CandProfile({ k, item, holding, precise }) {
-  const span = precise ? 0.5 : k.span;
-  const names = COMPETENCIES[item.seat];
-  const tr = MANAGER_TRAITS[k.trait];
-  const sim = holding ? { ...holding, [item.seat]: { ...seatFromCand(k), prof: k.shownProf, skill: k.shown }, onboard: 0 } : null;
-  const progs = item.seat === "ceo" ? [] : INITS[item.seat === "cfo" ? "plat" : "acc"].filter((p) => p.id !== "ma");
-  return (
-    <div className="pad" style={{ paddingTop: 6, fontSize: 12.5, lineHeight: 1.5 }}>
-      <div style={{ color: "var(--ink2)" }}>{k.name} · {k.age} · Herkunft {k.origin}</div>
-      {names.map((n, i) => {
-        const v = k.shownProf[i];
-        return (
-          <div key={n} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <span>{n}</span>
-            <span className="mono">{Math.max(1, v - span).toFixed(1)}–{Math.min(5, v + span).toFixed(1)}</span>
-          </div>
-        );
-      })}
-      {tr && <div style={{ marginTop: 4 }}><b>{tr.n}</b> · <span style={{ color: "var(--ink2)" }}>{tr.t}</span></div>}
-      {k.side && (
-        <div style={{ marginTop: 4 }}>
-          <b>Haltung {SIDES[k.side]}</b>
-          {sim && sim.mx && <span style={{ color: chemOf(sim) < 0 ? "var(--ox)" : "var(--ink2)" }}> · mit diesem Team: {CHEM_LABEL(chemOf(sim))}</span>}
-        </div>
-      )}
-      {sim && progs.length > 0 && (
-        <div style={{ marginTop: 4, color: "var(--ink2)" }}>
-          {progs.map((p) => {
-            const E = effSkill(sim, item.seat, p.id);
-            const q = clamp(initSuccess(E, p.cls) + (p.sm || 0) + (k.trait === "risk" && p.cls === "hard" ? 0.05 : 0), 0.1, 0.97);
-            return <span key={p.id} style={{ marginRight: 10 }}>{p.n.split(" ")[0]} {Math.round(q * 100)} %</span>;
-          })}
-        </div>
-      )}
-      {item.seat === "ceo" && (
-        <div style={{ marginTop: 4, color: "var(--ink2)" }}>
-          Wirkt halb auf alle Performance-Programme (Operational Excellence) und alle Growth-Programme (Growth); Leadership deckelt die Fachpositionen.
-        </div>
-      )}
-    </div>
-  );
-}
-
+/* Die Shortlist. Ein Deck mit Kompetenzprofilen (seit dem 19.10.2026)
+   öffnet die Draft-Ansicht; eine Shortlist aus der Zeit davor, die in einer
+   laufenden Partie noch offen ist, bleibt bei ihrer Tabelle.            */
 export function Shortlist({ item, holding, analysis, hire, reject }) {
+  if (item.cands.some((k) => k.prof)) {
+    // Eigener Schlüssel je Shortlist: Die nächste beginnt wieder bei der ersten Karte, Vorderseite oben
+    const key = `${item.uid || item.holdingUid}:${item.seat}:${item.cands.map((k) => k.name).join("|")}`;
+    return <Draft key={key} item={item} holding={holding} analysis={analysis} hire={hire} reject={reject} />;
+  }
   const eb = holding ? ebitdaOf(holding) : 0;
-  const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[holding ? holding.sector : "Software"].n;
+  const nm = seatName(item.seat, holding ? holding.sector : undefined);
   const precise = analysis >= 4;
   const ceoSk = holding ? holding.ceo.skill : 2;
   const cap = item.seat === "ceo" ? 5 : ceoSk + 1.5;
@@ -3299,18 +3265,17 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
               <div className="pad" style={{ paddingTop: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: 15, fontWeight: 600 }}>{k.label}</span>
-                  <span className="mono" style={{ fontSize: 17 }}>{k.prof ? "Assessment" : "Rating"} {lo.toFixed(1)}–{hi.toFixed(1)}</span>
+                  <span className="mono" style={{ fontSize: 17 }}>Rating {lo.toFixed(1)}–{hi.toFixed(1)}</span>
                 </div>
               </div>
-              {k.prof && <CandProfile k={k} item={item} holding={holding} precise={precise} />}
               <table className="ledger fix"><tbody>
                 <tr><td className="lab">Signing Bonus</td><td>{eur(signBonusOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Gehalt p.a.</td><td>{eur(payOf(item.seat, k.shown, eb))}</td></tr>
                 <tr><td className="lab">Effektives Rating unter diesem CEO</td>
                   <td style={{ color: cap < k.shown ? "var(--ox)" : "var(--ink)" }}>
                     {Math.min(k.shown, cap).toFixed(1)}{cap < k.shown ? ` — auf ${cap.toFixed(1)} gedeckelt` : ""}</td></tr>
-                {!k.prof && <tr><td className="lab">Erfolgsquote rel. / transf. / markt.</td>
-                  <td>{["rel", "tr", "hard"].map((cl) => Math.round(initSuccess(Math.min(k.shown, cap) + 0.5 * ceoSk, cl) * 100)).join(" / ")} %</td></tr>}
+                <tr><td className="lab">Erfolgsquote rel. / transf. / markt.</td>
+                  <td>{["rel", "tr", "hard"].map((cl) => Math.round(initSuccess(Math.min(k.shown, cap) + 0.5 * ceoSk, cl) * 100)).join(" / ")} %</td></tr>
                 <tr><td className="lab">Entwicklungspotenzial</td><td>{k.dev ? "+0,25 je Halbjahr bis 4,5" : "stabil"}</td></tr>
                 <tr><td className="lab">Retention-Risiko</td>
                   <td>{(POACH * k.shown * k.shown * k.poach * 100).toFixed(1)} % je HJ</td></tr>
@@ -3326,7 +3291,6 @@ export function Shortlist({ item, holding, analysis, hire, reject }) {
           Das wahre Rating steht erst beim Antritt fest. Eine Fachposition wirkt höchstens bis CEO-Rating +1,5 —
           ein A-Player unter einem schwachen CEO verpufft. Einen Amtsinhaber zu ersetzen kostet zwölf
           Monatsgehälter Abfindung, danach ein Halbjahr Einarbeitung mit gebremstem Tempo.
-          {holding && holding.mx ? " Die Haltung entscheidet über die Chemie: Drei gleich ausgerichtete Positionen sind eingespielt, helle und dunkle Charaktere im selben Team bringen Reibung." : ""}
         </div>
         <div style={{ margin: "0 16px 28px" }}>
           <button className="ox" style={{ width: "100%" }} onClick={() => reject(item)}>

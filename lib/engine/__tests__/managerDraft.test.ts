@@ -4,7 +4,7 @@ import {
   ENTRY_FEE, COV_FLOOR, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
-  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
+  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, inProbation, revealedNow, viewOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -350,5 +350,33 @@ describe("Chemie", () => {
     expect(fitOn - fitOff).toBeGreaterThan(0.15);
     expect(fitOn - fitOff).toBeLessThan(0.4);
     expect(fitOff).toBeGreaterThan(missOn);
+  });
+});
+
+/* Probezeit und Seltenheit: reine Ansicht, die Rechnung bleibt beim wahren Profil. */
+describe("Probezeit", () => {
+  const card: Any = { ...makeCandidates(createRng(3), "cfo")[0] };
+  const seat: Any = seatFromCand(card, 6);
+
+  it("zeigt bis zum Halbjahr nach der Verpflichtung das Assessment und deckt danach auf", () => {
+    expect(inProbation(seat, 6)).toBe(true);
+    expect(inProbation(seat, 7)).toBe(true);
+    expect(inProbation(seat, 8)).toBe(false);
+    expect(revealedNow(seat, 8)).toBe(true);
+    expect(revealedNow(seat, 9)).toBe(false);
+  });
+
+  it("tauscht in der Ansicht das wahre gegen das gezeigte Profil, ohne die Beteiligung zu ändern", () => {
+    const c = holding({ mx: true, cfo: seat });
+    const v = viewOf(c, 7);
+    expect(v.cfo.prof).toEqual(seat.shownProf);
+    expect(c.cfo.prof).toEqual(seat.prof);
+    expect(viewOf(c, 8)).toBe(c);
+    // Amtsinhaber und alte Karten ohne Profil haben keine Probezeit
+    expect(viewOf(holding(), 7)).toEqual(holding());
+  });
+
+  it("stuft nach Assessment-Score in Bronze, Silber, Gold und Legende ein", () => {
+    expect([2.4, 2.5, 3.49, 3.5, 4.49, 4.5].map(tierOf)).toEqual(["bronze", "silber", "silber", "gold", "gold", "legende"]);
   });
 });

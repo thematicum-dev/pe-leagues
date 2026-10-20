@@ -523,7 +523,7 @@ function GuidedRun({ dark, setDark, back }) {
     patch({
       ...chargeOff(c, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(c))
         + (had ? severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)) : 0)),
-      [item.seat]: seatFromCand(cand, q), onboard: onboardOf(cand),
+      [item.seat]: seatFromCand(cand, decQ), onboard: onboardOf(cand),
       searches: (c.searches || []).filter((se) => se.seat !== item.seat),
     });
     setSl((p) => p.slice(1));
@@ -1125,7 +1125,7 @@ function GuidedRun({ dark, setDark, back }) {
 
       {sheet && <Sheet sheet={sheet} close={() => setSheet(null)} onConfirm={() => setSheet(null)} />}
       {initPick && (
-        <InitPicker c={c} dim={initPick.dim} market={market}
+        <InitPicker c={c} dim={initPick.dim} market={market} quarter={q}
           start={(id, mandate) => { startInit(initPick.dim, id, mandate); setInitPick(null); }} close={() => setInitPick(null)} />
       )}
       {!sheet && !initPick && sl.length > 0 && (
