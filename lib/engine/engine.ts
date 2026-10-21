@@ -1479,31 +1479,56 @@ const LAST = ["Albers", "Okafor", "Hoffmann", "Brandl", "Wieland", "Keller", "Ri
    21 Personen, jede in zwei Fassungen: vor hellem Büro für helle Charaktere
    und vor nächtlicher Skyline für dunkle (public/manager/<id>-hell.webp,
    <id>-dunkel.webp, 720 × 1080). IDs und Alter wie im Bildbriefing;
-   f11 ist eine zweite Person im Stil von f05 und trägt deren Alter. Die
-   Fachfunktionen haben noch keinen eigenen Satz und nehmen diesen.       */
+   f11 ist eine zweite Person im Stil von f05 und trägt deren Alter. Für
+   CEO und CFO; die Fachfunktion hat je Sektor einen eigenen Satz
+   (SPEC_PORTRAITS).                                                       */
 export const PORTRAIT_POOL: Record<"f" | "m", [string, number][]> = {
   f: [["f01", 31], ["f02", 34], ["f03", 36], ["f04", 30], ["f05", 38], ["f06", 42], ["f07", 33], ["f08", 40],
     ["f09", 35], ["f10", 44], ["f11", 38]],
   m: [["m01", 30], ["m02", 33], ["m03", 35], ["m04", 31], ["m05", 38], ["m06", 42], ["m07", 34], ["m08", 40],
     ["m09", 36], ["m10", 44]],
 };
+/* Die Fachfunktion trägt das Gesicht ihrer Branche: CTO im Maschinenbau vor
+   der Fertigung, CTO Medizintechnik im Laborkittel, Head of BD im Anzug.
+   Je Sektor vier Frauen und vier Männer, IDs `<präfix>-f1` … `-m4` und Alter
+   wie im Bildbriefing (manager-raw/fachfunktionen/README.md). */
+const SPEC_PORTRAITS: Record<string, { pre: string; f: number[]; m: number[] }> = {
+  Industrials: { pre: "ind", f: [34, 39, 42, 31], m: [36, 44, 33, 40] },
+  Healthcare:  { pre: "hc",  f: [37, 32, 44, 35], m: [41, 34, 45, 30] },
+  Software:    { pre: "sw",  f: [31, 36, 40, 33], m: [32, 38, 35, 43] },
+  Services:    { pre: "bd",  f: [35, 41, 32, 44], m: [37, 42, 31, 45] },
+  Consumer:    { pre: "cmo", f: [34, 38, 30, 43], m: [33, 39, 44, 31] },
+};
+/* Porträts, die es nur in einer Fassung gibt. Sie kommen nur auf Karten
+   dieser Farbe. */
+const PORTRAIT_ONLY: Record<string, "hell" | "dunkel"> = { "ind-f3": "dunkel" };
+const fitsSide = (id: string, side?: string) => !side || !PORTRAIT_ONLY[id] || PORTRAIT_ONLY[id] === side;
+/* Der Pool zu Geschlecht und Position: die Fachfunktion (r3) aus dem Satz
+   ihres Sektors, CEO und CFO aus dem allgemeinen. */
+export function portraitPool(g, seat?: string, sector?: string, side?: string): [string, number][] {
+  const k = g === "f" ? "f" : "m";
+  const sp = seat === "r3" && sector ? SPEC_PORTRAITS[sector] : null;
+  const pool: [string, number][] = sp ? sp[k].map((a, i) => [`${sp.pre}-${k}${i + 1}`, a]) : PORTRAIT_POOL[k];
+  return pool.filter(([id]) => fitsSide(id, side));
+}
 /* Ein Porträt zu Geschlecht und Wunschalter: unter den drei mit dem
    nächsten Alter, `r` in [0, 1) wählt eines davon. Das Alter steht nicht
    auf der Karte; es sorgt nur dafür, dass ein Step-up eher ein junges
    Gesicht bekommt. Die Karte trägt das Alter des Porträts. */
-export function pickPortrait(g, age: number, r: number) {
-  const pool = [...(PORTRAIT_POOL[g === "f" ? "f" : "m"])]
+export function pickPortrait(g, age: number, r: number, seat?: string, sector?: string, side?: string) {
+  const pool = [...portraitPool(g, seat, sector, side)]
     .sort((a, b) => Math.abs(a[1] - age) - Math.abs(b[1] - age) || (a[0] < b[0] ? -1 : 1));
   const [id, a] = pool[Math.min(pool.length - 1, Math.floor(r * 3))];
   return { id, age: a };
 }
-export const portraitUrl = (id: string, side?: string) => `/manager/${id}-${side === "hell" ? "hell" : "dunkel"}.webp`;
+export const portraitUrl = (id: string, side?: string) =>
+  `/manager/${id}-${(PORTRAIT_ONLY[id] || side) === "hell" ? "hell" : "dunkel"}.webp`;
 
 /* Eine Kandidatenkarte. Die gezeigten Kompetenzen streuen um den Archetyp,
    die wahren um die gezeigten — so weit, wie die Assessment-Bandbreite
    reicht. Mit der Verpflichtung steht das wahre Profil auf der Karte.   */
 interface ManagerArch { key: string; n: string[]; p: number[]; span: number; note: string; dev?: boolean; poach?: number }
-function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
+function managerCard(rng: Rng, seat, a: ManagerArch, sector?: string): ManagerCard {
   const g: "f" | "m" = rng.rnd() < 0.5 ? "f" : "m";
   const pool = Object.entries(MANAGER_TRAITS).filter(([, t]) => !t.seat || t.seat === seat);
   let r = rng.rnd() * pool.reduce((sum, [, t]) => sum + t.w, 0);
@@ -1523,7 +1548,7 @@ function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
   // Dieselbe Reihenfolge der Zufallszahlen wie vorher: Name, dann Porträt
   const name = rng.pick(FIRST[g]) + " " + rng.pick(LAST);
   const pic = rng.rnd();
-  const portrait = pickPortrait(g, age, pic);
+  const portrait = pickPortrait(g, age, pic, seat, sector, side);
   return {
     label: a.n[g === "f" ? 1 : 0], arch: a.key,
     name, g, age: portrait.age, origin, pic: Math.floor(pic * 16), portrait: portrait.id,
@@ -1536,7 +1561,7 @@ function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
    immer mindestens ein Profil für den größten Bedarf des Cases auf dem
    Tisch —, dazu zwei aus Branchen-Insider, Serial PE und Step-up. Serial PE
    ist die seltene Karte. Reihenfolge gemischt.                            */
-export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}): ManagerCard[] {
+export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}, sector?: string): ManagerCard[] {
   if (compat.legacyCandidates) return legacyCandidates(rng);
   const A = MANAGER_ARCHES[seat] || MANAGER_ARCHES.cfo;
   const spec = A.slice(0, 3);
@@ -1548,7 +1573,22 @@ export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}
     const j = Math.floor(rng.rnd() * (i + 1));
     [pick[i], pick[j]] = [pick[j], pick[i]];
   }
-  return pick.map((a) => managerCard(rng, seat, a));
+  // Der Sektor wählt nur die Porträts der Fachfunktion, er zieht keine Zufallszahl
+  const cards = pick.map((a) => managerCard(rng, seat, a, sector));
+  /* Ein Gesicht je Deck: Trägt eine Karte ein Porträt, das schon im Deck
+     liegt, bekommt sie das freie mit dem nächsten Alter. Die Fachfunktion
+     hat nur vier Gesichter je Geschlecht, ohne das läge dieselbe Person mit
+     zwei Namen nebeneinander. Ohne Zufallszahl, die Folge bleibt gleich. */
+  const used = new Set<string>();
+  for (const k of cards) {
+    if (used.has(k.portrait!)) {
+      const alt = portraitPool(k.g, seat, sector, k.side).filter(([id]) => !used.has(id))
+        .sort((a, b) => Math.abs(a[1] - k.age!) - Math.abs(b[1] - k.age!) || (a[0] < b[0] ? -1 : 1))[0];
+      if (alt) { k.portrait = alt[0]; k.age = alt[1]; }
+    }
+    used.add(k.portrait!);
+  }
+  return cards;
 }
 
 /* Aus einer Kandidatenkarte wird ein Amtsinhaber. Eine Stelle für alle
@@ -1590,7 +1630,7 @@ export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
   const pref = (BOT_PREF[key] || BOT_PREF.all)[seat] ?? 0;
   const chem = (k: ManagerCard) => (c ? 1.2 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
   const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown + chem(k);
-  return makeCandidates(rng, seat).reduce((best, k) => (score(k) > score(best) ? k : best));
+  return makeCandidates(rng, seat, {}, c?.sector).reduce((best, k) => (score(k) > score(best) ? k : best));
 }
 /* Ersatz suchen: Die bisherige Person geht mit dem Suchmandat. Gibt die
    Abfindung zurück (zwölf Monatsgehälter) und lässt die Position vakant; bis
@@ -2276,7 +2316,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
            Periodenschluss eine neue gezogen, solange nicht entschieden war —
            man konnte die Kandidatenratings beliebig oft neu würfeln, indem man
            die Entscheidung vor sich her schob.                                */
-        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng, se.seat, compat) });
+        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng, se.seat, compat, c.sector) });
         still.push({ ...se, waiting: true });
       }
       else c[se.seat] = { skill: Math.max(c[se.seat].skill, 3) };

@@ -9,7 +9,7 @@ import {
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
   PORTRAIT_POOL, pickPortrait, portraitUrl, teamScoreOf,
-  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
+  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, tierOf, portraitPool, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -475,6 +475,43 @@ describe("Porträts", () => {
     // Genug Abwechslung: jedes Porträt kommt vor
     const seen = new Set(cards.map((k) => k.portrait));
     expect(seen.size).toBe(PORTRAIT_POOL.f.length + PORTRAIT_POOL.m.length);
+  });
+
+  const SECTORS5 = ["Industrials", "Healthcare", "Software", "Services", "Consumer"];
+  it("hat für jede Fachfunktion ihre Fassungen in public/manager, ind-f3 nur dunkel", () => {
+    for (const sec of SECTORS5) for (const g of ["f", "m"]) for (const side of ["hell", "dunkel"]) {
+      for (const [id] of portraitPool(g, "r3", sec, side)) {
+        expect(fs.existsSync(path.join(process.cwd(), "public", portraitUrl(id, side)))).toBe(true);
+      }
+    }
+    expect(portraitPool("f", "r3", "Industrials", "hell").map(([id]) => id)).not.toContain("ind-f3");
+    expect(portraitPool("f", "r3", "Industrials", "dunkel").map(([id]) => id)).toContain("ind-f3");
+  });
+
+  it("gibt der Fachfunktion das Gesicht ihres Sektors, ohne eine Zufallszahl mehr zu ziehen", () => {
+    const pre = { Industrials: "ind-", Healthcare: "hc-", Software: "sw-", Services: "bd-", Consumer: "cmo-" };
+    for (const sec of SECTORS5) {
+      const a = makeCandidates(createRng(5), "r3", {}, sec), b = makeCandidates(createRng(5), "r3");
+      a.forEach((k, i) => {
+        expect(k.portrait!.startsWith(pre[sec])).toBe(true);
+        // Alles außer Porträt und Alter wie ohne Sektor: dieselbe Folge der Zufallszahlen
+        expect({ ...k, portrait: null, age: null }).toEqual({ ...b[i], portrait: null, age: null });
+        if (k.side === "hell") expect(k.portrait).not.toBe("ind-f3");
+      });
+      const inc = incumbentPortrait("Testfirma", "r3", sec, "hell");
+      expect(inc.id.startsWith(pre[sec])).toBe(true);
+    }
+    // Ein Gesicht je Deck, solange der Pool reicht
+    const rng = createRng(8);
+    for (let n = 0; n < 200; n++) {
+      const deck = makeCandidates(rng, "r3", {}, SECTORS5[n % 5]);
+      for (const g of ["f", "m"]) {
+        const ids = deck.filter((k) => k.g === g).map((k) => k.portrait);
+        if (ids.length <= 3) expect(new Set(ids).size).toBe(ids.length);
+      }
+    }
+    // CEO und CFO bleiben beim allgemeinen Satz
+    expect(makeCandidates(createRng(5), "ceo", {}, "Software").every((k) => /^[fm]\d\d$/.test(k.portrait!))).toBe(true);
   });
 
   it("wählt unter den drei Porträts mit dem nächsten Alter", () => {

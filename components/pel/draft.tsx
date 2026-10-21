@@ -20,7 +20,7 @@ import { createPortal } from "react-dom";
 import {
   CHEM, CHEM_LABEL, COMPETENCIES, INITS, MANAGER_ARCHES, MANAGER_TRAITS, POACH, PROGRAM_COMP, ROLE3, TIERS,
   cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, initDurationOf, initSuccess,
-  isCapped, mgmtFx, payOf, PORTRAIT_POOL, portraitUrl, retainerOf, seatFromCand, severanceOf,
+  isCapped, mgmtFx, payOf, PORTRAIT_POOL, portraitPool, portraitUrl, retainerOf, seatFromCand, severanceOf,
   signBonusOf, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import { seedOf } from "./battle";
@@ -192,7 +192,14 @@ function runDeltas(base: Any, sim: Any) {
    oder vakante, damit ein Wechsel auf einer Position die anderen Gesichter
    nicht verschiebt. */
 const SEAT_KEYS = ["ceo", "cfo", "r3"];
-export function incumbentPortrait(name: string, seat: string) {
+export function incumbentPortrait(name: string, seat: string, sector?: string, side?: string) {
+  // Die Fachfunktion zieht aus dem Satz ihres Sektors, dort gibt es keine Überschneidung mit CEO und CFO
+  if (seat === "r3" && sector) {
+    const g = seedOf(name + seat) % 2 ? "f" : "m";
+    const pool = portraitPool(g, seat, sector, side);
+    const [id, age] = pool[seedOf(name + ":" + seat) % pool.length];
+    return { g, id, age };
+  }
   const taken = new Set<string>();
   for (const k of SEAT_KEYS) {
     const g = seedOf(name + k) % 2 ? "f" : "m";
@@ -211,7 +218,7 @@ export function seatCardOf(c: Any, seat: string) {
   const s = c[seat];
   if (!(s.skill > 0)) return null;
   if (!s.prof || !s.name) {
-    const { g, id, age } = incumbentPortrait(c.name, seat);
+    const { g, id, age } = incumbentPortrait(c.name, seat, c.sector, s.side);
     return {
       label: "Seit dem Kauf im Amt", name: g === "f" ? "Amtsinhaberin" : "Amtsinhaber", incumbent: true,
       g, portrait: id, pic: seedOf(c.name + ":" + seat) % 16, age, origin: "Mittelstand",
