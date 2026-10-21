@@ -3,13 +3,12 @@ import fs from "fs";
 import path from "path";
 import { createRng } from "../rng";
 import { runQuarter } from "../runQuarter";
-import { incumbentPortrait } from "@/components/pel/draft";
 import {
   ENTRY_FEE, COV_FLOOR, ARCHES, CAPITAL, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
   PORTRAIT_POOL, pickPortrait, portraitUrl, teamScoreOf,
-  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, tierOf, portraitPool, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
+  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, tierOf, portraitPool, incumbentPortrait, faceOf, avoidFaces, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -510,8 +509,28 @@ describe("Porträts", () => {
         if (ids.length <= 3) expect(new Set(ids).size).toBe(ids.length);
       }
     }
+    // Wer gerade geht und wer im Team sitzt, kommt im neuen Deck nicht vor
+    for (let n = 0; n < 200; n++) {
+      const deck = makeCandidates(rng, "r3", {}, "Healthcare", ["hc-m1", "hc-f2"]);
+      expect(deck.map((k) => k.portrait)).not.toContain("hc-m1");
+      expect(deck.map((k) => k.portrait)).not.toContain("hc-f2");
+    }
     // CEO und CFO bleiben beim allgemeinen Satz
     expect(makeCandidates(createRng(5), "ceo", {}, "Software").every((k) => /^[fm]\d\d$/.test(k.portrait!))).toBe(true);
+  });
+
+  it("merkt sich beim Suchstart das Gesicht, das geht, und legt es nicht ins neue Deck", () => {
+    const c: Any = holding({ name: "Testfirma", sector: "Healthcare", mx: true,
+      r3: { skill: 2.4, side: "dunkel" }, cfo: { skill: 3, prof: [3, 3, 3], name: "Anna Wieland", portrait: "f03", side: "hell" } });
+    const before = faceOf(c, "r3");
+    expect(before).toBe(incumbentPortrait("Testfirma", "r3", "Healthcare", "dunkel").id);
+    vacateForSearch(c, "r3");
+    expect(c.gone.r3).toBe(before);
+    expect(avoidFaces(c, "r3")).toEqual(expect.arrayContaining([before, "f03"]));
+    const rng = createRng(4);
+    for (let n = 0; n < 100; n++) {
+      expect(makeCandidates(rng, "r3", {}, c.sector, avoidFaces(c, "r3")).map((k) => k.portrait)).not.toContain(before);
+    }
   });
 
   it("wählt unter den drei Porträts mit dem nächsten Alter", () => {

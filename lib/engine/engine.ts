@@ -1524,6 +1524,56 @@ export function pickPortrait(g, age: number, r: number, seat?: string, sector?: 
 export const portraitUrl = (id: string, side?: string) =>
   `/manager/${id}-${(PORTRAIT_ONLY[id] || side) === "hell" ? "hell" : "dunkel"}.webp`;
 
+/* Derselbe FNV-1a-Hash wie seedOf in der Oberfläche (battle.tsx): Die
+   Gesichter der Amtsinhaber bleiben, wie sie bisher auf den Karten standen. */
+function nameSeed(str: string) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+/* Porträt eines Amtsinhabers, fest aus Firma und Position. Die drei
+   Positionen ziehen nacheinander aus dem ganzen Pool ihres Geschlechts, jede
+   ohne die Gesichter der vorigen: Zwei Amtsinhaber derselben Firma sehen
+   nie gleich aus. Gezogen wird für alle drei Positionen, auch für besetzte
+   oder vakante, damit ein Wechsel auf einer Position die anderen Gesichter
+   nicht verschiebt. */
+const SEAT_KEYS = ["ceo", "cfo", "r3"];
+export function incumbentPortrait(name: string, seat: string, sector?: string, side?: string) {
+  // Die Fachfunktion zieht aus dem Satz ihres Sektors, dort gibt es keine Überschneidung mit CEO und CFO
+  if (seat === "r3" && sector) {
+    const g = nameSeed(name + seat) % 2 ? "f" : "m";
+    const pool = portraitPool(g, seat, sector, side);
+    const [id, age] = pool[nameSeed(name + ":" + seat) % pool.length];
+    return { g, id, age };
+  }
+  const taken = new Set<string>();
+  for (const k of SEAT_KEYS) {
+    const g = nameSeed(name + k) % 2 ? "f" : "m";
+    const pool = PORTRAIT_POOL[g].filter(([id]) => !taken.has(id));
+    const [id, age] = pool[nameSeed(name + ":" + k) % pool.length];
+    taken.add(id);
+    if (k === seat) return { g, id, age };
+  }
+  return { g: "m", id: PORTRAIT_POOL.m[0][0], age: PORTRAIT_POOL.m[0][1] };
+}
+
+/* Das Gesicht auf einer Position: bei einer Verpflichtung das Porträt der
+   Karte, bei einem Amtsinhaber das feste aus Firma und Position. */
+export function faceOf(c, seat: string): string | null {
+  const s = c[seat];
+  if (!s || !(s.skill > 0)) return null;
+  if (s.prof && s.name) return s.portrait || null;
+  return incumbentPortrait(c.name, seat, c.sector, s.side).id;
+}
+/* Gesichter, die ein neues Deck für diese Position nicht tragen soll: das
+   übrige Team und wer zuletzt auf ihr gegangen ist (c.gone, gesetzt von
+   vacateForSearch). Sonst stünde die eben ersetzte Person mit neuem Namen
+   wieder auf der Shortlist. */
+export function avoidFaces(c, seat: string): string[] {
+  return [...["ceo", "cfo", "r3"].map((k) => faceOf(c, k)), c.gone?.[seat]].filter(Boolean);
+}
+
+
 /* Eine Kandidatenkarte. Die gezeigten Kompetenzen streuen um den Archetyp,
    die wahren um die gezeigten — so weit, wie die Assessment-Bandbreite
    reicht. Mit der Verpflichtung steht das wahre Profil auf der Karte.   */
@@ -1561,7 +1611,7 @@ function managerCard(rng: Rng, seat, a: ManagerArch, sector?: string): ManagerCa
    immer mindestens ein Profil für den größten Bedarf des Cases auf dem
    Tisch —, dazu zwei aus Branchen-Insider, Serial PE und Step-up. Serial PE
    ist die seltene Karte. Reihenfolge gemischt.                            */
-export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}, sector?: string): ManagerCard[] {
+export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}, sector?: string, avoid: string[] = []): ManagerCard[] {
   if (compat.legacyCandidates) return legacyCandidates(rng);
   const A = MANAGER_ARCHES[seat] || MANAGER_ARCHES.cfo;
   const spec = A.slice(0, 3);
@@ -1578,12 +1628,16 @@ export function makeCandidates(rng: Rng, seat = "cfo", compat: EngineCompat = {}
   /* Ein Gesicht je Deck: Trägt eine Karte ein Porträt, das schon im Deck
      liegt, bekommt sie das freie mit dem nächsten Alter. Die Fachfunktion
      hat nur vier Gesichter je Geschlecht, ohne das läge dieselbe Person mit
-     zwei Namen nebeneinander. Ohne Zufallszahl, die Folge bleibt gleich. */
-  const used = new Set<string>();
+     zwei Namen nebeneinander. Ohne Zufallszahl, die Folge bleibt gleich.
+     `avoid` (avoidFaces) ist von vornherein vergeben. */
+  const used = new Set<string>(avoid), banned = new Set<string>(avoid);
   for (const k of cards) {
     if (used.has(k.portrait!)) {
-      const alt = portraitPool(k.g, seat, sector, k.side).filter(([id]) => !used.has(id))
-        .sort((a, b) => Math.abs(a[1] - k.age!) - Math.abs(b[1] - k.age!) || (a[0] < b[0] ? -1 : 1))[0];
+      const pool = portraitPool(k.g, seat, sector, k.side);
+      const near = (xs: [string, number][]) =>
+        xs.sort((a, b) => Math.abs(a[1] - k.age!) - Math.abs(b[1] - k.age!) || (a[0] < b[0] ? -1 : 1))[0];
+      // Reicht der Pool nicht, lieber ein Gesicht zweimal im Deck als eines aus `avoid`
+      const alt = near(pool.filter(([id]) => !used.has(id))) || near(pool.filter(([id]) => !banned.has(id)));
       if (alt) { k.portrait = alt[0]; k.age = alt[1]; }
     }
     used.add(k.portrait!);
@@ -1630,7 +1684,7 @@ export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
   const pref = (BOT_PREF[key] || BOT_PREF.all)[seat] ?? 0;
   const chem = (k: ManagerCard) => (c ? 1.2 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
   const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown + chem(k);
-  return makeCandidates(rng, seat, {}, c?.sector).reduce((best, k) => (score(k) > score(best) ? k : best));
+  return makeCandidates(rng, seat, {}, c?.sector, c ? avoidFaces(c, seat) : []).reduce((best, k) => (score(k) > score(best) ? k : best));
 }
 /* Ersatz suchen: Die bisherige Person geht mit dem Suchmandat. Gibt die
    Abfindung zurück (zwölf Monatsgehälter) und lässt die Position vakant; bis
@@ -1640,6 +1694,9 @@ export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
 export function vacateForSearch(c, seat) {
   if (!(c[seat] && c[seat].skill > 0)) return 0;
   const sev = severanceOf(seat, c[seat].skill, ebitdaOf(c));
+  // Das Gesicht geht mit: Das neue Deck für diese Position trägt es nicht (avoidFaces)
+  const face = faceOf(c, seat);
+  if (face) c.gone = { ...(c.gone || {}), [seat]: face };
   c[seat] = { skill: 0 };
   return sev;
 }
@@ -2316,7 +2373,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
            Periodenschluss eine neue gezogen, solange nicht entschieden war —
            man konnte die Kandidatenratings beliebig oft neu würfeln, indem man
            die Entscheidung vor sich her schob.                                */
-        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng, se.seat, compat, c.sector) });
+        if (!se.waiting) shortlists.push({ uid: c.uid, name: c.name, seat: se.seat, cands: makeCandidates(rng, se.seat, compat, c.sector, avoidFaces(c, se.seat)) });
         still.push({ ...se, waiting: true });
       }
       else c[se.seat] = { skill: Math.max(c[se.seat].skill, 3) };
