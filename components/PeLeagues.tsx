@@ -17,7 +17,7 @@ import {
   END_PRESSURE_FROM, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL,
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
   exitNetOf, mepCut, fundEquityIn, liquidateHoldings,
-  RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
+  RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
@@ -1200,7 +1200,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
                   const d = (market[s] / SECTORS[s].m - 1) * 100;
                   return (
                     <tr key={s}>
-                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
+                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{SECLABEL[s]}</td>
                       <td>{x(market[s])}
                         <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                           {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %
