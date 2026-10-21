@@ -1363,6 +1363,12 @@ const LEVER_SHORT = {
 };
 function Levers({ c, lev, quarter, freeSlots, act, sp }) {
   const progs = (d) => INITS[d].map((I) => LEVER_SHORT[I.id] || I.n).join(", ");
+  /* Das MEP ist ein Schalter, solange das Halbjahr läuft, in dem es aufgesetzt
+     wurde (ltipQ). Danach ist es bindend: Wer es kurz vor dem Exit abstreifen
+     könnte, hätte Rating-Bonus und halbes Retention-Risiko die ganze Haltedauer
+     lang gehabt, ohne je das Sweet Equity zu zahlen. */
+  const mepNew = !!c.ltip && c.ltipQ === quarter;
+  const mepFix = !!c.ltip && !mepNew;
   const prog = (d, run, icon, title, fam) => {
     const busy = freeSlots <= 0;
     return (
@@ -1384,11 +1390,13 @@ function Levers({ c, lev, quarter, freeSlots, act, sp }) {
     <div className="blevers">
       {prog("plat", c.initP, "sliders", "Performance", "l")}
       {prog("acc", c.initA, "sprout", "Growth", "a")}
-      <button className={"blever p" + (c.ltip ? " done" : "") + sp("ltip")} disabled={!!c.ltip} onClick={act.ltip}>
+      <button className={"blever p mep" + (c.ltip ? " on" : "") + (mepFix ? " done" : "") + sp("ltip")}
+        disabled={mepFix} role="switch" aria-checked={!!c.ltip} onClick={() => { haptic(8); act.ltip(); }}>
         <span>
-          <span className="art"><Icon k="users" /></span>
-          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}</span>
-          <span className="s">Management am Exit beteiligen</span>
+          <span className="art"><Icon k="users" />{c.ltip && <span className="bmepon"><Icon k="check" />Aktiv</span>}</span>
+          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}{mepFix ? <Icon k="lock" /> : <i className="bsw" />}</span>
+          <span className="s">{mepFix ? "Bindend bis zum Exit"
+            : mepNew ? "Tippen nimmt es zurück. Bindend ab Halbjahresende" : "Management am Exit beteiligen"}</span>
           <span className="f"><span className="tok">{Math.round(LTIP_SHARE * 100)} % Sweet Equity</span></span>
         </span>
       </button>

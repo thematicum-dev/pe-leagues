@@ -714,11 +714,15 @@ export default function PeLeagues() {
         + ` — die Nettoverschuldung sinkt entsprechend, die Kostenbasis des Deals steigt um den Anteil des Fonds.` }, ...p]);
   }
 
+  // Zurücknehmen nur im Halbjahr des Aufsetzens (ltipQ), danach ist das MEP bindend
   function toggleLtip(c) {
+    const undo = c.ltip && c.ltipQ === quarter;
+    if (c.ltip && !undo) return;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h, ltip: true }),
+      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h, ltip: !undo, ltipQ: undo ? null : quarter }),
     }));
-    setFeed((p) => [{ q: quarter, e: "📜", tone: "neu", t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
+    setFeed((p) => undo ? p.filter((n) => !(n.q === quarter && n.mep === c.uid))
+      : [{ q: quarter, e: "📜", tone: "neu", mep: c.uid, t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
   }
 
   /* ---- Exit-Mechanik ---- */

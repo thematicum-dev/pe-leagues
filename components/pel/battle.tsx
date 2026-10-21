@@ -1798,6 +1798,29 @@ export const BATTLE_CSS = `
 .pel .blever.run:disabled,.pel .blever.done:disabled{filter:none;}
 .pel .blever.run:disabled > span,.pel .blever.done:disabled > span{opacity:1;}
 .pel .blever.run .f{color:var(--gold);}
+/* MEP als Schalter: aus = gedämpfter Rahmen, Token nur umrandet, Schalter links;
+   an = voller Goldrahmen mit Schein, getönte Fläche, "Aktiv"-Marke, Schalter rechts. */
+.pel .blever.mep:not(.on){background:linear-gradient(150deg,color-mix(in srgb, var(--fam) 42%, var(--card)),
+  color-mix(in srgb, var(--fam) 8%, var(--card)) 72%);}
+.pel .blever.mep:not(.on) .art{color:color-mix(in srgb, var(--fam) 55%, var(--ink2));
+  background:radial-gradient(circle at 50% 62%,color-mix(in srgb, var(--fam) 12%, transparent),transparent 70%);}
+.pel .blever.mep:not(.on) .tok{color:var(--fam);background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--fam) 60%, transparent);}
+.pel .blever.mep.on{box-shadow:0 0 0 1px var(--fam),0 10px 26px -12px var(--fam);}
+.pel .blever.mep.on > span{background:color-mix(in srgb, var(--fam) 9%, var(--card));}
+.pel .blever.mep.on .art{position:relative;background:radial-gradient(circle at 50% 62%,color-mix(in srgb, var(--fam) 48%, transparent),
+  color-mix(in srgb, var(--fam) 8%, transparent) 70%);}
+.pel .blever.mep .t{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.pel .blever.mep .t .bli{width:15px;height:15px;color:var(--fam);stroke-width:2.2;}
+.pel .blever.mep.on .t{color:var(--fam);}
+.pel .bmepon{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px 2px 5px;
+  border-radius:99px;background:var(--fam);color:var(--card);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;}
+.pel .blever .art .bmepon .bli{width:11px;height:11px;stroke-width:3;}
+.pel .bsw{position:relative;flex:none;width:30px;height:18px;border-radius:99px;background:var(--rule);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink2) 35%, transparent);transition:background .2s;}
+.pel .bsw:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:99px;background:var(--ink2);
+  transition:transform .2s cubic-bezier(.2,.8,.2,1),background .2s;}
+.pel .blever.mep.on .bsw{background:var(--fam);box-shadow:none;}
+.pel .blever.mep.on .bsw:after{transform:translateX(12px);background:var(--card);}
 .pel .bcard.hold .bstatus{font-size:10.5px;color:var(--ink2);margin-top:8px;line-height:1.45;}
 .pel .bcard.hold .bstatus .bli{width:12px;height:12px;vertical-align:-2px;margin-right:4px;}
 

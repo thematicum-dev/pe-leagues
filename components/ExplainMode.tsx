@@ -624,9 +624,13 @@ function GuidedRun({ dark, setDark, back }) {
     setOffer(null); setProc(null);
   }
 
+  // Zurücknehmen nur im Halbjahr des Aufsetzens (ltipQ), danach ist das MEP bindend
   function toggleLtip() {
-    patch({ ltip: true });
-    setFeed((p) => [{ q, e: "📜", tone: "neu", t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
+    const undo = c.ltip && c.ltipQ === q;
+    if (c.ltip && !undo) return;
+    patch({ ltip: !undo, ltipQ: undo ? null : q });
+    setFeed((p) => undo ? p.filter((n) => !(n.q === q && n.mep))
+      : [{ q, e: "📜", tone: "neu", mep: true, t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
   }
 
   /* Periodenlauf — Reihenfolge identisch zur Partie */
