@@ -479,9 +479,8 @@ export function SeatCard({ c, view, seat, nm, quarter, searching, se, onClick, c
       onClick={onClick} aria-label={`${nm}${s.name ? " " + s.name : ""}, Karte öffnen`}>
       <span className="dmcin">
         <span className="dmcpic">
+          {/* Seltenheit zeigt der Rahmen, die Farbe Oberfläche und Foto: keine Schilder */}
           <Bust k={k} side={s.side} crop />
-          {s.side && <SideDot side={s.side} />}
-          <span className="dmctier">{TIERS[tier]}</span>
         </span>
         <span className="dmcrole">{nm}</span>
         <span className="dmcsk mono">{fmt(s.skill)}</span>
@@ -712,9 +711,6 @@ export const DRAFT_CSS = `
   background:var(--cs-surf);color:var(--cs-ink);padding-bottom:8px;}
 .pel .dmcpic{position:relative;display:block;width:100%;height:78px;overflow:hidden;}
 .pel .dmcpic:after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,transparent 50%,var(--cs-surf) 100%);}
-.pel .dmcpic .dside{position:absolute;top:6px;right:6px;z-index:1;width:13px;height:13px;box-shadow:0 0 0 1.5px var(--cs-ring),0 1px 4px rgba(0,0,0,.4);}
-.pel .dmctier{position:absolute;top:5px;left:5px;z-index:1;padding:2px 6px;border-radius:99px;background:rgba(8,13,15,.66);
-  font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--tondark);}
 .pel .dmcrole{margin-top:2px;font-size:8.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cs-ink2);}
 .pel .dmcsk{font-size:19px;font-weight:700;line-height:1.2;color:var(--tink);}
 .pel .dmcsub{font-size:10px;color:var(--cs-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 4px;}

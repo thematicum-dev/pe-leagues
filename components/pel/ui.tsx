@@ -3250,19 +3250,14 @@ function TeamScore({ c, base }) {
   );
 }
 
-/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen, die
-   Farben als Punkte. Gemischte Farben kosten nichts, sie bringen nur keinen
-   Bonus. */
+/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen. Die
+   Farben zeigen die Mini-Karten selbst. Gemischte Farben kosten nichts, sie
+   bringen nur keinen Bonus. */
 function ChemLine({ c }) {
   const v = chemOf(c);
   const pct = CHEM.toFixed(2).replace(".", ",");
   return (
-    <p className="hint" style={{ margin: "8px 16px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <span style={{ display: "inline-flex", gap: 4 }} aria-hidden="true">
-        {["ceo", "cfo", "r3"].map((k) => (
-          <i key={k} className={"dside " + (c[k].skill > 0 && c[k].side ? c[k].side : "vac")} />
-        ))}
-      </span>
+    <p className="hint" style={{ margin: "8px 16px 0" }}>
       <span>
         Team: <b style={{ color: v > 0 ? "var(--teal)" : undefined }}>{CHEM_LABEL(v)}</b>
         {v > 0 ? ` · jede Kompetenz +${pct}` : " · eingespielt erst mit drei Positionen gleicher Farbe"}
