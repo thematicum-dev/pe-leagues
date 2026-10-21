@@ -601,15 +601,22 @@ export const DRAFT_CSS = `
 .pel .daskrows span:nth-child(odd){color:#8E9C9B;}
 
 /* Battle Card: Vorder- und Rückseite, Metallrahmen, Oberfläche nach Haltung */
-.pel .dcard{position:relative;height:min(552px, 68vh);min-height:480px;transform-style:preserve-3d;
-  transition:transform .6s cubic-bezier(.2,.8,.2,1);}
-.pel .dcard.flip{transform:rotateY(180deg);}
-.pel .dface{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;
-  padding:2px;overflow:hidden;background:var(--metal);box-shadow:0 22px 46px -26px var(--tglow),0 2px 6px rgba(0,0,0,.18);}
-.pel .dface.back{transform:rotateY(180deg);}
+.pel .dcard{position:relative;height:min(552px, 68vh);min-height:480px;perspective:1400px;}
+/* Umgedreht wird in zwei Hälften: Die sichtbare Seite kippt bis auf die Kante,
+   erst dann kommt die andere von der Kante herein. Bis zum 21.10.2026 drehte
+   die ganze Karte um 180° mit preserve-3d und backface-visibility. iOS Safari
+   hielt das nicht durch: Positionierte Ebenen der Vorderseite (Score, Badge,
+   Name) schienen gespiegelt durch die Rückseite, und deren Scrollbereich
+   zerfiel in Streifen. Jetzt ruht die sichtbare Seite ohne Transform, und die
+   verdeckte ist schlicht unsichtbar — keine Rückseite, die versteckt werden müsste. */
+.pel .dface{position:absolute;inset:0;border-radius:20px;
+  padding:2px;overflow:hidden;background:var(--metal);box-shadow:0 22px 46px -26px var(--tglow),0 2px 6px rgba(0,0,0,.18);
+  transition:transform .3s cubic-bezier(.2,.8,.2,1) .3s,visibility 0s linear .3s;}
 /* Die verdeckte Seite nimmt keine Eingaben an: Ihre Tippfläche läge sonst über der sichtbaren. */
-.pel .dcard.flip .dface.front,.pel .dcard:not(.flip) .dface.back{pointer-events:none;}
-.pel .dcard.flip .dface.front .dtap,.pel .dcard:not(.flip) .dface.back .dtap{visibility:hidden;}
+.pel .dcard.flip .dface.front,.pel .dcard:not(.flip) .dface.back{visibility:hidden;pointer-events:none;
+  transition:transform .3s cubic-bezier(.6,0,.9,.4),visibility 0s linear .3s;}
+.pel .dcard.flip .dface.front{transform:rotateY(-90deg);}
+.pel .dcard:not(.flip) .dface.back{transform:rotateY(90deg);}
 .pel .dtap{position:absolute;inset:0;z-index:5;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:20px;
   background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .pel .dtap:hover:not(:disabled){background:transparent;}
@@ -707,7 +714,7 @@ export const DRAFT_CSS = `
 .pel .dmini.empty{box-shadow:0 0 0 1.5px var(--rule);color:var(--gold);background:color-mix(in srgb, var(--gold) 10%, transparent);}
 .pel .dmini.empty.vac{box-shadow:none;border:1.5px dashed var(--ox);background:transparent;}
 @media (prefers-reduced-motion:reduce){
-  .pel .dcard{transition:none;}
+  .pel .dface,.pel .dcard.flip .dface.front,.pel .dcard:not(.flip) .dface.back{transition:none;}
   .pel .dfoil{animation:none;opacity:0;}
 }
 `;

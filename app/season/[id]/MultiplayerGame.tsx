@@ -752,7 +752,8 @@ export default function MultiplayerGame({
        Spieler entscheidet über den Rest des Halbjahres auf veralteten Zahlen. */
     const inj = stagedInjectionByHolding[c.uid];
     if (inj) { p.netDebt = c.netDebt - inj.amount; p.equityIn = (c.equityIn || 0) + inj.amount; }
-    if (ltipStaged.includes(c.uid)) p.ltip = true;
+    // Vorgemerkt heißt: in diesem Halbjahr aufgesetzt, also noch per Tipp zurücknehmbar
+    if (ltipStaged.includes(c.uid)) { p.ltip = true; p.ltipQ = quarter; }
     // Vorgemerkte Benchmarkstudie sofort sichtbar machen: die Karte zeigt
     // Branchenreferenz und Marktwachstum ab dem Klick, nicht erst nach der
     // Auswertung — genauso wie im Übungsmodus, wo runStudy() direkt wirkt.
@@ -1361,7 +1362,7 @@ export default function MultiplayerGame({
                       cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),
                       search: (seat: Seat) => setSearches((arr) => [...arr, { holdingUid: c.uid, seat }]),
                       init: (dim: "plat" | "acc") => setInitPick({ uid: c.uid, dim }),
-                      ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
+                      ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p.filter((u) => u !== c.uid) : [...p, c.uid])),
                       study: () => setStudyStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
                       inject: () => setInjectPick(c.uid),
                     }} />
