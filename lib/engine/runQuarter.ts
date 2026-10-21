@@ -780,7 +780,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       candidates: sl.cands.map((cd: Any) => ({
         label: cd.label, shown: cd.shown, span: cd.span, skill: cd.skill, dev: cd.dev, poach: cd.poach, note: cd.note,
         ...(cd.prof ? {
-          arch: cd.arch, name: cd.name, g: cd.g, age: cd.age, origin: cd.origin, pic: cd.pic, trait: cd.trait,
+          arch: cd.arch, name: cd.name, g: cd.g, age: cd.age, origin: cd.origin, pic: cd.pic, portrait: cd.portrait, trait: cd.trait,
           prof: cd.prof, shownProf: cd.shownProf, side: cd.side,
         } : {}),
       })),

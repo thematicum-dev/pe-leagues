@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import fs from "fs";
+import path from "path";
 import { createRng } from "../rng";
 import { runQuarter } from "../runQuarter";
 import {
   ENTRY_FEE, COV_FLOOR, ARCHES, CAPITAL, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
+  PORTRAIT_POOL, pickPortrait, portraitUrl,
   effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, inProbation, revealedNow, viewOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
@@ -457,5 +460,31 @@ describe("Ersatz in der Auswertung", () => {
     const h: Any = (out.funds[0].holdings as Any[]).find((x: Any) => x.uid === c.uid);
     expect(h.ceo.skill).toBeGreaterThan(0);
     expect(h.ceo.skill).toBeCloseTo(sk, 0);
+  });
+});
+
+describe("Porträts", () => {
+  it("hat für jede Person eine helle und eine dunkle Fassung in public/manager", () => {
+    for (const g of ["f", "m"] as const) for (const [id] of PORTRAIT_POOL[g]) for (const side of ["hell", "dunkel"]) {
+      expect(fs.existsSync(path.join(process.cwd(), "public", portraitUrl(id, side)))).toBe(true);
+    }
+  });
+
+  it("gibt jeder Karte ein Porträt ihres Geschlechts und dessen Alter", () => {
+    const rng = createRng(21);
+    const cards = Array.from({ length: 60 }, () => makeCandidates(rng, "cfo")).flat();
+    for (const k of cards) {
+      const p = PORTRAIT_POOL[k.g!].find(([id]) => id === k.portrait);
+      expect(p).toBeTruthy();
+      expect(k.age).toBe(p![1]);
+    }
+    // Genug Abwechslung: jedes Porträt kommt vor
+    const seen = new Set(cards.map((k) => k.portrait));
+    expect(seen.size).toBe(PORTRAIT_POOL.f.length + PORTRAIT_POOL.m.length);
+  });
+
+  it("wählt unter den drei Porträts mit dem nächsten Alter", () => {
+    expect(["m01", "m04", "m02"]).toContain(pickPortrait("m", 30, 0.99).id);
+    expect(pickPortrait("f", 44, 0).id).toBe("f10");
   });
 });

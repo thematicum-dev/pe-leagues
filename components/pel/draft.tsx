@@ -20,7 +20,8 @@ import { createPortal } from "react-dom";
 import {
   CHEM, CHEM_LABEL, COMPETENCIES, INITS, MANAGER_ARCHES, MANAGER_TRAITS, POACH, PROGRAM_COMP, ROLE3, TIERS,
   cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, inProbation, initDurationOf, initSuccess,
-  isCapped, mgmtFx, payOf, retainerOf, revealedNow, seatFromCand, severanceOf, signBonusOf, tierOf,
+  isCapped, mgmtFx, payOf, pickPortrait, portraitUrl, retainerOf, revealedNow, seatFromCand, severanceOf,
+  signBonusOf, tierOf,
 } from "@/lib/engine";
 import { seedOf } from "./battle";
 import { haptic } from "./haptics";
@@ -35,16 +36,24 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 export const seatName = (seat: string, sector?: string) =>
   seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : (ROLE3[sector || "Software"] || ROLE3.Software).n;
 
-/* ---------- Gezeichnete Büste ----------
-   Platzhalter für den Porträt-Pool (Schritt 4). Deterministisch aus Name,
-   Porträtnummer, Geschlecht und Alter, damit dieselbe Person überall gleich
-   aussieht. Der Hintergrund folgt der Haltung: hell für helle Charaktere,
-   dunkel für dunkle — so wie später die Fotos. `crop` zeigt nur den Kopf. */
+/* ---------- Porträt ----------
+   Das Foto der Person in der Fassung ihrer Haltung: vor hellem Büro für
+   helle, vor nächtlicher Skyline für dunkle Charaktere (PORTRAIT_POOL).
+   `crop` zeigt den Kopf für die Mini-Karte. Fehlt ein Bild, zeichnet die
+   Karte eine Büste, deterministisch aus Name, Porträtnummer, Geschlecht und
+   Alter, mit demselben hellen oder dunklen Grund.                        */
 const SKIN = ["#F1D1B5", "#E3B68F", "#C99067", "#9C6744", "#6E4630"];
 const HAIR = ["#1E1B1A", "#4A3326", "#7A4E2D", "#B08A5A"];
 const SUIT = ["#24313A", "#3A2E4A", "#1F3B39", "#40362C", "#2C3550"];
 const STYLE = { f: ["bob", "long", "bun", "pixie"], m: ["crop", "side", "recede", "crop"] };
 export function Bust({ k, side, crop = false }: { k: Any; side?: string; crop?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (k.portrait && !failed) {
+    // Fertig skalierte WebP-Dateien aus public/manager, Größe kommt aus dem Kartenlayout
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className={"dphoto" + (crop ? " crop" : "")} src={portraitUrl(k.portrait, side)} alt=""
+      loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />;
+  }
   const s = seedOf((k.name || k.label || "") + ":" + (k.pic ?? 0));
   const g = k.g === "f" ? "f" : "m";
   const skin = SKIN[(k.pic ?? s) % SKIN.length];
@@ -183,10 +192,12 @@ export function seatCardOf(c: Any, view: Any, seat: string, quarter: number) {
   const s = view[seat];
   if (!(s.skill > 0)) return null;
   if (!s.prof || !s.name) {
+    // Amtsinhaber: Porträt fest aus Firma und Position, Alter vom Porträt
+    const g = seedOf(c.name + seat) % 2 ? "f" : "m";
+    const pr = pickPortrait(g, 40, (seedOf(c.name + ":" + seat) % 1000) / 1000);
     return {
-      label: "Seit dem Kauf im Amt", name: seedOf(c.name + seat) % 2 ? "Amtsinhaberin" : "Amtsinhaber", incumbent: true,
-      g: seedOf(c.name + seat) % 2 ? "f" : "m",
-      pic: seedOf(c.name + ":" + seat) % 16, age: 48 + (seedOf(c.name + seat) % 14), origin: "Mittelstand",
+      label: "Seit dem Kauf im Amt", name: g === "f" ? "Amtsinhaberin" : "Amtsinhaber", incumbent: true,
+      g, portrait: pr.id, pic: seedOf(c.name + ":" + seat) % 16, age: pr.age, origin: "Mittelstand",
       shown: s.skill, shownProf: [s.skill, s.skill, s.skill], span: 0, side: s.side, poach: s.poach ?? 1, dev: !!s.dev,
       note: "Saß schon vor dem Kauf in der Geschäftsführung. Das Rating stammt aus der Management-Due-Diligence.",
     };
@@ -611,8 +622,11 @@ export const DRAFT_CSS = `
 .pel .dfoil{position:absolute;inset:0;z-index:3;border-radius:20px;pointer-events:none;background:var(--cs-foil);
   mix-blend-mode:var(--cs-foilmix);transform:translateX(-110%);animation:dfoil 12s ease-in-out 1.5s infinite;}
 @keyframes dfoil{0%{transform:translateX(-110%);}20%,100%{transform:translateX(110%);}}
-.pel .dportrait{position:relative;height:300px;max-height:52%;flex:none;overflow:hidden;}
+.pel .dportrait{position:relative;height:262px;max-height:48%;flex:none;overflow:hidden;}
 .pel .dbust{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.pel .dphoto{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:50% 14%;
+  user-select:none;-webkit-user-drag:none;}
+.pel .dphoto.crop{object-position:50% 10%;transform:scale(1.35);transform-origin:50% 12%;}
 .pel .dportrait:after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(to bottom,transparent 38%,color-mix(in srgb, var(--cs-surf) 78%, transparent) 70%,var(--cs-surf) 96%);}
 .pel .dovr{position:absolute;top:12px;left:12px;z-index:2;padding:8px 10px 7px;border-radius:12px;background:rgba(8,13,15,.52);

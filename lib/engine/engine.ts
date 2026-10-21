@@ -1383,7 +1383,7 @@ export function makeSeats(rng: Rng, d) {
 export interface ManagerCard {
   label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string;
   arch?: string; name?: string; g?: "f" | "m"; age?: number; origin?: string; pic?: number; trait?: string;
-  prof?: number[]; shownProf?: number[]; side?: "hell" | "dunkel";
+  prof?: number[]; shownProf?: number[]; side?: "hell" | "dunkel"; portrait?: string;
 }
 function legacyCandidates(rng: Rng): ManagerCard[] {
   const draw = (mid, sp) => clamp(mid + (rng.rnd() * 2 - 1) * sp, 1, 5);
@@ -1475,7 +1475,28 @@ const FIRST = {
 };
 const LAST = ["Albers", "Okafor", "Hoffmann", "Brandl", "Wieland", "Keller", "Richter", "Yilmaz", "Bauer", "Lorenz", "Vogt", "Sommer",
   "Haas", "Schuster", "Kaya", "Winter", "Berger", "Frank", "Lehmann", "Krüger", "Seidel", "Novak", "Arslan", "Hartmann"];
-export const PORTRAITS = 16;   // Porträts je Geschlecht im Pool (public/manager)
+/* ---------- Porträts ----------
+   21 Personen, jede in zwei Fassungen: vor hellem Büro für helle Charaktere
+   und vor nächtlicher Skyline für dunkle (public/manager/<id>-hell.webp,
+   <id>-dunkel.webp, 720 × 1080). IDs und Alter wie im Bildbriefing;
+   f11 ist eine zweite Person im Stil von f05 und trägt deren Alter. Die
+   Fachfunktionen haben noch keinen eigenen Satz und nehmen diesen.       */
+export const PORTRAIT_POOL: Record<"f" | "m", [string, number][]> = {
+  f: [["f01", 31], ["f02", 34], ["f03", 36], ["f04", 30], ["f05", 38], ["f06", 42], ["f07", 33], ["f08", 40],
+    ["f09", 35], ["f10", 44], ["f11", 38]],
+  m: [["m01", 30], ["m02", 33], ["m03", 35], ["m04", 31], ["m05", 38], ["m06", 42], ["m07", 34], ["m08", 40],
+    ["m09", 36], ["m10", 44]],
+};
+/* Ein Porträt zu Geschlecht und Wunschalter: unter den drei mit dem
+   nächsten Alter, `r` in [0, 1) wählt eines davon. Die Karte trägt danach
+   das Alter des Porträts, damit Gesicht und Angabe zusammenpassen. */
+export function pickPortrait(g, age: number, r: number) {
+  const pool = [...(PORTRAIT_POOL[g === "f" ? "f" : "m"])]
+    .sort((a, b) => Math.abs(a[1] - age) - Math.abs(b[1] - age) || (a[0] < b[0] ? -1 : 1));
+  const [id, a] = pool[Math.min(pool.length - 1, Math.floor(r * 3))];
+  return { id, age: a };
+}
+export const portraitUrl = (id: string, side?: string) => `/manager/${id}-${side === "hell" ? "hell" : "dunkel"}.webp`;
 
 /* Eine Kandidatenkarte. Die gezeigten Kompetenzen streuen um den Archetyp,
    die wahren um die gezeigten — so weit, wie die Assessment-Bandbreite
@@ -1490,14 +1511,21 @@ function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
   const shownProf = a.p.map((v) => Math.round(clamp(v + (rng.rnd() * 2 - 1) * 0.3 + lift, 1, 5) * 10) / 10);
   const prof = shownProf.map((v) => clamp(v + (rng.rnd() * 2 - 1) * a.span, 1, 5));
   const mean = (xs) => xs.reduce((x, y) => x + y, 0) / xs.length;
-  const age = a.key === "stepup" ? 32 + Math.floor(rng.rnd() * 9)
-    : a.key === "insider" ? 50 + Math.floor(rng.rnd() * 13) : 40 + Math.floor(rng.rnd() * 19);
+  /* Wunschalter im Bereich des Porträt-Pools (30–44): Step-up jung, Branchen-
+     Insider am oberen Ende. Bis 21.10.2026 reichte es bis 62 — dafür gibt es
+     keine Gesichter, und die ältesten drei hätten fast jede Karte getragen. */
+  const age = a.key === "stepup" ? 30 + Math.floor(rng.rnd() * 6)
+    : a.key === "insider" ? 40 + Math.floor(rng.rnd() * 5) : 33 + Math.floor(rng.rnd() * 12);
   const origin = a.key === "serial" ? (rng.rnd() < 0.7 ? "Private Equity" : "Konzern") : rng.pick(ORIGINS.slice(0, 4));
   const poach = (a.poach || 1) * (trait === "flight" ? 2 : trait === "bind" ? 0.5 : 1);
   const side = rng.rnd() < 0.5 ? "hell" : "dunkel";
+  // Dieselbe Reihenfolge der Zufallszahlen wie vorher: Name, dann Porträt
+  const name = rng.pick(FIRST[g]) + " " + rng.pick(LAST);
+  const pic = rng.rnd();
+  const portrait = pickPortrait(g, age, pic);
   return {
     label: a.n[g === "f" ? 1 : 0], arch: a.key,
-    name: rng.pick(FIRST[g]) + " " + rng.pick(LAST), g, age, origin, pic: Math.floor(rng.rnd() * PORTRAITS),
+    name, g, age: portrait.age, origin, pic: Math.floor(pic * 16), portrait: portrait.id,
     shown: Math.round(mean(shownProf) * 10) / 10, span: a.span, shownProf,
     skill: mean(prof), prof, dev: !!a.dev, poach, trait, side, note: a.note,
   };
@@ -1532,7 +1560,7 @@ export function seatFromCand(cand, q?: number) {
   return {
     ...base, prof: [...cand.prof], shownProf: [...(cand.shownProf || cand.prof)],
     arch: cand.arch, label: cand.label, name: cand.name, g: cand.g, age: cand.age, origin: cand.origin,
-    pic: cand.pic, trait: cand.trait, side: cand.side, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
+    pic: cand.pic, portrait: cand.portrait, trait: cand.trait, side: cand.side, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
     ...(q != null ? { hiredQ: q } : {}),
   };
 }
