@@ -360,6 +360,12 @@ export interface EngineCompat {
      das Closing `mx` auf der Beteiligung, und die Kompetenzen wirken laufend
      (siehe mgmtFx).                                                        */
   legacyMgmt?: boolean;
+  /* Bis 21.10.2026 blieb bei einer Suche auf einer besetzten Position der
+     Amtsinhaber im Amt, bis die neue Person unterschrieb; die Abfindung fiel
+     erst dann an. Seither geht die Person mit dem Suchmandat, die Abfindung
+     fällt sofort an, und die Position ist bis zur Verpflichtung vakant
+     (siehe vacateForSearch).                                               */
+  legacyReplaceSearch?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -367,7 +373,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   addonWithoutDebt: true, nwcOnIncrementOnly: true, legacyEventP: true, legacyHistMark: true,
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
-  legacyDealSize: true, legacyCandidates: true, legacyMgmt: true,
+  legacyDealSize: true, legacyCandidates: true, legacyMgmt: true, legacyReplaceSearch: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -725,8 +731,10 @@ export const seatLoad = (c) => {
 };
 export const peopleLvl = (c) => (c.ceo.skill + c.cfo.skill + c.r3.skill) / 3;
 // Eine Fachposition kann den CEO nicht überholen — A-Player berichten nicht an C-Player
-export const cappedSkill = (c, seat) => seat === "ceo" ? c.ceo.skill : Math.min(c[seat].skill, c.ceo.skill + 1.5);
-export const isCapped = (c, seat) => seat !== "ceo" && c[seat].skill > c.ceo.skill + 1.5;
+// Ein vakanter CEO führt mit `mx` kommissarisch auf Interim-Niveau (siehe ceoIn)
+const ceoLeadFlat = (c) => (c.mx && !(c.ceo.skill > 0) ? 2.0 : c.ceo.skill);
+export const cappedSkill = (c, seat) => seat === "ceo" ? c.ceo.skill : Math.min(c[seat].skill, ceoLeadFlat(c) + 1.5);
+export const isCapped = (c, seat) => seat !== "ceo" && c[seat].skill > ceoLeadFlat(c) + 1.5;
 /* ---------- Kompetenzprofile ----------
    Bis zum 19.10.2026 trug jede Position eine einzige Zahl, und jedes Programm
    einer Position rechnete mit ihr. Damit gab es bei der Besetzung nur eine
@@ -754,48 +762,55 @@ export const PROGRAM_COMP = { opex: 0, nwc: 1, erp: 2, ai: 2, pen: 0, exp: 1, ma
 export const compOf = (s, i) => (s.skill > 0 ? (s.prof ? s.prof[i] : s.skill) : 0);
 
 /* ---------- Chemie im Top-Team ----------
-   Jede Führungskraft hat eine Haltung: hell (baut auf, hält Leute, spielt
-   fair mit Belegschaft und Lieferanten) oder dunkel (harte Hand, holt Kosten
-   und Cash heraus, nutzt jeden Hebel). Keine ist besser; es zählt allein, ob
-   das Team gleich tickt.
+   Jede Führungskraft hat eine Haltung, im Spiel nur als Farbe zu sehen
+   (weiß oder schwarz): hell baut auf, hält Leute, spielt fair; dunkel führt
+   mit harter Hand und holt Kosten und Cash heraus. Keine ist besser; es zählt
+   allein, ob das Team gleich tickt.
    - Alle drei Positionen besetzt und gleich ausgerichtet: eingespielt, jede
      Kompetenz wirkt um CHEM besser.
-   - Unter den Besetzten beide Haltungen: Reibung, jede Kompetenz wirkt um
-     CHEM schlechter.
-   - Sonst (eine Vakanz, der Rest gleich): neutral.
-   Die Verschiebung gilt in beiden Kanälen: für die Erfolgsquote der
-   Programme (effSkill), dort auch für die Leadership des CEO und damit für
-   den Deckel, und für die laufende Wirkung (mgmtFx), dort nach dem Deckel
-   MGMT_UP, damit sie bei den Stärken einer Spezialistin nicht verpufft. Die
-   Haltung hängt nicht am Archetyp: Gerade die Spezialistin, die der Case
-   braucht, passt oft nicht zum CEO.
+   - Sonst: neutral. Gemischte Farben kosten nichts — bis zum 21.10.2026
+     brachten sie Reibung (−0,25 auf jede Kompetenz), und weil sich die Farbe
+     der Altmannschaft nicht aussuchen lässt, war die Chemie damit vor allem
+     eine Strafe fürs Besetzen.
+   Der Bonus gilt in beiden Kanälen: für die Erfolgsquote der Programme
+   (effSkill), dort auch für die Leadership des CEO und damit für den Deckel,
+   und für die laufende Wirkung (mgmtFx), dort nach dem Deckel MGMT_UP, damit
+   er bei den Stärken einer Spezialistin nicht verpufft. Die Haltung hängt
+   nicht am Archetyp: Gerade die Spezialistin, die der Case braucht, hat oft
+   die andere Farbe.
 
-   Kalibriert über 250 Cases wie bei mgmtFx: Zwischen eingespieltem Team und
-   Reibung liegen 0,25–0,35x MOIC. Die passende Besetzung bleibt die erste
-   Frage (0,6x); passgenau mit Reibung liegt noch klar vor fehlbesetzt und
-   eingespielt.
+   Gemessen in 30 ganzen Partien: Wer auf Fit und Farbe achtet, ist in rund
+   einem Drittel der Beteiligungs-Halbjahre eingespielt, wer nur auf Fit
+   achtet in rund einem Fünftel, passiv in 5 %. Erst ab etwa 0,4 lohnt es
+   sich messbar, für die Farbe auf etwas Fit zu verzichten; die passende
+   Besetzung bleibt die erste Frage.
 
    Gilt nur für Beteiligungen mit `mx`. Eine besetzte Position ohne Haltung
-   (Karten der alten Shortlist) macht die Chemie neutral.                 */
-export const CHEM = 0.25;
-export const SIDES = { hell: "Hell", dunkel: "Dunkel" };
+   (Karten der alten Shortlist) zählt nicht als gleich ausgerichtet.      */
+export const CHEM = 0.4;
 export function chemOf(c): number {
   if (!c || !c.mx || !c.ceo) return 0;
   const on = ["ceo", "cfo", "r3"].map((k) => c[k]).filter((s) => s && s.skill > 0);
-  if (on.some((s) => !s.side)) return 0;
-  const sides = new Set(on.map((s) => s.side));
-  if (sides.size > 1) return -CHEM;
-  return on.length === 3 ? CHEM : 0;
+  if (on.length < 3 || on.some((s) => !s.side)) return 0;
+  return new Set(on.map((s) => s.side)).size === 1 ? CHEM : 0;
 }
-export const CHEM_LABEL = (v: number) => (v > 0 ? "Eingespielt" : v < 0 ? "Reibung" : "Neutral");
+export const CHEM_LABEL = (v: number) => (v > 0 ? "Eingespielt" : "Neutral");
 /* Haltung der Amtsinhaber beim Closing: aus dem Namen der Beteiligung und der
    Position abgeleitet statt gewürfelt, damit das Closing keine Zufallszahl
    mehr zieht und alle Wege (Mehrspieler, Übungsmodus) dieselbe Haltung
-   sehen. */
+   sehen.
+
+   Das unterste Bit eines FNV-1a-Hashs ist nur die Parität der Zeichen: Bis
+   zum 21.10.2026 hatten CEO und CFO derselben Firma dadurch immer die
+   entgegengesetzte Farbe (":ceo" und ":cfo" unterscheiden sich in genau einem
+   ungeraden Zeichen), keine Altmannschaft war je gleich ausgerichtet. Die
+   oberen Bits mischen; ein Finalizer streut zusätzlich.                 */
 export function sideOf(key: string): "hell" | "dunkel" {
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
-  return (h >>> 0) % 2 ? "dunkel" : "hell";
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 31) ? "dunkel" : "hell";
 }
 export function seatSides(c, key: string) {
   for (const k of ["ceo", "cfo", "r3"]) {
@@ -805,7 +820,13 @@ export function seatSides(c, key: string) {
 }
 // Kompetenz einer Position im Team, mit Chemie
 const compIn = (c, seat, i) => compOf(c[seat], i) + (c[seat].skill > 0 ? chemOf(c) : 0);
-const leadOf = (c) => compIn(c, "ceo", 2);
+/* Ein vakanter CEO wird kommissarisch geführt: Leadership und
+   Kompetenzfamilie wirken wie ein Interim auf MGMT_INTERIM, so wie bei der
+   laufenden Wirkung. Vorher zählte die Vakanz als 0 und deckelte CFO und
+   Fachfunktion auf 1,5 — ein CEO-Wechsel lähmte das ganze Team. Nur mit
+   `mx`, ältere Halbjahre rechnen wie bisher.                              */
+const ceoIn = (c, i) => (c.mx && !(c.ceo.skill > 0) ? MGMT_INTERIM : compIn(c, "ceo", i));
+const leadOf = (c) => ceoIn(c, 2);
 // Ein Co-Investor wirkt wie ein laufendes MEP: eigenes Geld im Unternehmen
 const mepOf = (c, seat) => !!(c.ltip || c.ceo.trait === "coinvest" || (seat !== "ceo" && c[seat].trait === "coinvest"));
 // Effektives Rating: gedeckelte Fachposition plus halber CEO, plus MEP-Bonus
@@ -816,7 +837,7 @@ const legacyEff = (c, seat) => cappedSkill(c, seat) + 0.5 * c.ceo.skill + (c.lti
    Programm (Anzeige, Altpfade) das bisherige effektive Rating.            */
 export const effSkill = (c, seat, id?: string) => {
   if (!id || PROGRAM_COMP[id] == null || seat === "ceo") return legacyEff(c, seat);
-  const fam = compIn(c, "ceo", INITS.plat.some((k) => k.id === id) ? 0 : 1);
+  const fam = ceoIn(c, INITS.plat.some((k) => k.id === id) ? 0 : 1);
   const own = Math.min(compIn(c, seat, PROGRAM_COMP[id]), leadOf(c) + 1.5);
   return own + 0.5 * fam + (mepOf(c, seat) ? 0.5 : 0)
     + (seat === "cfo" && c.sector === "Software" ? 0.5 * cappedSkill(c, "r3") : 0);
@@ -1540,10 +1561,11 @@ export function viewOf(c, q) {
   return v;
 }
 /* Seltenheit nach Assessment-Score, in derselben Rahmensprache wie die
-   Zielunternehmen: Bronze unter 2,5, Silber bis 3,5, Gold bis 4,5, darüber
-   Legende. */
-export const TIERS = { bronze: "Bronze", silber: "Silber", gold: "Gold", legende: "Legende" };
-export const tierOf = (score: number) => (score < 2.5 ? "bronze" : score < 3.5 ? "silber" : score < 4.5 ? "gold" : "legende");
+   Zielunternehmen: Bronze unter 2,5, Silber bis 3,5, darüber Gold. Gold
+   trägt den seltenen Glanz; eine vierte Stufe (Legende ab 4,5) gab es bis
+   zum 21.10.2026. */
+export const TIERS = { bronze: "Bronze", silber: "Silber", gold: "Gold" };
+export const tierOf = (score: number) => (score < 2.5 ? "bronze" : score < 3.5 ? "silber" : "gold");
 
 /* Wie ein KI-Fonds aus dem Deck draftet: Nähe des Assessment-Scores zu
    seinem Anspruch (teurer als nötig ist auch schlecht) plus die Kompetenz,
@@ -1563,6 +1585,17 @@ export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
   const chem = (k: ManagerCard) => (c ? 1.2 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
   const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown + chem(k);
   return makeCandidates(rng, seat).reduce((best, k) => (score(k) > score(best) ? k : best));
+}
+/* Ersatz suchen: Die bisherige Person geht mit dem Suchmandat. Gibt die
+   Abfindung zurück (zwölf Monatsgehälter) und lässt die Position vakant; bis
+   zur Verpflichtung rechnet sie mit einem Interim. Eine vakante Position
+   kostet nichts. Mutiert `c`, wie die Auswertung es mit Beteiligungen tut;
+   der Übungsmodus übergibt eine Kopie.                                    */
+export function vacateForSearch(c, seat) {
+  if (!(c[seat] && c[seat].skill > 0)) return 0;
+  const sev = severanceOf(seat, c[seat].skill, ebitdaOf(c));
+  c[seat] = { skill: 0 };
+  return sev;
 }
 // Einarbeitung nach der Verpflichtung: Day-1-ready braucht keine
 export const onboardOf = (cand) => (cand && cand.trait === "day1" ? 0 : 1);

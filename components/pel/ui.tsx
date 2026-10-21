@@ -32,7 +32,7 @@ import {
 } from "./battle";
 import { haptic } from "./haptics";
 import { BRIEFING_CSS } from "./briefing";
-import { DRAFT_CSS, Draft, SeatCard, seatName } from "./draft";
+import { DRAFT_CSS, Draft, SeatCard, SeatSheet, seatName } from "./draft";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -1031,6 +1031,8 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
 }
 
 export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false }) {
+  // Geöffnete Karte einer besetzten Position (SeatSheet)
+  const [openSeat, setOpenSeat] = useState<string | null>(null);
   const spot = useContext(CoachCtx);
   const sp = (k) => (spot === k ? " spot" : "");
   const health = healthOf(c, market);
@@ -1237,11 +1239,19 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
             return (
               <SeatCard key={k} c={c} view={seatView} seat={k} nm={nm} quarter={quarter} eb={eb}
                 searching={!!se} se={se} className={k === "cfo" ? sp("hire") : ""}
-                onClick={() => { haptic(8); act.search(k); }} />
+                onClick={() => {
+                  haptic(8);
+                  // Besetzt: erst die Karte, der Ersatz ist eine Entscheidung darauf. Vakant: gleich suchen.
+                  if (c[k].skill > 0) setOpenSeat(k); else act.search(k);
+                }} />
             );
           })}
         </div>
         {c.mx && <ChemLine c={c} />}
+        {openSeat && c[openSeat].skill > 0 && (
+          <SeatSheet c={c} view={seatView} seat={openSeat} quarter={quarter}
+            close={() => setOpenSeat(null)} search={(k) => act.search(k)} />
+        )}
       </Section>
 
       <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
@@ -3214,23 +3224,30 @@ export function InitPicker({ c: real, dim, market, start, close, investable = 0,
   );
 }
 
-/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen. */
-const signed = (v: number) => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(".", ",");
+/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen, die
+   Farben als Punkte. Gemischte Farben kosten nichts, sie bringen nur keinen
+   Bonus. */
 function ChemLine({ c }) {
   const v = chemOf(c);
-  const why = v > 0 ? `alle drei ${c.ceo.side === "hell" ? "hell" : "dunkel"}: jede Kompetenz wirkt ${signed(CHEM)}`
-    : v < 0 ? `helle und dunkle Charaktere im Team: jede Kompetenz wirkt ${signed(-CHEM)}`
-      : "erst mit drei gleich ausgerichteten Positionen eingespielt";
+  const pct = CHEM.toFixed(2).replace(".", ",");
   return (
-    <p className="hint" style={{ margin: "6px 16px 0", color: v < 0 ? "var(--ox)" : undefined }}>
-      Chemie: <b>{CHEM_LABEL(v)}</b> · {why}
-      <Info t="Chemie im Top-Team">
-        Jede Führungskraft ist hell (baut auf, hält Leute, spielt fair) oder dunkel (harte Hand, holt
-        Kosten und Cash heraus). Keine Haltung ist besser. Sind alle drei Positionen besetzt und gleich
-        ausgerichtet, wirkt jede Kompetenz um {CHEM.toFixed(2).replace(".", ",")} besser. Sitzen helle
-        und dunkle Charaktere zusammen, um {CHEM.toFixed(2).replace(".", ",")} schlechter. Mit einer
-        Vakanz und sonst gleicher Haltung ist die Chemie neutral.
-      </Info>
+    <p className="hint" style={{ margin: "8px 16px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ display: "inline-flex", gap: 4 }} aria-hidden="true">
+        {["ceo", "cfo", "r3"].map((k) => (
+          <i key={k} className={"dside " + (c[k].skill > 0 && c[k].side ? c[k].side : "vac")} />
+        ))}
+      </span>
+      <span>
+        Team: <b style={{ color: v > 0 ? "var(--teal)" : undefined }}>{CHEM_LABEL(v)}</b>
+        {v > 0 ? ` · jede Kompetenz +${pct}` : " · eingespielt erst mit drei Positionen gleicher Farbe"}
+        <Info t="Chemie im Top-Team">
+          Jede Führungskraft hat eine Farbe, weiß oder schwarz. Keine ist besser. Sind alle drei Positionen
+          besetzt und haben dieselbe Farbe, ist das Team eingespielt: Jede Kompetenz wirkt um {pct} besser,
+          bei den Programmen wie im Tagesgeschäft. Gemischte Farben und Vakanzen kosten nichts, sie bringen
+          nur keinen Bonus. Die Farbe einer Kandidatin steht auf ihrer Karte; die Altmannschaft bringt ihre
+          Farbe mit.
+        </Info>
+      </span>
     </p>
   );
 }

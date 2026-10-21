@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
+import { runQuarter } from "../runQuarter";
 import {
-  ENTRY_FEE, COV_FLOOR, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
+  ENTRY_FEE, COV_FLOOR, ARCHES, CAPITAL, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
-  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, inProbation, revealedNow, viewOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
+  effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, inProbation, revealedNow, viewOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -286,13 +287,13 @@ describe("Chemie", () => {
     mx: true, ceo: { skill: 3, side: a }, cfo: { skill: 3, side: b }, r3: { skill: 3, side: d }, ...over,
   });
 
-  it("ist eingespielt, wenn alle drei gleich ticken, und reibt, sobald beide Haltungen im Team sitzen", () => {
+  it("ist eingespielt, wenn alle drei dieselbe Farbe haben, und sonst neutral, ohne Malus", () => {
     expect(chemOf(team("hell", "hell", "hell"))).toBe(CHEM);
     expect(chemOf(team("dunkel", "dunkel", "dunkel"))).toBe(CHEM);
-    expect(chemOf(team("hell", "dunkel", "hell"))).toBe(-CHEM);
-    // Eine Vakanz und sonst gleich: neutral; eine Vakanz und gemischt: Reibung
+    expect(chemOf(team("hell", "dunkel", "hell"))).toBe(0);
+    // Eine Vakanz: neutral, ob die übrigen gleich sind oder nicht
     expect(chemOf(team("hell", "hell", "hell", { r3: { skill: 0 } }))).toBe(0);
-    expect(chemOf(team("hell", "dunkel", "hell", { r3: { skill: 0 } }))).toBe(-CHEM);
+    expect(chemOf(team("hell", "dunkel", "hell", { r3: { skill: 0 } }))).toBe(0);
   });
 
   it("bleibt neutral ohne mx und mit einer Position ohne Haltung", () => {
@@ -300,13 +301,27 @@ describe("Chemie", () => {
     expect(chemOf(team("hell", "dunkel", "hell", { cfo: { skill: 3 } }))).toBe(0);
   });
 
-  it("verschiebt jede Kompetenz um CHEM, in Programmen und in der laufenden Wirkung", () => {
+  it("hebt jede Kompetenz um CHEM, in Programmen und in der laufenden Wirkung; gemischt kostet nichts", () => {
     const on = team("hell", "hell", "hell"), off = team("hell", "dunkel", "hell"), zero = team("hell", "hell", "hell", { cfo: { skill: 3 } });
     // Fachposition plus halbe CEO-Kompetenz der Familie
     expect(effSkill(on, "cfo", "opex") - effSkill(zero, "cfo", "opex")).toBeCloseTo(1.5 * CHEM, 12);
-    expect(effSkill(off, "cfo", "opex") - effSkill(zero, "cfo", "opex")).toBeCloseTo(-1.5 * CHEM, 12);
+    expect(effSkill(off, "cfo", "opex")).toBeCloseTo(effSkill(zero, "cfo", "opex"), 12);
     expect(mgmtFx(on).nwc).toBeLessThan(mgmtFx(zero).nwc);
-    expect(mgmtFx(off).nwc).toBeGreaterThan(mgmtFx(zero).nwc);
+    expect(mgmtFx(off).nwc).toBeCloseTo(mgmtFx(zero).nwc, 12);
+  });
+
+  it("verteilt die Farben der Altmannschaft unabhängig voneinander", () => {
+    // Bis 21.10.2026 hatten CEO und CFO derselben Firma immer verschiedene Farben
+    let same = 0, all = 0;
+    for (let i = 0; i < 400; i++) {
+      const n = "Firma " + i * 7919;
+      if (sideOf(n + ":ceo") === sideOf(n + ":cfo")) same++;
+      if (sideOf(n + ":ceo") === sideOf(n + ":cfo") && sideOf(n + ":cfo") === sideOf(n + ":r3")) all++;
+    }
+    expect(same / 400).toBeGreaterThan(0.4);
+    expect(same / 400).toBeLessThan(0.6);
+    expect(all / 400).toBeGreaterThan(0.17);
+    expect(all / 400).toBeLessThan(0.33);
   });
 
   it("wirkt in der laufenden Wirkung auch oberhalb des Deckels", () => {
@@ -340,13 +355,13 @@ describe("Chemie", () => {
     expect(share(picks)).toBeGreaterThan(share(ref) + 0.15);
   });
 
-  it("trennt eingespielte Teams und Reibung spürbar, ohne die passende Besetzung zu überholen", () => {
+  it("trennt eingespielte von gemischten Teams spürbar, ohne die passende Besetzung zu überholen", () => {
     const N = 250;
     const avg = (t: Any, sides: string[]) => mean(Array.from({ length: N }, (_, i) => playCase((i + 1) * 7717, t, true, sides)));
     const same = ["hell", "hell", "hell"], mixed = ["hell", "dunkel", "hell"];
     const fitOn = avg(specialists(true), same), fitOff = avg(specialists(true), mixed);
     const missOn = avg(specialists(false), same);
-    // Kalibriert auf rund 0,25x beim passgenauen Team
+    // Bonus 0,4 ohne Malus: rund 0,2x beim passgenauen Team
     expect(fitOn - fitOff).toBeGreaterThan(0.15);
     expect(fitOn - fitOff).toBeLessThan(0.4);
     expect(fitOff).toBeGreaterThan(missOn);
@@ -376,7 +391,71 @@ describe("Probezeit", () => {
     expect(viewOf(holding(), 7)).toEqual(holding());
   });
 
-  it("stuft nach Assessment-Score in Bronze, Silber, Gold und Legende ein", () => {
-    expect([2.4, 2.5, 3.49, 3.5, 4.49, 4.5].map(tierOf)).toEqual(["bronze", "silber", "silber", "gold", "gold", "legende"]);
+  it("stuft nach Assessment-Score in Bronze, Silber und Gold ein", () => {
+    expect([2.4, 2.5, 3.49, 3.5, 4.49, 4.9].map(tierOf)).toEqual(["bronze", "silber", "silber", "gold", "gold", "gold"]);
+  });
+});
+
+/* Vakanzen und Ersatz: Ein vakanter CEO führt kommissarisch, und wer einen
+   Ersatz sucht, verliert die bisherige Person sofort. */
+describe("Vakanz und Ersatz", () => {
+  it("lässt einen vakanten CEO mit mx als Interim auf 2,0 führen statt die Fachpositionen auf 1,5 zu deckeln", () => {
+    const base = { ceo: { skill: 0 }, cfo: { skill: 4, prof: [4, 4, 4] }, r3: { skill: 3 } };
+    const neu = holding({ ...base, mx: true }), alt = holding(base);
+    // min(4, 2,0 + 1,5) + 0,5 × 2,0 gegen min(4, 0 + 1,5) + 0
+    expect(effSkill(neu, "cfo", "opex")).toBeCloseTo(3.5 + 1.0, 12);
+    expect(effSkill(alt, "cfo", "opex")).toBeCloseTo(1.5, 12);
+  });
+
+  it("macht die Position beim Suchstart frei und gibt die Abfindung zurück", () => {
+    const c = holding({ mx: true, cfo: { skill: 3.2, side: "hell" } });
+    const sev = vacateForSearch(c, "cfo");
+    expect(sev).toBeCloseTo(severanceOf("cfo", 3.2, ebitdaOf(c)), 12);
+    expect(c.cfo.skill).toBe(0);
+    // Eine vakante Position kostet nichts
+    expect(vacateForSearch(c, "cfo")).toBe(0);
+  });
+});
+
+describe("Ersatz in der Auswertung", () => {
+  const fund = (slot: number, ai: string | null): Any => {
+    const a = ai ? ARCHES.find((x) => x.key === ai)! : null;
+    return { slot, profileId: ai ? null : "p" + slot, isAi: !!ai, archetype: ai, name: a ? a.name : "Fonds",
+      attrs: a ? a.attrs : { sourcing: 3, analysis: 3, negotiation: 2, operations: 2, financing: 2 },
+      cash: CAPITAL, proceeds: 0, investedTotal: 0, fees: 0, holdings: [], realized: [],
+      undrawn: CAPITAL, drawn: 0, recyc: 0, recycled: 0, distTotal: 0, accrued: 0, calls: [], dists: [] };
+  };
+  // Spielt, bis der Spieler eine Beteiligung mit besetztem CEO hält
+  function withHolding() {
+    const rng = createRng(77);
+    const market: Record<string, number> = {};
+    SECNAMES.forEach((s) => (market[s] = SECTORS[s].m));
+    let state: Any = { market, funds: [fund(0, null), fund(1, "ops")], feed: [], deals: [], landmark: null, exitQueue: {}, shortlist: {} };
+    for (let i = 0; i < 4; i++) state.deals.push(newDeal(rng, "process", market));
+    for (let hy = 1; hy <= 6; hy++) {
+      const c = state.funds[0].holdings.find((h: Any) => h.ceo.skill > 0 && !(h.searches || []).length);
+      if (c) return { state, rng, hy, c };
+      const d = state.deals[0];
+      state = runQuarter({ state, halfYear: hy, rng, decisionsBySlot: { 0: { bids: [{ dealId: d.id, multiple: d.askMult * 1.2, leverage: Math.min(d.levCap, 2.8) }] } } }).state;
+    }
+    throw new Error("keine Beteiligung");
+  }
+
+  it("lässt die bisherige Person beim Suchstart gehen und bucht die Abfindung sofort", () => {
+    const { state, rng, hy, c } = withHolding();
+    const out = runQuarter({ state, halfYear: hy, rng, decisionsBySlot: { 0: { searches: [{ holdingUid: c.uid, seat: "ceo" }] } } }).state;
+    const h: Any = (out.funds[0].holdings as Any[]).find((x: Any) => x.uid === c.uid);
+    expect(h.ceo.skill).toBe(0);
+    expect(h.searches.some((x: Any) => x.seat === "ceo")).toBe(true);
+    expect(out.feed.some((f: Any) => f.slot === 0 && /Der bisherige CEO geht/.test(f.text))).toBe(true);
+  });
+
+  it("behält unter LEGACY_COMPAT den Amtsinhaber bis zur Verpflichtung", () => {
+    const { state, rng, hy, c } = withHolding();
+    const sk = c.ceo.skill;
+    const out = runQuarter({ state, halfYear: hy, rng, compat: LEGACY_COMPAT, decisionsBySlot: { 0: { searches: [{ holdingUid: c.uid, seat: "ceo" }] } } }).state;
+    const h: Any = (out.funds[0].holdings as Any[]).find((x: Any) => x.uid === c.uid);
+    expect(h.ceo.skill).toBeGreaterThan(0);
+    expect(h.ceo.skill).toBeCloseTo(sk, 0);
   });
 });

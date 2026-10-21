@@ -29,7 +29,7 @@ import {
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
-  botDraft, seatFromCand, onboardOf, searchLagOf,
+  botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
@@ -244,8 +244,19 @@ function applyImmediateDecisions(
     if ((c.searches || []).some((se: Any) => se.seat === s.seat)) return;
     const retainer = retainerOf(s.seat, ebitdaOf(c));
     c.netDebt += retainer; bookOff(c, "mgmt", retainer);
-    c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + searchLagOf(c) }];
+    // Die Lag hängt am Netzwerk der Amtsinhaber: vor dem Ausscheiden messen
+    const lag = searchLagOf(c);
     const nm = s.seat === "ceo" ? "CEO" : s.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    /* Ersatz für eine besetzte Position: Die bisherige Person geht sofort,
+       die Abfindung fällt jetzt an (siehe vacateForSearch).               */
+    if (!compat.legacyReplaceSearch) {
+      const sev = vacateForSearch(c, s.seat);
+      if (sev > 0) {
+        c.netDebt += sev; bookOff(c, "mgmt", sev);
+        pushFeed(news, quarter, "🚪", "neu", `${c.name}: Der bisherige ${nm} geht, die Position ist bis zur Verpflichtung vakant.`, f.slot);
+      }
+    }
+    c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + lag }];
     pushFeed(news, quarter, "🔍", "neu", `${c.name}: Search-Mandat für einen neuen ${nm} erteilt.`, f.slot);
   });
 

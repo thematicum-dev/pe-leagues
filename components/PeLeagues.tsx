@@ -21,7 +21,7 @@ import {
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
-  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
+  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -586,13 +586,22 @@ export default function PeLeagues() {
   const freeSlots = maxSlots - busySlots;
 
   function startSearch(c, seat) {
+    // Ersatz für eine besetzte Position: Die Person geht sofort, wie in runQuarter (vacateForSearch)
+    const leaving = c[seat].skill > 0;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...chargeOff(h, "mgmt", retainerOf(seat, ebitdaOf(h))),
-        searches: [...(h.searches || []), { seat, readyQ: decQ + searchLagOf(h) }],
+      ...f, holdings: f.holdings.map((h) => {
+        if (h.uid !== c.uid) return h;
+        const lag = searchLagOf(h);
+        const v = { ...h };
+        const sev = vacateForSearch(v, seat);
+        return {
+          ...chargeOff(v, "mgmt", retainerOf(seat, ebitdaOf(h)) + sev),
+          searches: [...(h.searches || []), { seat, readyQ: decQ + lag }],
+        };
       }),
     }));
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    if (leaving) setFeed((p) => [{ q: quarter, e: "🚪", tone: "neu", t: `<b>${c.name}</b>: Der bisherige ${nm} geht — Abfindung ${eur(severanceOf(seat, c[seat].skill, ebitdaOf(c)))}. Die Position ist bis zur Verpflichtung vakant.` }, ...p]);
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
 

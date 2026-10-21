@@ -26,7 +26,7 @@ import {
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
-  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf,
+  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf, vacateForSearch,
 } from "@/lib/engine";
 
 import {
@@ -399,9 +399,9 @@ const COACH = [
   { id: "vac", when: (o) => o.c.cfo.skill <= 0 && !(o.c.searches || []).some((s) => s.seat === "cfo") && o.q <= 3,
     t: "Der <b>CFO ist vakant</b>. Eine unbesetzte Position zieht das People-Niveau nach unten — und über <code>min(Growth, People+1, Performance+1)</code> deckelt sie direkt dein Wachstum. Und sie spart kein Geld: die Position wird interimistisch besetzt, und Interim kostet ein Viertel mehr als der Vorgänger. Ein Mandat kostet 30 % eines Jahresgehalts und zwei Halbjahre — gemessen an der Wirkung auf jede spätere Maßnahme die schnellste Rendite im ganzen Katalog. Du darfst auch beide offenen Positionen gleichzeitig ausschreiben." },
   { id: "search", when: (o) => (o.c.searches || []).some((s) => !s.waiting),
-    t: "Search läuft. Nach zwei Halbjahren bekommst du drei Kandidaten. Das angezeigte Rating ist eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und der wahre Wert steht erst beim Antritt fest." },
+    t: "Search läuft. Im nächsten Halbjahr kommt die Shortlist: <b>fünf Kandidatenkarten</b> zum Wischen. Die Kompetenzen darauf sind eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und das wahre Profil zeigt sich erst nach der Probezeit." },
   { id: "cap", when: (o) => ["cfo", "r3"].some((k) => isCapped(o.c, k)),
-    t: "Eine Fachposition wirkt höchstens bis <b>CEO-Rating + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. A-Player berichten nicht dauerhaft an C-Player; wenn du oben investieren willst, fang beim CEO an." },
+    t: "Eine Fachposition wirkt höchstens bis <b>Leadership des CEO + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. Starke Fachleute berichten nicht dauerhaft an eine schwache Führung; wenn du oben investieren willst, fang beim CEO an." },
   { id: "init", when: (o) => anyInit(o.c) && !(o.c.initA && o.c.initA.ma) && o.q >= 1,
     t: "Maßnahme läuft. Zwei Dinge bestimmen den Ausgang: das <b>effektive Rating</b> auf der zuständigen Position — es steuert Erfolgswahrscheinlichkeit, Dauer und Höhe des Gewinns — und die <b>Risikoklasse</b>. Mit einem schwachen Team liefern verlässliche Maßnahmen rund 70 %, Transformationsprogramme wie ERP oder KI 50–60 %, marktabhängige nur 20–37 %. Mit einem A-Team sind es 97 %, 78–88 % und bis 86 %. Die Besetzung entscheidet mehr als die Auswahl. Der <b>Zukauf</b> ist die Ausnahme: sein Risiko kommt aus dem Mandat, das du erteilst." },
   /* Der Zukauf rechnet als einzige Maßnahme nicht über Rating und Risikoklasse,
@@ -511,9 +511,13 @@ function GuidedRun({ dark, setDark, back }) {
   function startSearch(seat) {
     haptic(8);
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    patch({ ...chargeOff(c, "mgmt", retainerOf(seat, ebitdaOf(c))),
-      searches: [...(c.searches || []), { seat, readyQ: decQ + searchLagOf(c) }] });
-    setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
+    // Ersatz für eine besetzte Position: Die Person geht sofort (vacateForSearch)
+    const lag = searchLagOf(c);
+    const v = { ...c };
+    const sev = vacateForSearch(v, seat);
+    patch({ ...chargeOff(v, "mgmt", retainerOf(seat, ebitdaOf(c)) + sev),
+      searches: [...(c.searches || []), { seat, readyQ: decQ + lag }] });
+    setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}${sev > 0 ? `, Abfindung für den bisherigen ${nm} ${eur(sev)}. Die Position ist bis zur Verpflichtung vakant` : ""}.` }, ...p]);
   }
 
   function hire(item, cand) {
