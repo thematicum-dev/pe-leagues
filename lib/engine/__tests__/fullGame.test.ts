@@ -176,16 +176,16 @@ function round(v: number) { return Math.round(v * 1e6) / 1e6; }
 /* Sollwert, erzeugt vor dem Umbau durch denselben Spielverlauf gegen den
    damaligen Code (globaler SEED, bare rnd()/nrm()/pick()/band()). */
 const GOLDEN_RESULT = {
-  finalRngPosition: 2986756629,
+  finalRngPosition: 644885692,
   holdingsCount: 2,
   realizedCount: 5,
-  cash: 77.59444,
-  undrawn: 77.59444,
-  drawn: 422.40556,
-  nav: 229.461106,
-  tvpi: 1.644254,
-  dpi: 1.109689,
-  irr: 0.094505,
+  cash: 55.976709,
+  undrawn: 55.976709,
+  drawn: 444.023291,
+  nav: 141.104916,
+  tvpi: 1.34054,
+  dpi: 1.022752,
+  irr: 0.055774,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
@@ -229,31 +229,41 @@ const GOLDEN_RESULT = {
      — vorher hielt die Beispielbeteiligung ein Ticket, das allein ein Sechstel
      des Fonds band, und lieferte 97 Mio. € EBITDA-Beitrag; jetzt 27. Das
      Landmark-Objekt ist der Rohwert aus newLandmark — gekappt wird es erst
-     bei der Ankündigung (announceLandmark), die diese Partie nicht spielt. */
-  score: 0.696603,
-  carry: 11.252011,
+     bei der Ankündigung (announceLandmark), die diese Partie nicht spielt.
+     Ein neuntes Mal mit dem Manager-Draft: Die Shortlist ist ein Deck aus
+     fünf Kandidatenkarten mit Kompetenzprofil (makeCandidates) und zieht
+     dafür mehr Zufallszahlen als die alten drei Schablonen. Ab dem ersten
+     Search-Mandat in Halbjahr 3 läuft der ganze Strom anders, Markt und
+     Landmark eingeschlossen. Die laufende Wirkung des Managements greift
+     hier nicht — die Beteiligungen dieser Partie tragen kein `mx`.
+     Ein zehntes Mal mit der Chemie im Top-Team: Jede Kandidatenkarte zieht
+     eine weitere Zufallszahl für ihre Haltung (hell/dunkel). Die Haltung
+     der Amtsinhaber zieht keine (sideOf), die Chemie selbst wirkt ohne `mx`
+     nicht. Ab dem ersten Search-Mandat läuft der Strom wieder anders. */
+  score: 0.526948,
+  carry: 0,
   landmark: {
-    sector: "Services",
-    revenue: 200.751518,
-    margin: 19.883744,
-    askMult: 12.831593,
-    name: "Brenseil Servicetechnik Gruppe",
+    sector: "Software",
+    revenue: 214.483139,
+    margin: 25.339055,
+    askMult: 19,
+    name: "Velseil Bau Software Gruppe",
   },
-  healthMoic: 1.376543,
-  healthCount: 2,
+  healthMoic: 0.769153,
+  healthCount: 5,
   bridge: {
-    entry: 69.674035,
-    ebitda: 26.849504,
-    mult: -10.47944,
-    delev: 15.802745,
+    entry: 74.929541,
+    ebitda: -19.056304,
+    mult: 34.361294,
+    delev: 11.511001,
     exit: 90,
   },
   marketFinal: {
-    Industrials: 7.742424,
-    Healthcare: 10.026113,
-    Software: 13.929235,
-    Services: 10.265666,
-    Consumer: 11.2,
+    Industrials: 8.795126,
+    Healthcare: 10.087508,
+    Software: 18.2,
+    Services: 12.862874,
+    Consumer: 6.362204,
   },
   firstHoldingUid: "c5",
 };

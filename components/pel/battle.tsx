@@ -900,18 +900,52 @@ export function StatePill({ tone = "dim", children }) {
 
 /* Fähigkeiten: Flaggen sind das, was auf einer Sammelkarte die Fähigkeit ist —
    eine Eigenschaft, die den Wert der Karte verschiebt.                       */
-export function Ability({ kind = "risk", children }) {
+export function Ability({ kind = "risk", icon = null, children }) {
   return (
     <span className={"babil " + kind}>
-      <i>{kind === "angle" ? "◆" : kind === "hidden" ? "?" : kind === "good" ? "✦" : "⚑"}</i>
+      <i><Icon k={icon || (kind === "angle" ? "layers" : kind === "hidden" ? "help" : kind === "good" ? "spark" : "flag")} /></i>
       <span>{children}</span>
     </span>
   );
 }
 
+/* Linienzeichen der Karte. Sie ersetzen die Emojis: Emojis zeichnet jedes
+   System anders, bunt und in eigener Größe, neben den Porträts und
+   Metallrahmen wirkten sie wie aus einem anderen Spiel. Die Zeichen nehmen
+   die Textfarbe an und haben dieselbe Strichstärke wie die Kennzahl-Icons. */
+const LINE_ICONS = {
+  lock:     (<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>),
+  flag:     <path d="M5 21V4h11l-2 4 2 4H5" />,
+  layers:   (<><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></>),
+  spark:    <path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z" />,
+  help:     (<><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5h.01" /></>),
+  chart:    <path d="M4 20V11M10 20V5M16 20v-7M21 20H3" />,
+  doc:      (<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></>),
+  person:   (<><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /></>),
+  users:    (<><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" /><path d="M18 14.8c1.9.7 3.1 2.4 3.5 5.2" /></>),
+  coins:    (<><ellipse cx="10" cy="6" rx="7" ry="3" /><path d="M3 6v6c0 1.7 3.1 3 7 3" /><path d="M3 12v6c0 1.7 3.1 3 7 3" /><path d="M19 13v7M15.5 16.5h7" /></>),
+  sliders:  <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />,
+  sprout:   (<><path d="M12 21v-9" /><path d="M12 12c0-4 3-7 8-7 0 5-3 7-8 7z" /><path d="M12 14c0-3-2.5-5-7-5 0 4 2.5 5 7 5z" /></>),
+  chevR:    <path d="M9 6l6 6-6 6" />,
+  chevD:    <path d="M6 9l6 6 6-6" />,
+  megaphone:(<><path d="M3 10v4h3l6 4V6l-6 4z" /><path d="M16 8.5a5 5 0 0 1 0 7" /></>),
+  bell:     (<><path d="M6 9a6 6 0 0 1 12 0c0 6 3 8 3 8H3s3-2 3-8" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>),
+  ban:      (<><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></>),
+  building: <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4" />,
+  check:    <path d="M5 12l5 5L20 7" />,
+  repeat:   (<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
+  alert:    (<><path d="M12 3l10 18H2z" /><path d="M12 10v5M12 18h.01" /></>),
+};
+export function Icon({ k, className = "bli" }: { k: keyof typeof LINE_ICONS | string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor"
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{LINE_ICONS[k] || LINE_ICONS.help}</svg>
+  );
+}
+
 /* Kopfzeile der Karte: Bild, Signet, Name, Anspruch, Fähigkeiten, Sektoranspruch. */
 export function CardHero({ id, sector, name, claim, tier = "common", state = null,
-                          meta = null, abilities = null }) {
+                          meta = null, abilities = null, badge = null }) {
   /* Die beiden Randtöne der Firmenfarbe stehen als Variablen bereit, damit der
      Anspruch des Sektors im hellen Theme den dunklen und im dunklen den hellen
      nehmen kann. Fest verdrahtet auf den hellen Ton stand er auf weißem Grund
@@ -924,11 +958,12 @@ export function CardHero({ id, sector, name, claim, tier = "common", state = nul
           <SectorPill sector={sector} />
           {state}
         </div>
-        <div className="bheroname">
+        <div className={"bheroname" + (badge ? " hasbadge" : "")}>
           <div className="bnamewrap">
             <h3 className="bname">{name}</h3>
             {meta && <div className="bmeta">{meta}</div>}
           </div>
+          {badge}
         </div>
         {claim && <p className="bclaim">{claim}</p>}
         {abilities}
@@ -1005,7 +1040,7 @@ export function Section({ title, right = null, children = null, flush = false })
 export function More({ label = "Mehr Details", children, open = false }) {
   return (
     <details className="bmore" open={open}>
-      <summary><span className="mi">↓</span>{label}<span className="mc">›</span></summary>
+      <summary><span className="mi"><Icon k="chevD" /></span>{label}<span className="mc"><Icon k="chevR" /></span></summary>
       <div className="bmorebody">{children}</div>
     </details>
   );
@@ -1261,7 +1296,9 @@ export const BATTLE_CSS = `
   border-style:dashed;border-color:var(--rule);}
 .pel .babil.good{color:var(--teal);background:color-mix(in srgb, var(--teal) 14%, var(--card));
   border-color:color-mix(in srgb, var(--teal) 42%, transparent);}
-.pel .babil i{font-style:normal;font-size:10px;line-height:1;opacity:.9;}
+.pel .babil i{font-style:normal;display:inline-flex;line-height:1;opacity:.9;}
+.pel .babil i .bli{width:12px;height:12px;stroke-width:2.2;}
+.pel .bli{width:16px;height:16px;flex:none;}
 
 /* ---------- Kopfzahlen ---------- */
 .pel .bheadline{display:flex;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
@@ -1398,7 +1435,8 @@ export const BATTLE_CSS = `
   width:24px;height:24px;border-radius:50%;flex:none;font-size:12px;
   color:var(--own);background:color-mix(in srgb, var(--own) 14%, transparent);
   border:1px solid color-mix(in srgb, var(--own) 32%, transparent);transition:transform .2s ease;}
-.pel .bmore > summary .mc{margin-left:auto;color:var(--ink2);font-size:16px;line-height:1;
+.pel .bmore > summary .mi .bli{width:14px;height:14px;stroke-width:2.2;}
+.pel .bmore > summary .mc{margin-left:auto;color:var(--ink2);display:inline-flex;line-height:1;
   transition:transform .2s ease;}
 .pel .bmore[open] > summary .mc{transform:rotate(90deg);}
 .pel .bmore[open] > summary .mi{transform:rotate(180deg);}
@@ -1624,4 +1662,157 @@ export const BATTLE_CSS = `
   background:repeating-linear-gradient(135deg,transparent,transparent 9px,
     color-mix(in srgb, var(--ink) 3%, transparent) 9px,color-mix(in srgb, var(--ink) 3%, transparent) 18px);}
 .pel .bslot b{display:block;font-size:13px;color:var(--ink);font-weight:650;margin-bottom:3px;}
+
+/* ============================================================
+   BETEILIGUNGSKARTE IM SPIELKARTEN-STIL (Portfolio, .hold)
+   Die Karte trägt einen Metallrahmen in der Sektorfarbe, wie die
+   Führungskarten ihren in Bronze, Silber oder Gold. --frame ist der
+   Rahmenton; im Verkaufsprozess wird er golden. Alles Typisierende
+   (Abschnittsmarken, Medaillon) greift auf --frame zu, die Hebel auf
+   die Farbe ihrer Reifegrad-Familie.
+   ============================================================ */
+.pel .bcard.hold{--frame:var(--sec);border-color:transparent;
+  --fmetal:linear-gradient(135deg,color-mix(in srgb, var(--frame) 55%, #000) 0%,var(--frame) 28%,
+    color-mix(in srgb, var(--frame) 30%, #fff) 47%,var(--frame) 62%,color-mix(in srgb, var(--frame) 55%, #000) 100%);
+  box-shadow:0 24px 50px -30px color-mix(in srgb, var(--frame) 90%, transparent),0 1px 2px var(--glow);}
+.pel .bcard.hold.tier-myth{--frame:var(--gold);}
+.pel .bcard.hold:before{content:"";position:absolute;inset:0;z-index:6;pointer-events:none;border-radius:inherit;
+  padding:2px;background:var(--fmetal);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);}
+.pel .bcard.hold .bedge{display:none;}
+
+/* Zustand als Leuchtpunkt statt Zeichen */
+.pel .bstate .bdot{width:7px;height:7px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 7px currentColor;flex:none;}
+.pel .bstate .bdot.ring{background:transparent;border:1.5px solid currentColor;box-shadow:none;width:6px;height:6px;}
+.pel .bstate .bli{width:12px;height:12px;stroke-width:2.4;}
+
+/* Medaillon im Kartenkopf: Total Value je eingesetztem Euro */
+.pel .bheroname.hasbadge{max-width:100%;align-items:center;gap:12px;}
+.pel .bmedal{flex:none;width:74px;height:74px;border-radius:50%;padding:2.5px;box-sizing:border-box;
+  background:var(--fmetal);box-shadow:0 8px 22px -8px color-mix(in srgb, var(--frame) 90%, transparent);}
+.pel .bmedal > span{width:100%;height:100%;border-radius:50%;background:var(--card);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;}
+.pel .bmedal .v{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:18px;font-weight:700;
+  letter-spacing:-.04em;line-height:1;}
+.pel .bmedal .v.teal{color:var(--teal);} .pel .bmedal .v.ox{color:var(--ox);}
+.pel .bmedal .l{font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);
+  font-weight:700;margin-top:4px;}
+.pel .bvalline{margin:0;padding:12px 15px 0;font-size:11.5px;line-height:1.45;color:var(--ink2);}
+.pel .bvalline b{color:var(--ink);font-weight:650;}
+
+/* Abschnitte: Marke in Rahmenfarbe, Versalien */
+.pel .bcard.hold .bsec{padding-top:22px;}
+.pel .bcard.hold .bsech{align-items:center;margin-bottom:12px;}
+.pel .bcard.hold .bsech h4{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;
+  letter-spacing:.18em;text-transform:uppercase;}
+.pel .bcard.hold .bsech h4:before{content:"";width:14px;height:2px;border-radius:2px;background:var(--frame);}
+
+/* Kopfzahlen als drei Kacheln */
+.pel .bcard.hold .bheadline{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;
+  margin:14px 15px 0;border:0;background:none;}
+.pel .bcard.hold .bheadline > div,.pel .bcard.hold .bheadline > div + div{padding:10px 6px;border-radius:12px;
+  border:1px solid var(--rule);background:color-mix(in srgb, var(--frame) 6%, var(--card));}
+/* Drei Kacheln lassen dem Betrag rund 90 px; "65,6 Mio. €" in Mono braucht bei 15 px gut 100. */
+.pel .bcard.hold .bheadline .v{font-size:13px;letter-spacing:-.04em;}
+@media (max-width:359px){
+  .pel .bcard.hold .bheadline{grid-template-columns:1fr 1fr;}
+  .pel .bcard.hold .bheadline > div:nth-child(3){grid-column:span 2;}
+}
+
+/* Vier Kennzahlen als 2 × 2 Kacheln, Zeichen links */
+.pel .bcard.hold .bicons{grid-template-columns:1fr 1fr;gap:6px;padding:6px 15px 0;}
+.pel .bcard.hold .bicons > div{display:grid;grid-template-columns:34px minmax(0,1fr);column-gap:10px;
+  align-items:center;align-content:center;text-align:left;padding:9px 10px;border-radius:12px;
+  border:1px solid var(--rule);background:var(--card);}
+.pel .bcard.hold .bicons .ic{grid-row:1 / span 3;width:34px;height:34px;margin:0;border-radius:9px;}
+.pel .bcard.hold .bicons .l{font-size:9px;letter-spacing:.12em;text-transform:uppercase;}
+.pel .bcard.hold .bicons .v{font-size:15px;margin-top:1px;}
+.pel .bcard.hold .bicons .s{font-size:9.5px;margin-top:1px;}
+.pel .bcard.hold .bicons .s.lock{display:inline-flex;align-items:center;gap:4px;justify-self:start;margin-top:3px;}
+.pel .bicons .s .bli{width:10px;height:10px;stroke-width:2.4;}
+
+/* Hinweisfeld: gestrichelt, Schaltfläche als Marke */
+.pel .bcicon .bli{width:18px;height:18px;color:var(--ox);}
+.pel .bcard.hold .bcallout{border-style:dashed;border-width:1.5px;margin-top:8px;}
+.pel .bcard.hold .bcallout{align-items:center;}
+.pel .bcard.hold .bcallout button{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;
+  font-size:10.5px;padding:6px 9px;
+  color:var(--card);background:var(--ox);border-color:var(--ox);}
+.pel .bcard.hold .bcallout button:hover:not(:disabled){filter:brightness(1.08);background:var(--ox);color:var(--card);}
+.pel .bcard.hold .bmore{margin-top:8px;}
+
+/* Reifegrad: Zeichen der Familie vor dem Balken */
+.pel .babic{flex:none;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.pel .babic .bli{width:14px;height:14px;}
+.pel .babic.p{color:var(--gold);background:color-mix(in srgb, var(--gold) 14%, transparent);}
+.pel .babic.l{color:var(--teal);background:color-mix(in srgb, var(--teal) 14%, transparent);}
+.pel .babic.a{color:#8478BE;background:color-mix(in srgb, #8478BE 16%, transparent);}
+.pel .bcard.hold .bablab{width:82px;font-size:10.5px;letter-spacing:.02em;text-transform:none;color:var(--ink);font-weight:700;}
+.pel .bcard.hold .babpip{height:10px;}
+.pel .bcard.hold .babpip.on.p{box-shadow:0 0 8px color-mix(in srgb, var(--gold) 50%, transparent);}
+.pel .bcard.hold .babpip.on.l{box-shadow:0 0 8px color-mix(in srgb, var(--teal) 50%, transparent);}
+.pel .bcard.hold .babpip.on.a{box-shadow:0 0 8px color-mix(in srgb, #8478BE 50%, transparent);}
+.pel .babwarn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ox);}
+.pel .babwarn .bli{width:13px;height:13px;}
+
+/* Team-Score als Ring in der Seltenheit des Teams */
+.pel .bteam{display:inline-flex;align-items:center;gap:7px;}
+.pel .bteam .ring{display:inline-flex;width:42px;height:42px;border-radius:50%;padding:2px;box-sizing:border-box;
+  background:var(--metal);box-shadow:0 6px 16px -8px var(--tglow);}
+.pel .bteam .ring > span{flex:1;border-radius:50%;background:var(--card);display:flex;align-items:center;
+  justify-content:center;}
+.pel .bteam .ring b{font-size:13.5px;color:var(--ink);letter-spacing:-.02em;}
+.pel .bteam .d{letter-spacing:0;}
+.pel .bteam .d.up{color:var(--teal);} .pel .bteam .d.dn{color:var(--ox);}
+
+/* Wertsteigerung als Hebel-Karten */
+.pel .bslots{display:inline-flex;align-items:center;gap:6px;}
+.pel .bslots span{display:inline-flex;gap:3px;}
+.pel .bslots i{width:7px;height:11px;border-radius:2px;background:var(--teal);}
+.pel .blevers{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.pel .blevers > :last-child:nth-child(odd){grid-column:span 2;}
+.pel .blever{--fam:var(--teal);display:flex;width:100%;margin:0;padding:1.5px;border:0;border-radius:16px;
+  text-align:left;color:var(--ink);
+  background:linear-gradient(150deg,var(--fam),color-mix(in srgb, var(--fam) 22%, var(--card)) 72%);}
+.pel .blever:hover:not(:disabled){border:0;color:var(--ink);
+  background:linear-gradient(150deg,var(--fam),color-mix(in srgb, var(--fam) 40%, var(--card)) 72%);}
+.pel .blever.l{--fam:var(--teal);} .pel .blever.a{--fam:#8478BE;} .pel .blever.p{--fam:var(--gold);}
+.pel .blever.n{--fam:var(--ink2);} .pel .blever.ox{--fam:var(--ox);}
+.pel .blever > span{display:flex;flex-direction:column;flex:1;min-width:0;border-radius:14.5px;overflow:hidden;
+  background:var(--card);}
+.pel .blever .art{display:flex;align-items:center;justify-content:center;height:68px;color:var(--fam);
+  background:radial-gradient(circle at 50% 62%,color-mix(in srgb, var(--fam) 30%, transparent),
+    color-mix(in srgb, var(--fam) 4%, transparent) 70%);}
+.pel .blever .art .bli{width:34px;height:34px;stroke-width:1.5;}
+.pel .blever .t{font-size:13.5px;font-weight:700;letter-spacing:-.01em;padding:10px 12px 0;}
+.pel .blever .s{flex:1;font-size:10.5px;line-height:1.4;color:var(--ink2);padding:3px 12px 0;}
+.pel .blever .f{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:9px 12px 11px;
+  font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--ink2);}
+.pel .blever .f .bli{width:14px;height:14px;color:var(--fam);stroke-width:2.2;}
+.pel .blever .tok{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0;
+  text-transform:none;padding:3px 7px;border-radius:6px;color:var(--card);background:var(--fam);}
+.pel .blever:disabled{opacity:1;cursor:default;filter:saturate(.3);}
+.pel .blever:disabled > span{opacity:.62;}
+.pel .blever.run:disabled,.pel .blever.done:disabled{filter:none;}
+.pel .blever.run:disabled > span,.pel .blever.done:disabled > span{opacity:1;}
+.pel .blever.run .f{color:var(--gold);}
+.pel .bcard.hold .bstatus{font-size:10.5px;color:var(--ink2);margin-top:8px;line-height:1.45;}
+.pel .bcard.hold .bstatus .bli{width:12px;height:12px;vertical-align:-2px;margin-right:4px;}
+
+/* Exit-Pfad: ein Knoten je Halbjahr bis zur Mindesthaltedauer */
+.pel .bexitpath{position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 4px;margin-bottom:14px;}
+.pel .bexitpath:before{content:"";position:absolute;left:12px;right:12px;top:50%;height:2px;margin-top:-1px;background:var(--rule);}
+.pel .bexitpath i{position:relative;width:12px;height:12px;border-radius:50%;box-sizing:border-box;
+  background:var(--card);border:2px solid var(--rule);}
+.pel .bexitpath i.on{background:var(--teal);border-color:var(--teal);
+  box-shadow:0 0 8px color-mix(in srgb, var(--teal) 60%, transparent);}
+.pel .bexitpath b{position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:8px;box-sizing:border-box;background:var(--card);border:2px solid var(--gold);color:var(--gold);}
+.pel .bexitpath b.on{background:var(--gold);color:var(--card);}
+.pel .bexitpath b .bli{width:13px;height:13px;stroke-width:2.2;}
+.pel .bcard.hold .bactgrid button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:48px;}
+.pel .bcard.hold .bactgrid button .bli{width:14px;height:14px;}
+.pel .bnote .bli{width:14px;height:14px;vertical-align:-2px;margin-right:5px;}
 `;

@@ -26,7 +26,7 @@ import {
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
-  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x,
+  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf,
 } from "@/lib/engine";
 
 import {
@@ -381,10 +381,12 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
     entryEV: eb * mult, entryFees: eb * mult * ENTRY_FEE,
     cashOut: 0, recapOut: 0, done: [],
     hist: [{ rev: d.revenue, eb, nd: eb * lev, mg: d.margin, ql: d.quality, eq: eb * mult - eb * lev, mult, st: 1, out: 0 }],
+    mx: true,   // laufende Wirkung des Managements, wie im Spiel
   };
   c.entryEquity = eb * mult - eb * lev + eb * mult * ENTRY_FEE;
   c.costTotal = c.entryEquity; c.costLeft = c.entryEquity;
   c.baseLoad = seatLoad(c);
+  c.tm0 = teamScoreOf(c);   // Team-Score beim Kauf
   return c;
 }
 
@@ -398,9 +400,9 @@ const COACH = [
   { id: "vac", when: (o) => o.c.cfo.skill <= 0 && !(o.c.searches || []).some((s) => s.seat === "cfo") && o.q <= 3,
     t: "Der <b>CFO ist vakant</b>. Eine unbesetzte Position zieht das People-Niveau nach unten — und über <code>min(Growth, People+1, Performance+1)</code> deckelt sie direkt dein Wachstum. Und sie spart kein Geld: die Position wird interimistisch besetzt, und Interim kostet ein Viertel mehr als der Vorgänger. Ein Mandat kostet 30 % eines Jahresgehalts und zwei Halbjahre — gemessen an der Wirkung auf jede spätere Maßnahme die schnellste Rendite im ganzen Katalog. Du darfst auch beide offenen Positionen gleichzeitig ausschreiben." },
   { id: "search", when: (o) => (o.c.searches || []).some((s) => !s.waiting),
-    t: "Search läuft. Nach zwei Halbjahren bekommst du drei Kandidaten. Das angezeigte Rating ist eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und der wahre Wert steht erst beim Antritt fest." },
+    t: "Search läuft. Im nächsten Halbjahr kommt die Shortlist: <b>fünf Kandidatenkarten</b> zum Wischen. Die Kompetenzen darauf sind eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und das wahre Profil steht mit der Verpflichtung fest." },
   { id: "cap", when: (o) => ["cfo", "r3"].some((k) => isCapped(o.c, k)),
-    t: "Eine Fachposition wirkt höchstens bis <b>CEO-Rating + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. A-Player berichten nicht dauerhaft an C-Player; wenn du oben investieren willst, fang beim CEO an." },
+    t: "Eine Fachposition wirkt höchstens bis <b>Leadership des CEO + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. Starke Fachleute berichten nicht dauerhaft an eine schwache Führung; wenn du oben investieren willst, fang beim CEO an." },
   { id: "init", when: (o) => anyInit(o.c) && !(o.c.initA && o.c.initA.ma) && o.q >= 1,
     t: "Maßnahme läuft. Zwei Dinge bestimmen den Ausgang: das <b>effektive Rating</b> auf der zuständigen Position — es steuert Erfolgswahrscheinlichkeit, Dauer und Höhe des Gewinns — und die <b>Risikoklasse</b>. Mit einem schwachen Team liefern verlässliche Maßnahmen rund 70 %, Transformationsprogramme wie ERP oder KI 50–60 %, marktabhängige nur 20–37 %. Mit einem A-Team sind es 97 %, 78–88 % und bis 86 %. Die Besetzung entscheidet mehr als die Auswahl. Der <b>Zukauf</b> ist die Ausnahme: sein Risiko kommt aus dem Mandat, das du erteilst." },
   /* Der Zukauf rechnet als einzige Maßnahme nicht über Rating und Risikoklasse,
@@ -510,9 +512,13 @@ function GuidedRun({ dark, setDark, back }) {
   function startSearch(seat) {
     haptic(8);
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    patch({ ...chargeOff(c, "mgmt", retainerOf(seat, ebitdaOf(c))),
-      searches: [...(c.searches || []), { seat, readyQ: decQ + 1 }] });
-    setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
+    // Ersatz für eine besetzte Position: Die Person geht sofort (vacateForSearch)
+    const lag = searchLagOf(c);
+    const v = { ...c };
+    const sev = vacateForSearch(v, seat);
+    patch({ ...chargeOff(v, "mgmt", retainerOf(seat, ebitdaOf(c)) + sev),
+      searches: [...(c.searches || []), { seat, readyQ: decQ + lag }] });
+    setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}${sev > 0 ? `, Abfindung für den bisherigen ${nm} ${eur(sev)}. Die Position ist bis zur Verpflichtung vakant` : ""}.` }, ...p]);
   }
 
   function hire(item, cand) {
@@ -522,16 +528,16 @@ function GuidedRun({ dark, setDark, back }) {
     patch({
       ...chargeOff(c, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(c))
         + (had ? severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)) : 0)),
-      [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach }, onboard: 1,
+      [item.seat]: seatFromCand(cand, decQ), onboard: onboardOf(cand),
       searches: (c.searches || []).filter((se) => se.seat !== item.seat),
     });
     setSl((p) => p.slice(1));
-    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
+    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Score ${cand.skill.toFixed(1).replace(".", ",")} (geschätzt ${cand.shown.toFixed(1).replace(".", ",")})` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
   }
 
   function reject(item) {
     patch({ ...chargeOff(c, "mgmt", retainerOf(item.seat, ebitdaOf(c)) * 0.5),
-      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se) });
+      searches: (c.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + searchLagOf(c) } : se) });
     setSl((p) => p.slice(1));
     setFeed((p) => [{ q, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
   }

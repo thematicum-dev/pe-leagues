@@ -39,7 +39,7 @@ import {
   BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
   IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
+  SECCOLOR, SECLABEL, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
   eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initsOf, investableOf, irrOf,
   recycleRoom, scoreOf, tvccOf, tvpiOf, x,
@@ -937,7 +937,10 @@ export default function MultiplayerGame({
   function hireStage(item: Any, cand: Any) {
     haptic(10);
     const idx = item.candidates.indexOf(cand);
-    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : "development";
+    /* Plätze 0 bis 2 unter ihren alten Namen: Die versteht auch eine
+       Auswertung, die das Deck mit fünf Karten noch nicht kennt. */
+    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : idx === 2 ? "development"
+      : (`c${idx}` as HireChoice);
     setHireDecisions((arr) => [...arr, { holdingUid: item.holdingUid, seat: item.seat, choice }]);
     setShortlistCursor((i) => i + 1);
   }
@@ -1283,7 +1286,7 @@ export default function MultiplayerGame({
                   const d = (state.market[s] / SECTORS[s].m - 1) * 100;
                   return (
                     <tr key={s}>
-                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
+                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{SECLABEL[s]}</td>
                       <td>{x(state.market[s])}
                         <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                           {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %

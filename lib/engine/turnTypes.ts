@@ -14,7 +14,10 @@ export type Seat = "ceo" | "cfo" | "r3";
 export type InitDim = "plat" | "acc";
 export type ExitAction = "process" | "bilateral" | "cv" | "ipo";
 export type OfferChoice = "accept" | "reneg" | "abort";
-export type HireChoice = "veteran" | "aplayer" | "development" | "reject";
+/* "veteran", "aplayer", "development" sind die Plätze 0 bis 2 der Shortlist
+   (so hieß die alte Liste mit drei festen Schablonen), "c0" bis "c4" die
+   Plätze des Decks mit fünf Kandidatenkarten. */
+export type HireChoice = "veteran" | "aplayer" | "development" | "c0" | "c1" | "c2" | "c3" | "c4" | "reject";
 
 export interface Bid {
   dealId: string;
@@ -102,13 +105,24 @@ export interface ExitQueueItem {
   offers: { buyer: string; kind: string; price: number; risk: number; note: string }[];
 }
 
+/* Eine Kandidatenkarte. Die Felder ab `arch` trägt nur das Deck seit dem
+   19.10.2026: Archetyp, Person, Herkunft, Porträtnummer, Eigenschaft, das
+   gezeigte und das wahre Kompetenzprofil (siehe makeCandidates), seit dem
+   20.10.2026 auch die Haltung hell/dunkel (siehe chemOf), seit dem
+   21.10.2026 die Porträt-ID (siehe PORTRAIT_POOL). */
+export interface ShortlistCandidate {
+  label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string;
+  arch?: string; name?: string; g?: "f" | "m"; age?: number; origin?: string; pic?: number; trait?: string;
+  prof?: number[]; shownProf?: number[]; side?: "hell" | "dunkel"; portrait?: string;
+}
+
 /* Eine offene Kandidaten-Shortlist für eine zu besetzende Position (hire()/
    rejectAll() in der ursprünglichen UI). */
 export interface ShortlistItem {
   holdingUid: string;
   name: string;
   seat: Seat;
-  candidates: { label: string; shown: number; span: number; skill: number; dev: boolean; poach: number; note: string }[];
+  candidates: ShortlistCandidate[];
 }
 
 /* Laufzeitzustand einer Partie zwischen zwei Auswertungen: alles, was die
