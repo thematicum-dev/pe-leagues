@@ -20,7 +20,7 @@ import { createPortal } from "react-dom";
 import {
   CHEM, CHEM_LABEL, COMPETENCIES, INITS, MANAGER_ARCHES, MANAGER_TRAITS, POACH, PROGRAM_COMP, ROLE3, TIERS,
   cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, initDurationOf, initSuccess,
-  isCapped, mgmtFx, payOf, pickPortrait, portraitUrl, retainerOf, seatFromCand, severanceOf,
+  isCapped, mgmtFx, payOf, PORTRAIT_POOL, portraitUrl, retainerOf, seatFromCand, severanceOf,
   signBonusOf, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import { seedOf } from "./battle";
@@ -185,6 +185,25 @@ function runDeltas(base: Any, sim: Any) {
   ].filter((r) => Math.abs(r.v) >= (r.d === 0 ? 0.5 : 0.05));
 }
 
+/* Porträt eines Amtsinhabers, fest aus Firma und Position. Die drei
+   Positionen ziehen nacheinander aus dem ganzen Pool ihres Geschlechts, jede
+   ohne die Gesichter der vorigen: Zwei Amtsinhaber derselben Firma sehen
+   nie gleich aus. Gezogen wird für alle drei Positionen, auch für besetzte
+   oder vakante, damit ein Wechsel auf einer Position die anderen Gesichter
+   nicht verschiebt. */
+const SEAT_KEYS = ["ceo", "cfo", "r3"];
+export function incumbentPortrait(name: string, seat: string) {
+  const taken = new Set<string>();
+  for (const k of SEAT_KEYS) {
+    const g = seedOf(name + k) % 2 ? "f" : "m";
+    const pool = PORTRAIT_POOL[g].filter(([id]) => !taken.has(id));
+    const [id, age] = pool[seedOf(name + ":" + k) % pool.length];
+    taken.add(id);
+    if (k === seat) return { g, id, age };
+  }
+  return { g: "m", id: PORTRAIT_POOL.m[0][0], age: PORTRAIT_POOL.m[0][1] };
+}
+
 /* Die Karte einer Person, die schon auf der Position sitzt. Eine verpflichtete
    Karte trägt ihr wahres Profil. Ein Amtsinhaber aus der Zeit vor dem Kauf
    hat nur ein Rating und keine Karte. */
@@ -192,12 +211,10 @@ export function seatCardOf(c: Any, seat: string) {
   const s = c[seat];
   if (!(s.skill > 0)) return null;
   if (!s.prof || !s.name) {
-    // Amtsinhaber: Porträt fest aus Firma und Position, Alter vom Porträt
-    const g = seedOf(c.name + seat) % 2 ? "f" : "m";
-    const pr = pickPortrait(g, 40, (seedOf(c.name + ":" + seat) % 1000) / 1000);
+    const { g, id, age } = incumbentPortrait(c.name, seat);
     return {
       label: "Seit dem Kauf im Amt", name: g === "f" ? "Amtsinhaberin" : "Amtsinhaber", incumbent: true,
-      g, portrait: pr.id, pic: seedOf(c.name + ":" + seat) % 16, age: pr.age, origin: "Mittelstand",
+      g, portrait: id, pic: seedOf(c.name + ":" + seat) % 16, age, origin: "Mittelstand",
       shown: s.skill, shownProf: [s.skill, s.skill, s.skill], span: 0, side: s.side, poach: s.poach ?? 1, dev: !!s.dev,
       note: "Saß schon vor dem Kauf in der Geschäftsführung. Das Rating stammt aus der Management-Due-Diligence.",
     };

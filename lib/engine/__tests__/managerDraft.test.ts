@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { createRng } from "../rng";
 import { runQuarter } from "../runQuarter";
+import { incumbentPortrait } from "@/components/pel/draft";
 import {
   ENTRY_FEE, COV_FLOOR, ARCHES, CAPITAL, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
@@ -450,6 +451,13 @@ describe("Ersatz in der Auswertung", () => {
 });
 
 describe("Porträts", () => {
+  it("gibt den Amtsinhabern einer Firma drei verschiedene Gesichter", () => {
+    for (let i = 0; i < 300; i++) {
+      const ids = ["ceo", "cfo", "r3"].map((k) => incumbentPortrait(`Firma ${i}`, k).id);
+      expect(new Set(ids).size).toBe(3);
+    }
+  });
+
   it("hat für jede Person eine helle und eine dunkle Fassung in public/manager", () => {
     for (const g of ["f", "m"] as const) for (const [id] of PORTRAIT_POOL[g]) for (const side of ["hell", "dunkel"]) {
       expect(fs.existsSync(path.join(process.cwd(), "public", portraitUrl(id, side)))).toBe(true);

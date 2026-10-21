@@ -24,10 +24,10 @@ import {
   DEAL_YEARS,
   markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf,
+  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import {
-  AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
+  AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Icon, Meter, More, Row, Section,
   SectorEmblem, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
 } from "./battle";
 import { haptic } from "./haptics";
@@ -1068,7 +1068,8 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
   /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
      Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
-  const exitStatus = c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
+  // Die Mindesthaltedauer zeigt der Exit-Pfad, dafür braucht es keine Zeile.
+  const exitStatus = c.holdQ < MIN_HOLD ? ""
     : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
     : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
     : endPressure(quarter) > 0.05
@@ -1097,21 +1098,35 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const { lead } = useMemo(() => splitDesc(c.desc), [c.desc]);
 
   return (
-    <div className={"bcard tier-" + tier} id={"h_" + c.uid}
+    <div className={"bcard hold tier-" + tier} id={"h_" + c.uid}
       style={{ "--sec": SECCOLOR[c.sector], "--own": id.own }}>
       <i className="bedge" />
 
-      <CardHero id={id} sector={c.sector} name={(c.cv ? "🔄 " : "") + c.name} claim={lead} tier={tier}
+      <CardHero id={id} sector={c.sector} name={c.name} claim={lead} tier={tier}
+        badge={
+          /* Die eine Zahl, nach der eine Beteiligung beurteilt wird, als
+             Medaillon neben dem Namen — wie der Score auf einer Battle Card. */
+          <span className="bmedal" role="img" aria-label={`Total Value je eingesetztem Euro ${mTot.toFixed(2)}×`}>
+            <span>
+              <span className={"v " + (mTot >= 1 ? "teal" : "ox")}>{mTot.toFixed(2).replace(".", ",")}×</span>
+              <span className="l">MOIC</span>
+            </span>
+          </span>
+        }
         meta={<>
           <span>{c.holdQ} HJ gehalten</span>
           <span>Einstieg {x(c.entryMult)}</span>
           {st < 1 && <span>{Math.round(st * 100)} % Anteil</span>}
         </>}
         state={<StatePill tone={inProc ? "gold" : health.attention ? "att" : ""}>
-          {sold ? "✓ Verkauf vorgemerkt" : inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
+          {sold ? <><Icon k="check" />Verkauf vorgemerkt</>
+            : inProc ? <><Icon k="megaphone" />Im Prozess</>
+            : health.attention ? <><i className="bdot" />Needs attention</>
+            : <><i className="bdot ring" />On track</>}
         </StatePill>}
-        abilities={(c.flag || c.ltip || health.top) && (
+        abilities={(c.flag || c.ltip || health.top || c.cv) && (
           <div className="babils">
+            {c.cv && <Ability kind="good" icon="repeat">Continuation Vehicle</Ability>}
             {c.flag && (isAngle(c.flag)
               ? <Ability kind="angle">{c.flag}</Ability>
               : <Ability kind="risk">{c.flag}</Ability>)}
@@ -1120,17 +1135,11 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
           </div>
         )} />
 
-      {/* Die eine Zahl, nach der eine Beteiligung beurteilt wird — direkt unter
-          dem Bild, bevor die Einzelheiten kommen. */}
-      <div className="bscore">
-        <span className="l">Total Value<br />je eingesetztem Euro
-          <span className="s">
-            {eur(val + out)} auf {eur(cost)} Einstand
-            {out > 0.5 ? ` · inkl. ${eur(out)} Rückfluss` : ""}
-          </span>
-        </span>
-        <span className={"v " + (mTot >= 1 ? "teal" : "ox")}>{mTot.toFixed(2)}×</span>
-      </div>
+      {/* Woraus das Medaillon besteht: Total Value gegen Einstand. */}
+      <p className="bvalline">
+        <b>{eur(val + out)}</b> Total Value auf {eur(cost)} Einstand
+        {out > 0.5 ? ` · inkl. ${eur(out)} Rückfluss` : ""}
+      </p>
 
       <Headline items={[
         { k: "Umsatz LTM", v: eur(c.revenue) },
@@ -1141,10 +1150,10 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: cagr == null ? "—" : pctS(cagr),
           tone: !c.dd || cagr == null ? "" : cagrPrem(c) >= 0 ? "teal" : "ox",
-          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "🔒 Markt", subTone: c.dd ? "" : "lock" },
+          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : <><Icon k="lock" />Markt</>, subTone: c.dd ? "" : "lock" },
         { icon: "margin", k: "Marge", v: pct(c.margin),
           tone: !c.dd ? "" : c.margin >= c.benchMargin ? "teal" : "ox",
-          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "🔒 Bench.", subTone: c.dd ? "" : "lock" },
+          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : <><Icon k="lock" />Bench.</>, subTone: c.dd ? "" : "lock" },
         { icon: "cash", k: "Cash Conv.", v: conv == null ? "—" : pct(conv),
           tone: conv == null ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -1160,7 +1169,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
           damit an einer Stelle. */}
       {!c.dd && act.study && (
         <div className="bcallout">
-          <span className="bcicon">📊</span>
+          <span className="bcicon"><Icon k="chart" /></span>
           <div className="bcbody">
             <div className="bchead">
               <b>Branchenreferenz fehlt</b>
@@ -1211,7 +1220,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         <Track c={c} />
         <div className="bacts">
           <StatementsButton statements={statements}
-            label={`📑 Financial Statements${finYears
+            label={`Financial Statements${finYears
               ? ` · ${finYears} ${finYears === 1 ? "Jahr" : "Jahre"} Halteperiode`
               : " · Eröffnungsbilanz"}`} />
           <p className="hint" style={{ marginTop: 6 }}>
@@ -1251,15 +1260,12 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         )}
       </Section>
 
-      <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
-        <div className="bactgrid">
-          <button className={sp("plat").trim()} disabled={!!c.initP || freeSlots <= 0} onClick={() => act.init("plat")}>
-            🏗 Performance
-          </button>
-          <button className={sp("acc").trim()} disabled={!!c.initA || freeSlots <= 0} onClick={() => act.init("acc")}>
-            🚀 Growth
-          </button>
-        </div>
+      <Section title="Wertsteigerung" right={freeSlots > 0
+        ? <span className="bslots" aria-label={`${freeSlots} Werkbänke frei`}>
+            Werkbänke<span>{Array.from({ length: Math.min(freeSlots, MAX_SLOTS) }, (_, i) => <i key={i} />)}</span>
+          </span>
+        : "Kapazität belegt"}>
+        <Levers c={c} lev={lev} quarter={quarter} freeSlots={freeSlots} act={act} sp={sp} />
         {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
             Ein Add-on wird im Halbjahr des Signings vollzogen. Die
@@ -1270,7 +1276,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
 
             Nur Statusmeldungen: Steht nichts an, bleibt die Zeile leer. */}
         {(initsOf(c).length > 0 || freeSlots <= 0) && (
-        <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
+        <div className="bstatus">
           {initsOf(c).length
             ? initsOf(c).map((I) => (I.ma
                 ? `${I.name || "Zukauf"}: Closing zum Ende dieses Halbjahres.`
@@ -1288,57 +1294,49 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
             Verlauf. Gescheiterte Integrationen stehen mit dabei — sie sind der
             Grund für die Schuld, die trotzdem in der Bilanz steht. */}
         {!!(c.addons || []).length && (
-          <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>
-            🏢 {(c.addons || []).length === 1 ? "Ein Zukauf" : `${(c.addons || []).length} Zukäufe`}:{" "}
+          <div className="bstatus">
+            <Icon k="building" />{(c.addons || []).length === 1 ? "Ein Zukauf" : `${(c.addons || []).length} Zukäufe`}:{" "}
             {(c.addons || []).map((a, i) =>
               `Halbjahr ${a.q} · ${eur(a.eb)} EBITDA zu ${x(a.mult)}${a.ok ? "" : " (Integration gescheitert)"}`
               + (i < (c.addons || []).length - 1 ? "; " : ".")).join("")}
           </div>
         )}
-        {!c.ltip && (
-          <button className={sp("ltip").trim()} style={{ width: "100%", marginTop: 10 }} onClick={act.ltip}>
-            📜 MEP aufsetzen · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
-          </button>
-        )}
-        {act.inject && (
-          <>
-            <button className={"" + (c.breach ? " ox" : "")} style={{ width: "100%", marginTop: 10 }}
-              onClick={() => { haptic(8); act.inject(); }}>
-              💶 Eigenkapital nachschießen
-            </button>
-            {!!c.breach && (
-              <p className="hint" style={{ marginTop: 6 }}>
-                Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
-              </p>
-            )}
-          </>
+        {act.inject && !!c.breach && (
+          <p className="hint" style={{ marginTop: 8 }}>
+            Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
+          </p>
         )}
       </Section>
 
       {inProc && !sold && (
         <div className="bnote gold">
-          📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
+          <Icon k="megaphone" /><b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
           der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
         </div>
       )}
       {locked && (
         <div className="bnote">
-          🔔 Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
+          <Icon k="bell" />Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
         </div>
       )}
       {blocked && (
         <div className="bnote ox">
-          🚫 Nach dem abgebrochenen Prozess für {hj(c.block - quarter)} gesperrt.
+          <Icon k="ban" />Nach dem abgebrochenen Prozess für {hj(c.block - quarter)} gesperrt.
         </div>
       )}
 
       {!practice && !inProc && !locked && (
-        <Section title="Exit">
+        <Section title="Exit" right={c.holdQ < MIN_HOLD ? `möglich in ${hj(MIN_HOLD - c.holdQ)}` : "möglich"}>
+          {/* Ein Knoten je Halbjahr bis zur Mindesthaltedauer, am Ende die Flagge. */}
+          <div className="bexitpath" role="img" aria-label={`Haltedauer ${Math.min(c.holdQ, MIN_HOLD)} von ${MIN_HOLD} Halbjahren`}>
+            {Array.from({ length: MIN_HOLD - 1 }, (_, i) => <i key={i} className={i < c.holdQ ? "on" : ""} />)}
+            <b className={c.holdQ >= MIN_HOLD ? "on" : ""}><Icon k="flag" /></b>
+          </div>
           <div className="bactgrid">
             <button className={"solid" + sp("proc")} disabled={!canProc || procCount >= MAX_PROC} onClick={act.proc}>
-              Verkaufsprozess
+              {(!canProc || procCount >= MAX_PROC) && <Icon k="lock" />}Verkaufsprozess
             </button>
-            <button disabled={!canNow} onClick={act.bil}>Bilateral</button>
+            <button disabled={!canNow} onClick={act.bil}>{!canNow && <Icon k="lock" />}Bilateral</button>
           </div>
           {/* GP-led Secondary und IPO sind abgeschaltet. Engine und Server führen
               beide Wege weiter (runQuarter.ts) — zurückholen heißt nur, die
@@ -1351,6 +1349,59 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         </Section>
       )}
       <div className="bend" />
+    </div>
+  );
+}
+
+/* Die Hebel der Wertsteigerung als vier kleine Karten, in der Farbe ihrer
+   Reifegrad-Familie: Performance türkis, Growth violett, People (MEP) gold,
+   Eigenkapital neutral. Jede Karte sagt, was dahinter liegt, und im Fuß, was
+   gerade gilt: wie viele Programme, ob eines läuft, was es kostet. */
+const LEVER_SHORT = {
+  opex: "Cost-out", nwc: "NWC", erp: "ERP", ai: "KI-Automatisierung",
+  pen: "Pricing", exp: "Expansion", ma: "Add-on M&A",
+};
+function Levers({ c, lev, quarter, freeSlots, act, sp }) {
+  const progs = (d) => INITS[d].map((I) => LEVER_SHORT[I.id] || I.n).join(", ");
+  const prog = (d, run, icon, title, fam) => {
+    const busy = freeSlots <= 0;
+    return (
+      <button className={"blever " + fam + (run ? " run" : "") + sp(d)} disabled={!!run || busy}
+        onClick={() => act.init(d)}>
+        <span>
+          <span className="art"><Icon k={icon} /></span>
+          <span className="t">{title}</span>
+          <span className="s">{run ? (run.name || "Maßnahme") : progs(d)}</span>
+          <span className="f">
+            {run ? `läuft · noch ${hj(run.doneQ - quarter)}` : busy ? "Kapazität belegt" : `${INITS[d].length} Programme`}
+            {!run && !busy && <Icon k="chevR" />}
+          </span>
+        </span>
+      </button>
+    );
+  };
+  return (
+    <div className="blevers">
+      {prog("plat", c.initP, "sliders", "Performance", "l")}
+      {prog("acc", c.initA, "sprout", "Growth", "a")}
+      <button className={"blever p" + (c.ltip ? " done" : "") + sp("ltip")} disabled={!!c.ltip} onClick={act.ltip}>
+        <span>
+          <span className="art"><Icon k="users" /></span>
+          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}</span>
+          <span className="s">Management am Exit beteiligen</span>
+          <span className="f"><span className="tok">{Math.round(LTIP_SHARE * 100)} % Sweet Equity</span></span>
+        </span>
+      </button>
+      {act.inject && (
+        <button className={"blever " + (c.breach ? "ox" : "n")} onClick={() => { haptic(8); act.inject(); }}>
+          <span>
+            <span className="art"><Icon k="coins" /></span>
+            <span className="t">Eigenkapital</span>
+            <span className="s">{c.breach ? "Covenant gerissen: frisches Kapital heilt den Bruch" : `Nachschießen, Leverage ${x(lev)} senken`}</span>
+            <span className="f">Fondskapital<Icon k="chevR" /></span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1816,27 +1867,27 @@ export function Stages({ c, compact }) {
   return (
     <div className="bability">
       <div className="babrow">
-        <span className="bablab">People</span><Pips v={pl} cls="p" />
+        <span className="babic p"><Icon k="person" /></span><span className="bablab">People</span><Pips v={pl} cls="p" />
         <span className={"babst " + (vac ? "warn" : runP ? "run" : "")}>
           {vac ? `${vac} vakant` : runP ? runP : pl.toFixed(1)}
         </span>
       </div>
       <div className="babrow">
-        <span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
+        <span className="babic l"><Icon k="sliders" /></span><span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
         <span className={"babst " + (c.initP ? "run" : c.plat < 1.5 ? "warn" : "")}>
           {c.initP ? `${c.initP.doneQ - (compact || 0)} HJ`
             : c.plat < 1.5 ? "unter Bench." : c.plat < 2.5 ? "Benchmark" : c.plat < 3.5 ? "über Bench." : "Best-in-Class"}
         </span>
       </div>
       <div className="babrow">
-        <span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
+        <span className="babic a"><Icon k="sprout" /></span><span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
         <span className={"babst " + (OS > 0 ? "warn" : c.initA ? "run" : c.acc < 1.5 ? "warn" : "")}>
           {OS > 0 ? "überdehnt" : c.initA ? `${c.initA.doneQ - (compact || 0)} HJ`
             : c.acc < 1.5 ? "unter Bench." : c.acc < 2.5 ? "Benchmark" : c.acc < 3.5 ? "über Bench." : "Best-in-Class"}
         </span>
       </div>
-      {OS > 0 && <div style={{ fontSize: 11, color: "var(--ox)" }}>
-        ⚠️ Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
+      {OS > 0 && <div className="babwarn">
+        <Icon k="alert" />Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
       </div>}
     </div>
   );
@@ -3223,11 +3274,13 @@ function TeamScore({ c, base }) {
   const v = teamScoreOf(c);
   const d = typeof base === "number" ? v - base : null;
   const f1 = (n) => Math.abs(n).toFixed(1).replace(".", ",");
+  // Der Ring trägt das Metall der Seltenheit, in der das Team als Karte stünde.
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span>Team-Score <b className="mono" style={{ color: "var(--ink)" }}>{v.toFixed(1).replace(".", ",")}</b></span>
+    <span className="bteam">
+      <span>Team-Score</span>
+      <span className="ring" data-tier={tierOf(v)}><span><b className="mono">{v.toFixed(1).replace(".", ",")}</b></span></span>
       {d != null && Math.abs(d) >= 0.05 && (
-        <span className="mono" style={{ color: d > 0 ? "var(--teal)" : "var(--ox)" }}>{d > 0 ? "▲" : "▼"} {f1(d)} seit Kauf</span>
+        <span className={"mono d " + (d > 0 ? "up" : "dn")} title="seit dem Kauf">{d > 0 ? "▲" : "▼"} {f1(d)}</span>
       )}
       <Info t="Team-Score">
         Eine Zahl für das Top-Team, auf der Skala des Assessments (1 bis 5): wie gut die Führung zu
