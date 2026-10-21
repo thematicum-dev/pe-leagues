@@ -7,7 +7,7 @@ import {
   ENTRY_FEE, COV_FLOOR, ARCHES, CAPITAL, COV_HEADROOM, BASE_RATE, SECTORS, SECNAMES, EVENTS, EVENT_P, INITS, LEGACY_COMPAT,
   MANAGER_ARCHES, MGMT_UP, MGMT_K,
   ebitdaOf, seatLoad, newDeal, stepCompany, maturePeople, buildInit, navValueOf, fitOf, initRuns, REPEAT_MAX, initSuccess,
-  PORTRAIT_POOL, pickPortrait, portraitUrl,
+  PORTRAIT_POOL, pickPortrait, portraitUrl, teamScoreOf,
   effSkill, mgmtFx, makeCandidates, chemOf, CHEM, makeSeats, botDraft, sideOf, vacateForSearch, severanceOf, inProbation, revealedNow, viewOf, tierOf, seatFromCand, onboardOf, searchLagOf, seatPay, rateOf, dealMultiple, nwcPctOf, targetMargin,
 } from "../engine";
 
@@ -486,5 +486,28 @@ describe("Porträts", () => {
   it("wählt unter den drei Porträts mit dem nächsten Alter", () => {
     expect(["m01", "m04", "m02"]).toContain(pickPortrait("m", 30, 0.99).id);
     expect(pickPortrait("f", 44, 0).id).toBe("f10");
+  });
+});
+
+describe("Team-Score", () => {
+  const flatTeam = (v: number, over: Any = {}) => holding({ mx: true, ceo: { skill: v, prof: [v, v, v] }, cfo: { skill: v, prof: [v, v, v] }, r3: { skill: v, prof: [v, v, v] }, ...over });
+
+  it("liegt bei gleich starken Generalisten auf deren Score und zählt eine Vakanz als Interim", () => {
+    expect(teamScoreOf(flatTeam(3))).toBeCloseTo(3, 12);
+    expect(teamScoreOf(flatTeam(3, { cfo: { skill: 0 } }))).toBeCloseTo((3 + 2 + 3) / 3, 12);
+  });
+
+  it("steigt, wenn eine passende Spezialistin einen gleich teuren Generalisten ersetzt", () => {
+    // Marge weit unter Benchmark: Cost-out ist gefragt, ERP kaum
+    const base = { margin: 8, benchMargin: 16 };
+    const fit = flatTeam(3, { ...base, cfo: { skill: 3, prof: [4.6, 2.6, 1.8] } });
+    const miss = flatTeam(3, { ...base, cfo: { skill: 3, prof: [1.8, 2.6, 4.6] } });
+    expect(teamScoreOf(fit)).toBeGreaterThan(teamScoreOf(flatTeam(3, base)));
+    expect(teamScoreOf(miss)).toBeLessThan(teamScoreOf(flatTeam(3, base)));
+  });
+
+  it("rechnet den Bonus eines eingespielten Teams mit ein", () => {
+    const same = flatTeam(3, { ceo: { skill: 3, prof: [3, 3, 3], side: "hell" }, cfo: { skill: 3, prof: [3, 3, 3], side: "hell" }, r3: { skill: 3, prof: [3, 3, 3], side: "hell" } });
+    expect(teamScoreOf(same)).toBeCloseTo(3 + CHEM, 12);
   });
 });

@@ -24,7 +24,7 @@ import {
   DEAL_YEARS,
   markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, viewOf,
+  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, viewOf, teamScoreOf,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -1232,7 +1232,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         <Stages c={c} compact={quarter} />
       </Section>
 
-      <Section title="Führung" right={`${(c.done || []).length} Programme`} flush>
+      <Section title="Führung" right={<TeamScore c={seatView} base={c.tm0} />} flush>
         <div className="bseats">
           {seatDefs.map(([k, nm]) => {
             const se = (c.searches || []).find((z) => z.seat === k);
@@ -3221,6 +3221,32 @@ export function InitPicker({ c: real, dim, market, start, close, investable = 0,
         </div>
       </div>
     </div>
+  );
+}
+
+/* Team-Score (teamScoreOf) im Kopf des Führungsbereichs, mit der
+   Veränderung seit dem Kauf. Gerechnet mit dem, was der Spieler sieht: in der
+   Probezeit mit dem Assessment. */
+function TeamScore({ c, base }) {
+  const v = teamScoreOf(c);
+  const d = typeof base === "number" ? v - base : null;
+  const f1 = (n) => Math.abs(n).toFixed(1).replace(".", ",");
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span>Team-Score <b className="mono" style={{ color: "var(--ink)" }}>{v.toFixed(1).replace(".", ",")}</b></span>
+      {d != null && Math.abs(d) >= 0.05 && (
+        <span className="mono" style={{ color: d > 0 ? "var(--teal)" : "var(--ox)" }}>{d > 0 ? "▲" : "▼"} {f1(d)} seit Kauf</span>
+      )}
+      <Info t="Team-Score">
+        Eine Zahl für das Top-Team, auf der Skala des Assessments (1 bis 5): wie gut die Führung zu
+        diesem Case passt. Je Position zählen die drei Kompetenzen, gewichtet mit dem Bedarf des Cases —
+        dieselbe Eignung, die der Maßnahmenpicker zeigt. CFO und Fachfunktion wirken höchstens bis
+        Leadership des CEO + 1,5, eine Vakanz zählt wie ein Interim auf 2,0, ein eingespieltes Team
+        bekommt seinen Bonus dazu. In der Probezeit rechnet die Zahl mit dem Assessment. Der Pfeil zeigt
+        die Veränderung seit dem Kauf; jede Verpflichtung und jeder Abgang steht mit dem neuen Wert in
+        den Meldungen.
+      </Info>
+    </span>
   );
 }
 

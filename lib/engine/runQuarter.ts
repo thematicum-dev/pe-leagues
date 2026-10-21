@@ -29,7 +29,7 @@ import {
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
-  botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch,
+  botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
   recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
@@ -202,14 +202,18 @@ function applyImmediateDecisions(
     if (!cand) return;
     const had = c[dec.seat].skill > 0;
     const prevSkill = c[dec.seat].skill;
+    const tmBefore = teamScoreOf(c);
     c[dec.seat] = seatFromCand(cand, quarter);
     c.searches = (c.searches || []).filter((se: Any) => se.seat !== dec.seat);
     c.onboard = onboardOf(cand);
     const hireCost = signBonusOf(dec.seat, cand.skill, ebitdaOf(c)) + (had ? severanceOf(dec.seat, prevSkill, ebitdaOf(c)) : 0);
     c.netDebt += hireCost; bookOff(c, "mgmt", hireCost);
     const nm = dec.seat === "ceo" ? "CEO" : dec.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    // Mit dem Assessment gerechnet: das wahre Profil zeigt sich erst nach der Probezeit
+    const tmAfter = c.mx && cand.shownProf
+      ? teamScoreOf({ ...c, [dec.seat]: { ...c[dec.seat], prof: cand.shownProf, skill: cand.shown } }) : null;
     pushFeed(news, quarter, "🤝", "pos", cand.name
-      ? `${c.name}: ${cand.name} ist neuer ${nm} (${cand.label}). Das wahre Profil zeigt sich in der Probezeit.`
+      ? `${c.name}: ${cand.name} ist neuer ${nm} (${cand.label}). Das wahre Profil zeigt sich in der Probezeit.${tmAfter != null ? ` ${teamMove(tmBefore, tmAfter)}.` : ""}`
       : `${c.name}: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}.`, f.slot);
     list = list.filter((it) => it !== item);
   });
@@ -250,10 +254,11 @@ function applyImmediateDecisions(
     /* Ersatz für eine besetzte Position: Die bisherige Person geht sofort,
        die Abfindung fällt jetzt an (siehe vacateForSearch).               */
     if (!compat.legacyReplaceSearch) {
+      const tmBefore = teamScoreOf(c);
       const sev = vacateForSearch(c, s.seat);
       if (sev > 0) {
         c.netDebt += sev; bookOff(c, "mgmt", sev);
-        pushFeed(news, quarter, "🚪", "neu", `${c.name}: Der bisherige ${nm} geht, die Position ist bis zur Verpflichtung vakant.`, f.slot);
+        pushFeed(news, quarter, "🚪", "neu", `${c.name}: Der bisherige ${nm} geht, die Position ist bis zur Verpflichtung vakant.${c.mx ? ` ${teamMove(tmBefore, teamScoreOf(c))}.` : ""}`, f.slot);
       }
     }
     c.searches = [...(c.searches || []), { seat: s.seat, readyQ: quarter + lag }];
@@ -654,6 +659,8 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       ...(compat.legacyMgmt ? {} : { mx: true }),
     };
     c.baseLoad = seatLoad(c);
+    // Team-Score beim Kauf: Bezug für "seit Kauf" im Führungsbereich
+    if (c.mx) c.tm0 = teamScoreOf(c);
     spendFund(f, c.entryEquity, q, undefined);
     f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
     f.holdings = [...(f.holdings as Any[]), c];
@@ -835,7 +842,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   if (rng.rnd() < 0.18) {
     const s = rng.pick(SECNAMES);
     mk[s] = clamp(mk[s] * 1.18, 0, SECTORS[s].m * 1.5);
-    pushFeed(news, q, "📈", "pos", `Multiple-Expansion in ${s}: Bewertungen ziehen deutlich an.`);
+    pushFeed(news, q, "📈", "pos", `Multiple-Expansion in ${SECLABEL[s]}: Bewertungen ziehen deutlich an.`);
   }
   if (rng.rnd() < 0.14) {
     const s = rng.pick(SECNAMES);
@@ -849,7 +856,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       c.drift = (c.drift || 0) - 1.0;
       c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
     }));
-    pushFeed(news, q, "📉", "neg", `Sektorabschwung in ${s}: Multiple-Kontraktion, Umsätze brechen ein.`);
+    pushFeed(news, q, "📉", "neg", `Sektorabschwung in ${SECLABEL[s]}: Multiple-Kontraktion, Umsätze brechen ein.`);
   }
 
   /* 4b — Periodenstand festhalten */

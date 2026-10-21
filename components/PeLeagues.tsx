@@ -21,7 +21,7 @@ import {
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
-  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
+  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -286,7 +286,8 @@ export default function PeLeagues() {
         uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
         mx: true,   // laufende Wirkung des Managements (mgmtFx)
       };
-      Object.assign(c, { baseLoad: seatLoad(c) });
+      // Team-Score beim Kauf: Bezug für "seit Kauf" im Führungsbereich
+      Object.assign(c, { baseLoad: seatLoad(c), tm0: teamScoreOf(c) });
       spendFund(f, c.entryEquity, q);
       f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
       f.holdings.push(c);
@@ -434,7 +435,7 @@ export default function PeLeagues() {
     if (rng.rnd() < 0.18) {
       const s = rng.pick(SECNAMES);
       mk[s] = clamp(mk[s] * 1.18, 0, SECTORS[s].m * 1.5);
-      news.push({ q, e: "📈", tone: "pos", t: `Multiple-Expansion in <b>${s}</b>: Bewertungen ziehen deutlich an.` });
+      news.push({ q, e: "📈", tone: "pos", t: `Multiple-Expansion in <b>${SECLABEL[s]}</b>: Bewertungen ziehen deutlich an.` });
     }
     // Sektorrezession: trifft Bewertung und operatives Geschäft aller Beteiligten gleichzeitig
     if (rng.rnd() < 0.14) {
@@ -458,7 +459,7 @@ export default function PeLeagues() {
       }));
       news.push({
         q, e: "📉", tone: "neg",
-        t: `Sektorabschwung in <b>${s}</b>: Multiple-Kontraktion −16 %, Umsätze brechen ein.${hit ? ` Betrifft ${hit} deiner Beteiligungen.` : ""}`,
+        t: `Sektorabschwung in <b>${SECLABEL[s]}</b>: Multiple-Kontraktion −16 %, Umsätze brechen ein.${hit ? ` Betrifft ${hit} deiner Beteiligungen.` : ""}`,
       });
     }
 
@@ -601,7 +602,8 @@ export default function PeLeagues() {
       }),
     }));
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    if (leaving) setFeed((p) => [{ q: quarter, e: "🚪", tone: "neu", t: `<b>${c.name}</b>: Der bisherige ${nm} geht — Abfindung ${eur(severanceOf(seat, c[seat].skill, ebitdaOf(c)))}. Die Position ist bis zur Verpflichtung vakant.` }, ...p]);
+    const tmMove = leaving && c.mx ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [seat]: { skill: 0 } }))}.` : "";
+    if (leaving) setFeed((p) => [{ q: quarter, e: "🚪", tone: "neu", t: `<b>${c.name}</b>: Der bisherige ${nm} geht — Abfindung ${eur(severanceOf(seat, c[seat].skill, ebitdaOf(c)))}. Die Position ist bis zur Verpflichtung vakant.${tmMove}` }, ...p]);
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
 
@@ -620,9 +622,12 @@ export default function PeLeagues() {
       }),
     }));
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    // Mit dem Assessment gerechnet: das wahre Profil zeigt sich erst nach der Probezeit
+    const tmMove = c.mx && cand.shownProf
+      ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [item.seat]: { ...seatFromCand(cand), prof: cand.shownProf, skill: cand.shown } }))}.` : "";
     setFeed((p) => [{
       q: quarter, e: "🤝", tone: "pos",
-      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}`,
+      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}${tmMove}`,
     }, ...p]);
   }
 

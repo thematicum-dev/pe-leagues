@@ -21,7 +21,7 @@ import {
   CHEM, CHEM_LABEL, COMPETENCIES, INITS, MANAGER_ARCHES, MANAGER_TRAITS, POACH, PROGRAM_COMP, ROLE3, TIERS,
   cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, inProbation, initDurationOf, initSuccess,
   isCapped, mgmtFx, payOf, pickPortrait, portraitUrl, retainerOf, revealedNow, seatFromCand, severanceOf,
-  signBonusOf, tierOf,
+  signBonusOf, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import { seedOf } from "./battle";
 import { haptic } from "./haptics";
@@ -247,6 +247,10 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
   const cap = seat === "ceo" ? 5 : capOf(h);
   const chem = sim && sim.mx ? chemOf(sim) : null;
   const chips = mode === "seat" ? (k.dev ? [["", "Wächst +0,25 je Halbjahr"]] : []) : fitChips(k, seat, h);
+  // Team-Score vor und nach der Verpflichtung, mit dem Assessment gerechnet
+  const tmA = mode === "draft" && base ? teamScoreOf(base) : null;
+  const tmB = mode === "draft" && sim ? teamScoreOf(sim) : null;
+  const tmCls = tmA == null ? "" : tmB - tmA > 0.05 ? "hi" : tmB - tmA < -0.05 ? "lo" : "";
   const progs = h ? programsOf(seat).map((x) => ({ ...x, now: progRate(base, x), new: progRate(sim, x) })) : [];
   const run = h ? runDeltas(base, sim) : null;
   const pay = payOf(seat, k.shown, eb);
@@ -274,10 +278,15 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
           <CompBars names={COMPETENCIES[seat]} vals={k.shownProf} span={span} cap={cap} />
           {tr && <div className="dtrait"><b>{tr.n}</b> · {tr.t}</div>}
           <div className="dchips">
-            {k.side && chem != null && (
+            {/* Ein Chip fürs Team: Farbe, Team-Score vorher → nachher, eingespielt */}
+            {tmA != null ? (
+              <span className={"dchip " + tmCls}>
+                {k.side && <SideDot side={k.side} />} Team-Score {fmt(tmA)} → {fmt(tmB)}{chem > 0 ? " · eingespielt" : ""}
+              </span>
+            ) : k.side && chem != null && (
               <span className={"dchip " + (chem > 0 ? "hi" : "")}><SideDot side={k.side} /> Team: {CHEM_LABEL(chem)}</span>
             )}
-            {chips.map(([t, x2]) => <span key={x2} className={"dchip " + t}>{x2}</span>)}
+            {chips.slice(0, tmA != null ? 2 : 3).map(([t, x2]) => <span key={x2} className={"dchip " + t}>{x2}</span>)}
           </div>
           <div className="dfoot">
             <span>Fixum <b className="mono">{eur(pay)}</b> p. a.</span>
@@ -534,6 +543,8 @@ export function SeatSheet({ c, view, seat, quarter, close, search }: Any) {
               Die Shortlist kommt im Halbjahr danach.
             </p>
             <div className="daskrows">
+              <span>Team-Score bis zur Neubesetzung</span>
+              <span className="mono">{fmt(teamScoreOf(view))} → {fmt(teamScoreOf({ ...view, [seat]: { skill: 0 } }))}</span>
               <span>Abfindung (zwölf Monatsgehälter)</span><span className="mono">{eur(severanceOf(seat, c[seat].skill, eb))}</span>
               <span>Retainer Headhunter</span><span className="mono">{eur(retainerOf(seat, eb))}</span>
             </div>
@@ -642,7 +653,7 @@ export const DRAFT_CSS = `
 .pel .darch{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--tink);font-weight:700;}
 .pel .dname{font-size:22px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-top:2px;}
 .pel .dmeta{font-size:12px;color:var(--cs-ink2);margin-top:1px;}
-.pel .dstats{padding:10px 16px 0;display:flex;flex-direction:column;gap:6px;}
+.pel .dstats{flex:none;padding:10px 16px 0;display:flex;flex-direction:column;gap:6px;}
 .pel .dstat{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:3px 8px;font-size:11.5px;}
 .pel .dstat .k{grid-row:1;grid-column:1;color:var(--cs-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .dstat .v{grid-row:1;grid-column:2;font-size:11.5px;text-align:right;white-space:nowrap;}
@@ -650,14 +661,15 @@ export const DRAFT_CSS = `
 .pel .dstat .rng{position:absolute;top:0;bottom:0;border-radius:9px;background:color-mix(in srgb, var(--tink) 34%, transparent);}
 .pel .dstat .pt{position:absolute;top:-2px;width:3px;height:11px;border-radius:2px;background:var(--tink);}
 .pel .dstat .cap{position:absolute;top:-4px;bottom:-4px;width:0;border-left:1.5px dashed var(--cs-cap);}
-.pel .dtrait{margin:10px 16px 0;padding:8px 10px;border-radius:10px;background:var(--cs-trait);font-size:12px;line-height:1.4;color:var(--cs-ink2);}
+.pel .dtrait{flex:none;margin:10px 16px 0;padding:8px 10px;border-radius:10px;background:var(--cs-trait);font-size:12px;line-height:1.4;color:var(--cs-ink2);}
 .pel .dtrait b{color:var(--tink);font-weight:700;}
-.pel .dchips{margin:8px 16px 0;display:flex;gap:6px;flex-wrap:wrap;}
+/* Die Chips geben als Erste nach, wenn die Karte voll ist: Die Fußzeile mit dem Fixum bleibt immer sichtbar. */
+.pel .dchips{margin:8px 16px 0;display:flex;gap:6px;flex-wrap:wrap;flex:0 1 auto;min-height:24px;overflow:hidden;align-content:flex-start;}
 .pel .dchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:99px;
   background:var(--cs-chip);color:var(--cs-chipink);white-space:nowrap;}
 .pel .dchip.hi{background:var(--cs-goodbg);color:var(--cs-good);}
 .pel .dchip.lo{background:color-mix(in srgb, var(--cs-bad) 14%, transparent);color:var(--cs-bad);}
-.pel .dfoot{margin-top:auto;padding:10px 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;
+.pel .dfoot{flex:none;margin-top:auto;padding:10px 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;
   border-top:1px solid var(--cs-hair);font-size:11.5px;color:var(--cs-ink2);}
 .pel .dfoot b{color:var(--cs-ink);font-weight:600;}
 .pel .dflip{font-size:12px;font-weight:650;color:var(--tink);white-space:nowrap;}

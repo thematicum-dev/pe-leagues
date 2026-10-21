@@ -1626,6 +1626,41 @@ export function vacateForSearch(c, seat) {
   c[seat] = { skill: 0 };
   return sev;
 }
+/* ---------- Team-Score ----------
+   Eine Zahl für das Top-Team auf der Skala des Assessments: Wie gut passt
+   die Führung zu diesem Case, und wird sie mit einem Wechsel besser oder
+   schlechter? Je Position die drei Kompetenzen, gewichtet mit dem Bedarf des
+   Cases (fitOf, dieselbe Eignung wie im Maßnahmenpicker); die Fachpositionen
+   gedeckelt durch Leadership + 1,5, eine Vakanz als Interim auf
+   MGMT_INTERIM, dazu die Chemie. Das Team ist der Durchschnitt der drei
+   Positionen. So steigt die Zahl auch, wenn eine passende Spezialistin einen
+   gleich teuren Generalisten ersetzt — der Assessment-Score allein sähe
+   keinen Unterschied. Reine Anzeige, die Rechnung bleibt bei effSkill und
+   mgmtFx.                                                                 */
+export function teamScoreOf(c) {
+  if (!c || !c.ceo) return 0;
+  const chem = chemOf(c);
+  const val = (k, i) => (c[k] && c[k].skill > 0 ? compOf(c[k], i) + chem : MGMT_INTERIM);
+  const cap = val("ceo", 2) + 1.5;
+  const f = (id) => fitOf(id, c);
+  const W = {
+    ceo: [Math.max(f("opex"), f("nwc"), f("erp")), Math.max(f("pen"), f("exp")), 1],
+    cfo: [f("opex"), f("nwc"), Math.max(f("erp"), f("ai"))],
+    r3: [f("pen"), f("exp"), 1],
+  };
+  const seat = (k) => {
+    let num = 0, den = 0;
+    for (let i = 0; i < 3; i++) {
+      const v = k === "ceo" ? val(k, i) : Math.min(val(k, i), cap);
+      num += W[k][i] * v; den += W[k][i];
+    }
+    return num / den;
+  };
+  return (seat("ceo") + seat("cfo") + seat("r3")) / 3;
+}
+// Für Meldungen: "Team-Score 2,8 → 3,3"
+export const teamMove = (a: number, b: number) => `Team-Score ${a.toFixed(1).replace(".", ",")} → ${b.toFixed(1).replace(".", ",")}`;
+
 // Einarbeitung nach der Verpflichtung: Day-1-ready braucht keine
 export const onboardOf = (cand) => (cand && cand.trait === "day1" ? 0 : 1);
 // Starkes Netzwerk: Search-Mandate dieser Beteiligung liefern ein Halbjahr schneller

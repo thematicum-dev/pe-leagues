@@ -26,7 +26,7 @@ import {
   dealMoic, periodFin, resetPeriod, dealMultiple, ebitdaOf, eqvOf, eur, evOf, growthPrem,
   hj, initsOf, isCapped, makeBridge,
   maturePeople, navValueOf, opLeverage, overstretch, payOf, pct,
-  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf, vacateForSearch,
+  retainerOf, seatLoad, severanceOf, signBonusOf, stepCompany, x, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf,
 } from "@/lib/engine";
 
 import {
@@ -386,6 +386,7 @@ function makePracticeCo(rng: Rng, d, mult, lev, hadDD) {
   c.entryEquity = eb * mult - eb * lev + eb * mult * ENTRY_FEE;
   c.costTotal = c.entryEquity; c.costLeft = c.entryEquity;
   c.baseLoad = seatLoad(c);
+  c.tm0 = teamScoreOf(c);   // Team-Score beim Kauf
   return c;
 }
 
