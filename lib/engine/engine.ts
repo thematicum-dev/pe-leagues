@@ -1488,8 +1488,9 @@ export const PORTRAIT_POOL: Record<"f" | "m", [string, number][]> = {
     ["m09", 36], ["m10", 44]],
 };
 /* Ein Porträt zu Geschlecht und Wunschalter: unter den drei mit dem
-   nächsten Alter, `r` in [0, 1) wählt eines davon. Die Karte trägt danach
-   das Alter des Porträts, damit Gesicht und Angabe zusammenpassen. */
+   nächsten Alter, `r` in [0, 1) wählt eines davon. Das Alter steht nicht
+   auf der Karte; es sorgt nur dafür, dass ein Step-up eher ein junges
+   Gesicht bekommt. Die Karte trägt das Alter des Porträts. */
 export function pickPortrait(g, age: number, r: number) {
   const pool = [...(PORTRAIT_POOL[g === "f" ? "f" : "m"])]
     .sort((a, b) => Math.abs(a[1] - age) - Math.abs(b[1] - age) || (a[0] < b[0] ? -1 : 1));

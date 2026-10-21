@@ -268,7 +268,7 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
             <div className="did">
               <div className="darch">{k.label}</div>
               <div className="dname">{k.name}</div>
-              <div className="dmeta">{seatName(seat, sector)}{k.age ? ` · ${k.age}` : ""}{k.origin ? ` · Herkunft ${k.origin}` : ""}{k.probe ? " · Probezeit" : ""}</div>
+              <div className="dmeta">{seatName(seat, sector)}{k.origin ? ` · Herkunft ${k.origin}` : ""}{k.probe ? " · Probezeit" : ""}</div>
             </div>
           </div>
           <CompBars names={COMPETENCIES[seat]} vals={k.shownProf} span={span} cap={cap} />
