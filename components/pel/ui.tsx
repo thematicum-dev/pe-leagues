@@ -24,7 +24,7 @@ import {
   DEAL_YEARS,
   markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, viewOf, teamScoreOf,
+  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
@@ -1086,9 +1086,6 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const grow = (v, dig = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dig).replace(".", ",")}`;
   const cagr = cagrOf(c);
   const seatDefs = [["ceo", "CEO"], ["cfo", "CFO"], ["r3", ROLE3[c.sector].n]];
-  /* Während der Probezeit zeigt die Führung das Assessment, nicht das wahre
-     Profil (viewOf). Gezählt wird im Halbjahr der Entscheidung, quarter + 1. */
-  const seatView = viewOf(c, quarter + 1);
   /* Dieselbe Identität wie im Dealflow: Ein Zielobjekt, das man kauft, behält
      Farbe, Monogramm und Bild — die Karte wechselt den Stapel, nicht das
      Gesicht. */
@@ -1232,12 +1229,12 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         <Stages c={c} compact={quarter} />
       </Section>
 
-      <Section title="Führung" right={<TeamScore c={seatView} base={c.tm0} />} flush>
+      <Section title="Führung" right={<TeamScore c={c} base={c.tm0} />} flush>
         <div className="bseats">
           {seatDefs.map(([k, nm]) => {
             const se = (c.searches || []).find((z) => z.seat === k);
             return (
-              <SeatCard key={k} c={c} view={seatView} seat={k} nm={nm} quarter={quarter} eb={eb}
+              <SeatCard key={k} c={c} seat={k} nm={nm}
                 searching={!!se} se={se} className={k === "cfo" ? sp("hire") : ""}
                 onClick={() => {
                   haptic(8);
@@ -1249,7 +1246,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         </div>
         {c.mx && <ChemLine c={c} />}
         {openSeat && c[openSeat].skill > 0 && (
-          <SeatSheet c={c} view={seatView} seat={openSeat} quarter={quarter}
+          <SeatSheet c={c} seat={openSeat}
             close={() => setOpenSeat(null)} search={(k) => act.search(k)} />
         )}
       </Section>
@@ -2946,11 +2943,7 @@ export function failBreakdown(chk) {
   return { teile: teile.filter((t) => t.pp !== 0), geklemmt };
 }
 
-export function InitPicker({ c: real, dim, market, start, close, investable = 0, quarter = null }) {
-  /* Während der Probezeit rechnet die Anzeige mit dem Assessment der neuen
-     Führungskraft (viewOf): Das wahre Profil wirkt schon, ist aber noch nicht
-     zu sehen. Gestartet wird über start() und damit gegen den wahren Stand. */
-  const c = viewOf(real, quarter == null ? null : quarter + 1);
+export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   const seat = dim === "plat" ? "cfo" : "r3";
   const E = effSkill(c, seat) * (c.onboard > 0 ? 0.7 : 1);
   const eb = ebitdaOf(c);
@@ -3225,8 +3218,7 @@ export function InitPicker({ c: real, dim, market, start, close, investable = 0,
 }
 
 /* Team-Score (teamScoreOf) im Kopf des Führungsbereichs, mit der
-   Veränderung seit dem Kauf. Gerechnet mit dem, was der Spieler sieht: in der
-   Probezeit mit dem Assessment. */
+   Veränderung seit dem Kauf. */
 function TeamScore({ c, base }) {
   const v = teamScoreOf(c);
   const d = typeof base === "number" ? v - base : null;
@@ -3242,7 +3234,7 @@ function TeamScore({ c, base }) {
         diesem Case passt. Je Position zählen die drei Kompetenzen, gewichtet mit dem Bedarf des Cases —
         dieselbe Eignung, die der Maßnahmenpicker zeigt. CFO und Fachfunktion wirken höchstens bis
         Leadership des CEO + 1,5, eine Vakanz zählt wie ein Interim auf 2,0, ein eingespieltes Team
-        bekommt seinen Bonus dazu. In der Probezeit rechnet die Zahl mit dem Assessment. Der Pfeil zeigt
+        bekommt seinen Bonus dazu. Der Pfeil zeigt
         die Veränderung seit dem Kauf; jede Verpflichtung und jeder Abgang steht mit dem neuen Wert in
         den Meldungen.
       </Info>

@@ -1502,7 +1502,7 @@ export default function MultiplayerGame({
       )}
       {initPick && me.holdings.find((h: Any) => h.uid === initPick.uid) && (
         <InitPicker c={patchHolding(me.holdings.find((h: Any) => h.uid === initPick.uid))}
-          dim={initPick.dim} market={state.market} investable={investableOf(me, quarter)} quarter={quarter}
+          dim={initPick.dim} market={state.market} investable={investableOf(me, quarter)}
           start={startInitStage} close={() => setInitPick(null)} />
       )}
       {injectPick && me.holdings.find((h: Any) => h.uid === injectPick) && (

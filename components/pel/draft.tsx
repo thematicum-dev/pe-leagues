@@ -12,15 +12,15 @@
 
    Gerechnet wird ausschließlich mit den Engine-Funktionen, mit denen auch die
    Auswertung rechnet (effSkill, initSuccess, initDurationOf, mgmtFx, chemOf).
-   Die Draft-Karte zeigt das Profil aus dem Assessment (shownProf); das wahre
-   Profil zeigt sich erst nach der Probezeit (viewOf, inProbation).        */
+   Die Draft-Karte zeigt das Profil aus dem Assessment (shownProf), eine
+   Schätzung; mit der Verpflichtung steht das wahre Profil auf der Karte.  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   CHEM, CHEM_LABEL, COMPETENCIES, INITS, MANAGER_ARCHES, MANAGER_TRAITS, POACH, PROGRAM_COMP, ROLE3, TIERS,
-  cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, inProbation, initDurationOf, initSuccess,
-  isCapped, mgmtFx, payOf, pickPortrait, portraitUrl, retainerOf, revealedNow, seatFromCand, severanceOf,
+  cappedSkill, chemOf, clamp, compOf, ebitdaOf, effSkill, eur, fitOf, initDurationOf, initSuccess,
+  isCapped, mgmtFx, payOf, pickPortrait, portraitUrl, retainerOf, seatFromCand, severanceOf,
   signBonusOf, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import { seedOf } from "./battle";
@@ -186,10 +186,10 @@ function runDeltas(base: Any, sim: Any) {
 }
 
 /* Die Karte einer Person, die schon auf der Position sitzt. Eine verpflichtete
-   Karte trägt ihr Profil; in der Probezeit zeigt sie das Assessment. Ein
-   Amtsinhaber aus der Zeit vor dem Kauf hat nur ein Rating und keine Karte. */
-export function seatCardOf(c: Any, view: Any, seat: string, quarter: number) {
-  const s = view[seat];
+   Karte trägt ihr wahres Profil. Ein Amtsinhaber aus der Zeit vor dem Kauf
+   hat nur ein Rating und keine Karte. */
+export function seatCardOf(c: Any, seat: string) {
+  const s = c[seat];
   if (!(s.skill > 0)) return null;
   if (!s.prof || !s.name) {
     // Amtsinhaber: Porträt fest aus Firma und Position, Alter vom Porträt
@@ -203,11 +203,7 @@ export function seatCardOf(c: Any, view: Any, seat: string, quarter: number) {
     };
   }
   const arch = (MANAGER_ARCHES[seat] || []).find((a: Any) => a.key === s.arch);
-  const probe = inProbation(c[seat], quarter + 1);
-  return {
-    ...s, shown: mean(s.prof), shownProf: s.prof, span: probe ? (arch ? arch.span : 0.5) : 0,
-    note: arch ? arch.note : "", probe,
-  };
+  return { ...s, shown: mean(s.prof), shownProf: s.prof, span: 0, note: arch ? arch.note : "" };
 }
 
 /* ---------- Battle Card ----------
@@ -264,7 +260,7 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
         <div className="din">
           <div className="dportrait">
             <Bust k={k} side={side} />
-            <div className="dovr"><span className="v mono">{fmt(k.shown)}</span><span className="l">{k.probe ? "Assessment" : mode === "seat" ? "Rating" : "Assessment"}</span></div>
+            <div className="dovr"><span className="v mono">{fmt(k.shown)}</span><span className="l">{mode === "seat" ? "Score" : "Assessment"}</span></div>
             <div className="dbadges">
               <span className="dtier"><span>{TIERS[tier]}</span></span>
               <SideDot side={k.side} big />
@@ -272,7 +268,7 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
             <div className="did">
               <div className="darch">{k.label}</div>
               <div className="dname">{k.name}</div>
-              <div className="dmeta">{seatName(seat, sector)}{k.origin ? ` · Herkunft ${k.origin}` : ""}{k.probe ? " · Probezeit" : ""}</div>
+              <div className="dmeta">{seatName(seat, sector)}{k.origin ? ` · Herkunft ${k.origin}` : ""}</div>
             </div>
           </div>
           <CompBars names={COMPETENCIES[seat]} vals={k.shownProf} span={span} cap={cap} />
@@ -303,7 +299,7 @@ export function BattleCard({ k, seat, h, sector, precise = false, flipped, onFli
               <h4>{seat === "ceo" ? "Wirkung auf die Programme" : "Programme"} bei {h.name}</h4>
               <div className="dnote">
                 {seat === "ceo" ? "Der CEO wirkt halb auf alle Programme mit; die Leadership deckelt die Fachpositionen. " : ""}
-                Erfolgsquote mit {last}, Strich = {mode === "seat" ? "ohne Besetzung (Interim)" : "heute"}.{mode === "draft" || k.probe ? " Gerechnet mit dem Assessment." : ""}
+                Erfolgsquote mit {last}, Strich = {mode === "seat" ? "ohne Besetzung (Interim)" : "heute"}.{mode === "draft" ? " Gerechnet mit dem Assessment." : ""}
               </div>
               <div className="dprog">
                 {progs.map(({ p, now, new: nw }) => {
@@ -437,7 +433,7 @@ export function Draft({ item, holding, analysis, hire, reject }: Any) {
         </div>
         <p className="dhint">
           {precise ? "Due Diligence 4+: enge Assessment-Bandbreite. " : "Ohne Referenzen ist die Bandbreite breit. "}
-          Das wahre Profil zeigt sich nach der Probezeit. Eine Fachposition wirkt höchstens bis Leadership des CEO +1,5 (gestrichelte Linie).
+          Mit der Verpflichtung steht das wahre Profil fest, es kann von der Schätzung abweichen. Eine Fachposition wirkt höchstens bis Leadership des CEO +1,5 (gestrichelte Linie).
           {holding && holding.mx ? ` Haben alle drei Positionen dieselbe Farbe, ist das Team eingespielt: jede Kompetenz wirkt um ${fmt(CHEM, 2)} besser.` : ""}
           {" "}Ablehnen kostet den halben Retainer und ein weiteres Halbjahr Suche.
         </p>
@@ -448,15 +444,10 @@ export function Draft({ item, holding, analysis, hire, reject }: Any) {
 
 /* ---------- Mini-Karte im Führungsbereich ----------
    Metallrahmen nach Seltenheit, Oberfläche nach Haltung, Porträt als
-   Ausschnitt. Während der Probezeit steht das Assessment da; im Halbjahr
-   danach deckt die Karte das wahre Profil auf.                          */
-export function SeatCard({ c, view, seat, nm, quarter, searching, se, onClick, className = "" }: Any) {
-  const s = view[seat];
-  const k = seatCardOf(c, view, seat, quarter);
-  // Gezählt im Halbjahr der Entscheidung (quarter zählt die ausgewerteten)
-  const probe = inProbation(c[seat], quarter + 1);
-  const reveal = revealedNow(c[seat], quarter + 1);
-  const delta = reveal && s.shownProf ? c[seat].skill - mean(s.shownProf) : 0;
+   Ausschnitt, darunter Position, Score und Name.                         */
+export function SeatCard({ c, seat, nm, searching, se, onClick, className = "" }: Any) {
+  const s = c[seat];
+  const k = seatCardOf(c, seat);
   if (searching || !k) {
     return (
       <button className={("bseat dseat" + (searching ? " busy" : " vac pulse") + " " + className).trim()} disabled={searching} onClick={onClick}>
@@ -470,12 +461,10 @@ export function SeatCard({ c, view, seat, nm, quarter, searching, se, onClick, c
     );
   }
   const tier = tierOf(s.skill);
-  const label = probe ? "Probezeit"
-    : reveal ? (Math.abs(delta) < 0.1 ? "wie erwartet" : `${delta > 0 ? "▲" : "▼"} ${fmt(Math.abs(delta))} vs. Assessment`)
-      : s.name ? s.name.split(" ").slice(-1)[0]
-        : isCapped(view, seat) ? `wirkt ${cappedSkill(view, seat).toFixed(1)}` : "Amtsinhaber";
+  const label = s.name ? s.name.split(" ").slice(-1)[0]
+    : isCapped(c, seat) ? `wirkt ${cappedSkill(c, seat).toFixed(1)}` : "Amtsinhaber";
   return (
-    <button className={("dmc" + (reveal ? " reveal" : "") + " " + className).trim()} data-tier={tier} data-side={s.side || "dunkel"}
+    <button className={("dmc " + className).trim()} data-tier={tier} data-side={s.side || "dunkel"}
       onClick={onClick} aria-label={`${nm}${s.name ? " " + s.name : ""}, Karte öffnen`}>
       <span className="dmcin">
         <span className="dmcpic">
@@ -484,7 +473,7 @@ export function SeatCard({ c, view, seat, nm, quarter, searching, se, onClick, c
         </span>
         <span className="dmcrole">{nm}</span>
         <span className="dmcsk mono">{fmt(s.skill)}</span>
-        <span className={"dmcsub" + (reveal && Math.abs(delta) >= 0.1 ? (delta > 0 ? " up" : " dn") : "")}>{label}</span>
+        <span className="dmcsub">{label}</span>
       </span>
       {tier === "gold" && <i className="dfoil" />}
     </button>
@@ -496,7 +485,7 @@ export function SeatCard({ c, view, seat, nm, quarter, searching, se, onClick, c
    lässt sich ein Ersatz suchen: Die Person geht dann sofort, die Abfindung
    fällt an, und die Position ist bis zur Verpflichtung vakant
    (vacateForSearch in lib/engine).                                       */
-export function SeatSheet({ c, view, seat, quarter, close, search }: Any) {
+export function SeatSheet({ c, seat, close, search }: Any) {
   const [flipped, setFlipped] = useState(false);
   const [ask, setAsk] = useState(false);
   /* Per Portal in die .pel-Wurzel, wie Info(): Die Beteiligungskarte trägt
@@ -512,7 +501,7 @@ export function SeatSheet({ c, view, seat, quarter, close, search }: Any) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
-  const k = seatCardOf(c, view, seat, quarter);
+  const k = seatCardOf(c, seat);
   if (!k) return null;
   const nm = seatName(seat, c.sector);
   const eb = ebitdaOf(c);
@@ -525,7 +514,7 @@ export function SeatSheet({ c, view, seat, quarter, close, search }: Any) {
           <div className="sub">{nm} · {c.name}</div>
         </div>
         <div className="dsolo">
-          <BattleCard k={k} seat={seat} h={view} sector={c.sector} mode="seat" flipped={flipped}
+          <BattleCard k={k} seat={seat} h={c} sector={c.sector} mode="seat" flipped={flipped}
             onFlip={() => { haptic("tap"); setFlipped((f) => !f); }} />
         </div>
         {!ask ? (
@@ -543,7 +532,7 @@ export function SeatSheet({ c, view, seat, quarter, close, search }: Any) {
             </p>
             <div className="daskrows">
               <span>Team-Score bis zur Neubesetzung</span>
-              <span className="mono">{fmt(teamScoreOf(view))} → {fmt(teamScoreOf({ ...view, [seat]: { skill: 0 } }))}</span>
+              <span className="mono">{fmt(teamScoreOf(c))} → {fmt(teamScoreOf({ ...c, [seat]: { skill: 0 } }))}</span>
               <span>Abfindung (zwölf Monatsgehälter)</span><span className="mono">{eur(severanceOf(seat, c[seat].skill, eb))}</span>
               <span>Retainer Headhunter</span><span className="mono">{eur(retainerOf(seat, eb))}</span>
             </div>
@@ -714,20 +703,13 @@ export const DRAFT_CSS = `
 .pel .dmcrole{margin-top:2px;font-size:8.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cs-ink2);}
 .pel .dmcsk{font-size:19px;font-weight:700;line-height:1.2;color:var(--tink);}
 .pel .dmcsub{font-size:10px;color:var(--cs-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 4px;}
-.pel .dmcsub.up{color:var(--cs-good);font-weight:600;}
-.pel .dmcsub.dn{color:var(--cs-bad);font-weight:600;}
 .pel .dmc .dfoil{border-radius:14px;}
 .pel .dseat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:134px;}
 .pel .dmini{display:flex;align-items:center;justify-content:center;width:36px;height:36px;margin:0 auto 4px;border-radius:99px;}
 .pel .dmini.empty{box-shadow:0 0 0 1.5px var(--rule);color:var(--gold);background:color-mix(in srgb, var(--gold) 10%, transparent);}
 .pel .dmini.empty.vac{box-shadow:none;border:1.5px dashed var(--ox);background:transparent;}
-.pel .dmc.reveal{animation:dreveal .9s cubic-bezier(.2,.8,.2,1) both;}
-.pel .dmc.reveal .dmcsk{animation:dpop .6s ease .25s both;}
-@keyframes dreveal{0%{transform:rotateY(90deg);}100%{transform:none;}}
-@keyframes dpop{0%{transform:scale(.6);opacity:.2;}60%{transform:scale(1.18);}100%{transform:none;opacity:1;}}
 @media (prefers-reduced-motion:reduce){
   .pel .dcard{transition:none;}
-  .pel .dmc.reveal,.pel .dmc.reveal .dmcsk{animation:none;}
   .pel .dfoil{animation:none;opacity:0;}
 }
 `;

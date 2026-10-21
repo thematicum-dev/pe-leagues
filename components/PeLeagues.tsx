@@ -622,12 +622,11 @@ export default function PeLeagues() {
       }),
     }));
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    // Mit dem Assessment gerechnet: das wahre Profil zeigt sich erst nach der Probezeit
-    const tmMove = c.mx && cand.shownProf
-      ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [item.seat]: { ...seatFromCand(cand), prof: cand.shownProf, skill: cand.shown } }))}.` : "";
+    // Mit der Verpflichtung steht das wahre Profil fest: Team-Score mit den wahren Werten
+    const tmMove = c.mx ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [item.seat]: seatFromCand(cand) }))}.` : "";
     setFeed((p) => [{
       q: quarter, e: "🤝", tone: "pos",
-      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}${tmMove}`,
+      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Score ${cand.skill.toFixed(1).replace(".", ",")} (geschätzt ${cand.shown.toFixed(1).replace(".", ",")})` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}${tmMove}`,
     }, ...p]);
   }
 
@@ -1254,7 +1253,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
       )}
       {initPick && me.holdings.find((h) => h.uid === initPick.uid) && (
         <InitPicker c={me.holdings.find((h) => h.uid === initPick.uid)} dim={initPick.dim} market={market}
-          investable={investableOf(me, quarter)} quarter={quarter}
+          investable={investableOf(me, quarter)}
           start={(id, mandate) => { startInit(me.holdings.find((h) => h.uid === initPick.uid), initPick.dim, id, mandate); setInitPick(null); }}
           close={() => setInitPick(null)} />
       )}

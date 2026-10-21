@@ -209,11 +209,10 @@ function applyImmediateDecisions(
     const hireCost = signBonusOf(dec.seat, cand.skill, ebitdaOf(c)) + (had ? severanceOf(dec.seat, prevSkill, ebitdaOf(c)) : 0);
     c.netDebt += hireCost; bookOff(c, "mgmt", hireCost);
     const nm = dec.seat === "ceo" ? "CEO" : dec.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
-    // Mit dem Assessment gerechnet: das wahre Profil zeigt sich erst nach der Probezeit
-    const tmAfter = c.mx && cand.shownProf
-      ? teamScoreOf({ ...c, [dec.seat]: { ...c[dec.seat], prof: cand.shownProf, skill: cand.shown } }) : null;
+    // Mit der Verpflichtung steht das wahre Profil fest: Score und Team-Score mit den wahren Werten
+    const tmAfter = c.mx ? teamScoreOf(c) : null;
     pushFeed(news, quarter, "🤝", "pos", cand.name
-      ? `${c.name}: ${cand.name} ist neuer ${nm} (${cand.label}). Das wahre Profil zeigt sich in der Probezeit.${tmAfter != null ? ` ${teamMove(tmBefore, tmAfter)}.` : ""}`
+      ? `${c.name}: ${cand.name} ist neuer ${nm} (${cand.label}), Score ${cand.skill.toFixed(1).replace(".", ",")} (geschätzt ${cand.shown.toFixed(1).replace(".", ",")}).${tmAfter != null ? ` ${teamMove(tmBefore, tmAfter)}.` : ""}`
       : `${c.name}: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}.`, f.slot);
     list = list.filter((it) => it !== item);
   });

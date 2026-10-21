@@ -400,7 +400,7 @@ const COACH = [
   { id: "vac", when: (o) => o.c.cfo.skill <= 0 && !(o.c.searches || []).some((s) => s.seat === "cfo") && o.q <= 3,
     t: "Der <b>CFO ist vakant</b>. Eine unbesetzte Position zieht das People-Niveau nach unten — und über <code>min(Growth, People+1, Performance+1)</code> deckelt sie direkt dein Wachstum. Und sie spart kein Geld: die Position wird interimistisch besetzt, und Interim kostet ein Viertel mehr als der Vorgänger. Ein Mandat kostet 30 % eines Jahresgehalts und zwei Halbjahre — gemessen an der Wirkung auf jede spätere Maßnahme die schnellste Rendite im ganzen Katalog. Du darfst auch beide offenen Positionen gleichzeitig ausschreiben." },
   { id: "search", when: (o) => (o.c.searches || []).some((s) => !s.waiting),
-    t: "Search läuft. Im nächsten Halbjahr kommt die Shortlist: <b>fünf Kandidatenkarten</b> zum Wischen. Die Kompetenzen darauf sind eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und das wahre Profil zeigt sich erst nach der Probezeit." },
+    t: "Search läuft. Im nächsten Halbjahr kommt die Shortlist: <b>fünf Kandidatenkarten</b> zum Wischen. Die Kompetenzen darauf sind eine <b>Schätzung</b> — die Spanne hängt an deiner Due-Diligence-Stärke, und das wahre Profil steht mit der Verpflichtung fest." },
   { id: "cap", when: (o) => ["cfo", "r3"].some((k) => isCapped(o.c, k)),
     t: "Eine Fachposition wirkt höchstens bis <b>Leadership des CEO + 1,5</b>. Der Überschuss verpufft — du bezahlst ihn trotzdem. Starke Fachleute berichten nicht dauerhaft an eine schwache Führung; wenn du oben investieren willst, fang beim CEO an." },
   { id: "init", when: (o) => anyInit(o.c) && !(o.c.initA && o.c.initA.ma) && o.q >= 1,
@@ -532,7 +532,7 @@ function GuidedRun({ dark, setDark, back }) {
       searches: (c.searches || []).filter((se) => se.seat !== item.seat),
     });
     setSl((p) => p.slice(1));
-    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Assessment-Score ${cand.shown.toFixed(1)}` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
+    setFeed((p) => [{ q, e: "🤝", tone: "pos", t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Score ${cand.skill.toFixed(1).replace(".", ",")} (geschätzt ${cand.shown.toFixed(1).replace(".", ",")})` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? " Plus zwölf Monatsgehälter Abfindung für den Vorgänger." : ""}` }, ...p]);
   }
 
   function reject(item) {
@@ -1130,7 +1130,7 @@ function GuidedRun({ dark, setDark, back }) {
 
       {sheet && <Sheet sheet={sheet} close={() => setSheet(null)} onConfirm={() => setSheet(null)} />}
       {initPick && (
-        <InitPicker c={c} dim={initPick.dim} market={market} quarter={q}
+        <InitPicker c={c} dim={initPick.dim} market={market}
           start={(id, mandate) => { startInit(initPick.dim, id, mandate); setInitPick(null); }} close={() => setInitPick(null)} />
       )}
       {!sheet && !initPick && sl.length > 0 && (

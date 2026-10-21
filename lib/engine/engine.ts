@@ -1501,7 +1501,7 @@ export const portraitUrl = (id: string, side?: string) => `/manager/${id}-${side
 
 /* Eine Kandidatenkarte. Die gezeigten Kompetenzen streuen um den Archetyp,
    die wahren um die gezeigten — so weit, wie die Assessment-Bandbreite
-   reicht. Das wahre Profil zeigt sich in der Probezeit.                  */
+   reicht. Mit der Verpflichtung steht das wahre Profil auf der Karte.   */
 interface ManagerArch { key: string; n: string[]; p: number[]; span: number; note: string; dev?: boolean; poach?: number }
 function managerCard(rng: Rng, seat, a: ManagerArch): ManagerCard {
   const g: "f" | "m" = rng.rnd() < 0.5 ? "f" : "m";
@@ -1562,32 +1562,9 @@ export function seatFromCand(cand, q?: number) {
     ...base, prof: [...cand.prof], shownProf: [...(cand.shownProf || cand.prof)],
     arch: cand.arch, label: cand.label, name: cand.name, g: cand.g, age: cand.age, origin: cand.origin,
     pic: cand.pic, portrait: cand.portrait, trait: cand.trait, side: cand.side, ...(cand.trait === "coinvest" ? { payF: 0.9 } : {}),
+    // Halbjahr der Verpflichtung, wie runQuarter es zählt
     ...(q != null ? { hiredQ: q } : {}),
   };
-}
-/* ---------- Probezeit ----------
-   Das wahre Profil steht mit dem Antritt fest und rechnet in der Engine vom
-   ersten Halbjahr an. Zu sehen ist es erst nach der Probezeit: bis zum
-   Halbjahr nach der Verpflichtung (hiredQ + PROBATION) zeigt die Oberfläche
-   das Profil aus dem Assessment, danach das wahre. `q` und `hiredQ` sind
-   Halbjahre der Entscheidung (halfYear in runQuarter, quarter + 1 in der
-   Oberfläche). So bleibt eine
-   Fehlbesetzung eine Weile unentdeckt, und Referenzen (Analyse) lohnen sich.
-   Reine Ansicht: viewOf() ändert nichts an der Rechnung.                  */
-export const PROBATION = 1;
-const meanOf = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
-export const inProbation = (s, q) => !!(s && s.skill > 0 && s.shownProf && s.hiredQ != null && q != null
-  && q <= s.hiredQ + PROBATION);
-// Das Halbjahr, in dem die Probezeit gerade endet und das wahre Profil aufgedeckt wird
-export const revealedNow = (s, q) => !!(s && s.skill > 0 && s.shownProf && s.hiredQ != null && q != null
-  && q === s.hiredQ + PROBATION + 1);
-export function viewOf(c, q) {
-  if (!c || q == null) return c;
-  const open = ["ceo", "cfo", "r3"].filter((k) => inProbation(c[k], q));
-  if (!open.length) return c;
-  const v = { ...c };
-  for (const k of open) v[k] = { ...c[k], prof: [...c[k].shownProf], skill: meanOf(c[k].shownProf) };
-  return v;
 }
 /* Seltenheit nach Assessment-Score, in derselben Rahmensprache wie die
    Zielunternehmen: Bronze unter 2,5, Silber bis 3,5, darüber Gold. Gold
