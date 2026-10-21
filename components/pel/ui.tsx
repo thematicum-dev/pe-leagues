@@ -1394,7 +1394,7 @@ function Levers({ c, lev, quarter, freeSlots, act, sp }) {
         disabled={mepFix} role="switch" aria-checked={!!c.ltip} onClick={() => { haptic(8); act.ltip(); }}>
         <span>
           <span className="art"><Icon k="users" />{c.ltip && <span className="bmepon"><Icon k="check" />Aktiv</span>}</span>
-          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}{mepFix ? <Icon k="lock" /> : <i className="bsw" />}</span>
+          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}{mepFix && <Icon k="lock" />}</span>
           <span className="s">{mepFix ? "Bindend bis zum Exit"
             : mepNew ? "Tippen nimmt es zurück. Bindend ab Halbjahresende" : "Management am Exit beteiligen"}</span>
           <span className="f"><span className="tok">{Math.round(LTIP_SHARE * 100)} % Sweet Equity</span></span>
