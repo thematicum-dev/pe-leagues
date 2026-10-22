@@ -729,7 +729,16 @@ export const seatLoad = (c) => {
   return (seatPay(c.ceo, "ceo", eb) + seatPay(c.cfo, "cfo", eb) + seatPay(c.r3, "r3", eb))
     / Math.max(4, c.revenue) * 100;
 };
-export const peopleLvl = (c) => (c.ceo.skill + c.cfo.skill + c.r3.skill) / 3;
+/* People-Reifegrad. Seit dem 22.10.2026 ist das der Team-Score (teamScoreOf):
+   Vorher war es der einfache Durchschnitt der drei Ratings, und die Karte
+   zeigte neben People 3,4 einen Team-Score von 3,3 — zwei Zahlen für dieselbe
+   Frage. Der Team-Score gewichtet nach dem Bedarf des Cases, deckelt die
+   Fachpositionen an der Leadership des CEO, zählt eine Vakanz als Interim
+   und rechnet die Chemie ein. Beteiligungen ohne laufende Managementwirkung
+   (kein `mx`: vor dem 19.10.2026 gekauft oder in einer Wiederholung nach
+   LEGACY_COMPAT) behalten den Durchschnitt, damit alte Halbjahre exakt
+   nachrechenbar bleiben (siehe replay.ts).                                */
+export const peopleLvl = (c) => (c.mx ? teamScoreOf(c) : (c.ceo.skill + c.cfo.skill + c.r3.skill) / 3);
 // Eine Fachposition kann den CEO nicht überholen — A-Player berichten nicht an C-Player
 // Ein vakanter CEO führt mit `mx` kommissarisch auf Interim-Niveau (siehe ceoIn)
 const ceoLeadFlat = (c) => (c.mx && !(c.ceo.skill > 0) ? 2.0 : c.ceo.skill);
@@ -781,13 +790,20 @@ export const compOf = (s, i) => (s.skill > 0 ? (s.prof ? s.prof[i] : s.skill) : 
 
    Gemessen in 30 ganzen Partien: Wer auf Fit und Farbe achtet, ist in rund
    einem Drittel der Beteiligungs-Halbjahre eingespielt, wer nur auf Fit
-   achtet in rund einem Fünftel, passiv in 5 %. Erst ab etwa 0,4 lohnt es
-   sich messbar, für die Farbe auf etwas Fit zu verzichten; die passende
-   Besetzung bleibt die erste Frage.
+   achtet in rund einem Fünftel, passiv in 5 %. Erst ab etwa 0,4 (Regelstand
+   vor dem 22.10.2026, siehe unten) lohnt es sich messbar, für die Farbe auf
+   etwas Fit zu verzichten; die passende Besetzung bleibt die erste Frage.
+
+   Seit dem 22.10.2026 ist der People-Reifegrad der Team-Score (peopleLvl),
+   und der enthält die Chemie. Damit wirkt sie ein drittes Mal, über
+   Assetqualität und Growth-Deckel, und bei 0,4 verdoppelte sich ihr Ertrag
+   von rund 0,21x auf 0,44x MOIC je eingespieltem Case. Halbiert auf 0,2
+   liegt er wieder bei 0,21x — das Gewicht der Farbe gegen den Fit, das die
+   Messung oben beschreibt, bleibt damit dasselbe.
 
    Gilt nur für Beteiligungen mit `mx`. Eine besetzte Position ohne Haltung
    (Karten der alten Shortlist) zählt nicht als gleich ausgerichtet.      */
-export const CHEM = 0.4;
+export const CHEM = 0.2;
 export function chemOf(c): number {
   if (!c || !c.mx || !c.ceo) return 0;
   const on = ["ceo", "cfo", "r3"].map((k) => c[k]).filter((s) => s && s.skill > 0);
@@ -1682,7 +1698,8 @@ const BOT_PREF: Record<string, Record<string, number>> = {
 };
 export function botDraft(rng: Rng, key: string, seat: string, amb: number, c?) {
   const pref = (BOT_PREF[key] || BOT_PREF.all)[seat] ?? 0;
-  const chem = (k: ManagerCard) => (c ? 1.2 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
+  // 2,4 × CHEM: dasselbe Gewicht wie 1,2 × 0,4 vor der Halbierung von CHEM — die Farbe ist der KI so viel wert wie vorher
+  const chem = (k: ManagerCard) => (c ? 2.4 * chemOf({ ...c, [seat]: { skill: k.shown, side: k.side } }) : 0);
   const score = (k: ManagerCard) => 0.6 * (k.shownProf ? k.shownProf[pref] : k.shown) - Math.abs(k.shown - amb) * 0.5 + 0.2 * k.shown + chem(k);
   return makeCandidates(rng, seat, {}, c?.sector, c ? avoidFaces(c, seat) : []).reduce((best, k) => (score(k) > score(best) ? k : best));
 }
@@ -1709,8 +1726,9 @@ export function vacateForSearch(c, seat) {
    MGMT_INTERIM, dazu die Chemie. Das Team ist der Durchschnitt der drei
    Positionen. So steigt die Zahl auch, wenn eine passende Spezialistin einen
    gleich teuren Generalisten ersetzt — der Assessment-Score allein sähe
-   keinen Unterschied. Reine Anzeige, die Rechnung bleibt bei effSkill und
-   mgmtFx.                                                                 */
+   keinen Unterschied. Die Programme rechnen weiter mit effSkill und mgmtFx;
+   der Team-Score selbst ist der People-Reifegrad (peopleLvl) und wirkt so
+   auf Assetqualität und Growth-Deckel.                                    */
 export function teamScoreOf(c) {
   if (!c || !c.ceo) return 0;
   const chem = chemOf(c);

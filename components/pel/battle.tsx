@@ -935,6 +935,7 @@ const LINE_ICONS = {
   check:    <path d="M5 12l5 5L20 7" />,
   repeat:   (<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
   alert:    (<><path d="M12 3l10 18H2z" /><path d="M12 10v5M12 18h.01" /></>),
+  clock:    (<><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.4l3.4 2" /></>),
 };
 export function Icon({ k, className = "bli" }: { k: keyof typeof LINE_ICONS | string; className?: string }) {
   return (
@@ -1798,6 +1799,7 @@ export const BATTLE_CSS = `
 .pel .blever.run:disabled,.pel .blever.done:disabled{filter:none;}
 .pel .blever.run:disabled > span,.pel .blever.done:disabled > span{opacity:1;}
 .pel .blever.run .f{color:var(--gold);}
+.pel .blever.run .s{color:var(--ink);font-weight:600;}
 /* MEP an- und abschalten per Tipp auf die Karte: aus = gedämpfter Rahmen, Token nur
    umrandet; an = voller Goldrahmen mit Schein, getönte Fläche, "Aktiv"-Marke. */
 .pel .blever.mep:not(.on){background:linear-gradient(150deg,color-mix(in srgb, var(--fam) 42%, var(--card)),
@@ -1807,14 +1809,16 @@ export const BATTLE_CSS = `
 .pel .blever.mep:not(.on) .tok{color:var(--fam);background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--fam) 60%, transparent);}
 .pel .blever.mep.on{box-shadow:0 0 0 1px var(--fam),0 10px 26px -12px var(--fam);}
 .pel .blever.mep.on > span{background:color-mix(in srgb, var(--fam) 9%, var(--card));}
-.pel .blever.mep.on .art{position:relative;background:radial-gradient(circle at 50% 62%,color-mix(in srgb, var(--fam) 48%, transparent),
+.pel .blever.mep.on .art{background:radial-gradient(circle at 50% 62%,color-mix(in srgb, var(--fam) 48%, transparent),
   color-mix(in srgb, var(--fam) 8%, transparent) 70%);}
 .pel .blever.mep .t{display:flex;align-items:center;justify-content:space-between;gap:6px;}
 .pel .blever.mep .t .bli{width:15px;height:15px;color:var(--fam);stroke-width:2.2;}
 .pel .blever.mep.on .t{color:var(--fam);}
-.pel .bmepon{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px 2px 5px;
+/* Marke oben rechts im Bild: "Aktiv" beim MEP, "Läuft" bei einem Programm */
+.pel .blever .art{position:relative;}
+.pel .blvbadge{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px 2px 5px;
   border-radius:99px;background:var(--fam);color:var(--card);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;}
-.pel .blever .art .bmepon .bli{width:11px;height:11px;stroke-width:3;}
+.pel .blever .art .blvbadge .bli{width:11px;height:11px;stroke-width:3;}
 .pel .bcard.hold .bstatus{font-size:10.5px;color:var(--ink2);margin-top:8px;line-height:1.45;}
 .pel .bcard.hold .bstatus .bli{width:12px;height:12px;vertical-align:-2px;margin-right:4px;}
 
