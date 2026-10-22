@@ -42,6 +42,8 @@ Dateinamen-Reihenfolge angewendet:
 37. `20260830100300_access_admin_functions.sql` – Admin-Funktionen für Freigaben und Universen
 38. `20261012090000_fund_profile_on_join.sql` – Fondsprofil schon beim Beitritt: `join_season`/`create_and_join_season` nehmen optional `p_attrs` an, damit auch der fünfte Spieler, dessen Beitritt die Partie startet, mit seinem Profil spielt
 39. `20261018090000_best_deals.sql` – `best_deals()`: bester realisierter Deal je abgeschlossener Partie eines Universums (Rangliste)
+40. `20261022090000_concurrent_seasons.sql` – bis zu drei aktive Partien gleichzeitig, höchstens drei eröffnete pro Tag (`seasons.opened_by`, `my_season_limits()`)
+41. `20261022090100_season_abort.sql` – laufende Partie abbrechen: sofort, wenn man der einzige Mensch ist, sonst per Abstimmung (`request_season_abort()`, `respond_season_abort()`, `season_abort_status()`)
 
 ## Zugangskontrolle und Universen
 
@@ -84,8 +86,10 @@ der Universen, die ihm über `profile_universes` zugeteilt wurden:
   `universe_not_granted` ab — auch bei direkt geratener Partie-UUID.
 - `global_leaderboard(p_universe_id)` liefert die Rangliste genau eines
   Universums und nur an dessen Mitglieder.
-- Die Regel "höchstens eine aktive Partie" gilt **je Universum**: Wer im
-  Test-Universum spielt, kann parallel eine Live-Partie bestreiten.
+- Die Grenzen für Partien gelten **je Universum**: höchstens drei aktive
+  Partien (Lobby oder laufend) gleichzeitig und höchstens drei neu eröffnete
+  pro Kalendertag (Europe/Berlin). Wer im Test-Universum spielt, verbraucht
+  davon im Live-Universum nichts. Siehe "Mehrere Partien und Abbruch" unten.
 
 Ein Spieler kann mehreren Universen zugeteilt sein und wechselt im Dashboard
 zwischen ihnen (`profiles.active_universe_id`).
@@ -119,6 +123,38 @@ Bestandsnutzer und Bestandspartien bleiben unangetastet: Die Migration setzt
 alle bereits vorhandenen Profile auf `approved` und teilt ihnen das
 Live-Universum zu; alle bestehenden Partien landen ebenfalls im
 Live-Universum.
+
+## Mehrere Partien und Abbruch
+
+**Gleichzeitige Partien.** `join_season()` und `create_and_join_season()`
+lehnen einen Beitritt bzw. eine Eröffnung ab, sobald der Spieler im Universum
+schon in drei aktiven Partien sitzt (`active_season_limit_reached`).
+`create_and_join_season()` zählt zusätzlich, wie viele Partien er heute
+eröffnet hat (`daily_season_limit_reached`) — jede eröffnete zählt, auch eine
+später aufgelöste, sonst ließe sich die Grenze durch Eröffnen und Auflösen
+umgehen. Wer eröffnet hat, steht in `seasons.opened_by`; `created_by` taugt
+dafür nicht, weil `leave_season()` die Ersteller-Rechte weitergibt. Beide
+Grenzen stehen an genau einer Stelle (`max_active_seasons()`,
+`max_daily_season_openings()`), das Dashboard liest sie über
+`my_season_limits()`. Ein Spieler, der dieselbe Lobby zweimal betreten will,
+bekommt `already_member`.
+
+**Abbruch einer laufenden Partie.** `request_season_abort()` bricht sofort ab,
+wenn der Spieler der einzige Mensch in der Partie ist. Sonst legt es eine
+Anfrage in `season_abort_requests` an (höchstens eine offene je Partie), der
+Antragsteller zählt als erste Zustimmung (`season_abort_votes`). Die übrigen
+Spieler antworten mit `respond_season_abort()`: Haben alle zugestimmt, ist die
+Partie abgebrochen; eine einzige Ablehnung beendet die Anfrage, und es wird
+weitergespielt. Der Antragsteller zieht seine Anfrage auf demselben Weg
+zurück. Solange eine Anfrage offen ist, läuft die Partie normal weiter.
+
+Abgebrochen heißt `status = 'cancelled'`, `cancelled_reason = 'aborted'`:
+keine Auswertung mehr (alle Claim-Funktionen verlangen `running`, das
+Claim-Token wird mit gelöscht, eine gerade rechnende Auswertung scheitert beim
+Commit), keine Abgaben (die `turn_submissions`-Policies verlangen `running`),
+keine Wertung in den Ranglisten (nur `finished`), und der Platz unter den drei
+aktiven Partien ist wieder frei. Beide Tabellen sind für Mitspieler lesbar und
+werden nur über diese Funktionen geschrieben.
 
 ## Admin-Bereich
 

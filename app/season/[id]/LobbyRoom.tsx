@@ -225,11 +225,13 @@ export default function LobbyRoom({
   if (status === "cancelled") {
     return (
       <div className="dashcard">
-        <h2>Lobby geschlossen</h2>
+        <h2>{cancelledReason === "aborted" ? "Partie abgebrochen" : "Lobby geschlossen"}</h2>
         <p className="dashsub">
-          {cancelledReason === "creator_deleted"
-            ? "Diese Partie wurde vom Ersteller aufgelöst."
-            : "Diese Lobby wurde geschlossen, weil kein menschlicher Spieler mehr übrig war."}
+          {cancelledReason === "aborted"
+            ? "Diese Partie wurde während des Spiels abgebrochen und wird nicht gewertet."
+            : cancelledReason === "creator_deleted"
+              ? "Diese Partie wurde vom Ersteller aufgelöst."
+              : "Diese Lobby wurde geschlossen, weil kein menschlicher Spieler mehr übrig war."}
         </p>
         <Link className="btn-primary" href="/dashboard">
           Zurück zum Dashboard

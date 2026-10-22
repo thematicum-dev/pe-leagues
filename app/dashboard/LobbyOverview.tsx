@@ -23,14 +23,25 @@ export interface MySeasonSummary {
   occupancy: number;
 }
 
+/* Grenzen je Universum, durchgesetzt in join_season() und
+   create_and_join_season() (Migration 20261022090000). Die Zahl der aktiven
+   Partien kommt nicht von hier, sondern aus der live gehaltenen Liste. */
+export interface SeasonLimits {
+  activeMax: number;
+  openedToday: number;
+  openedMax: number;
+}
+
 // Von Universen ist in diesen Meldungen nur die Rede, wenn der Spieler
 // überhaupt in mehreren unterwegs ist (showUniverse) -- sonst wäre es ein
 // Begriff, den er nirgends sonst zu sehen bekommt.
 function rpcErrorMessages(showUniverse: boolean): Record<string, string> {
   return {
-    already_in_active_season: showUniverse
-      ? "Du bist in diesem Universum bereits in einer aktiven Partie."
-      : "Du bist bereits in einer aktiven Partie.",
+    active_season_limit_reached: showUniverse
+      ? "Du bist in diesem Universum bereits in drei aktiven Partien — mehr gehen nicht gleichzeitig."
+      : "Du bist bereits in drei aktiven Partien — mehr gehen nicht gleichzeitig.",
+    daily_season_limit_reached: "Du hast heute schon drei Partien eröffnet. Morgen geht es wieder.",
+    already_member: "In dieser Partie bist du schon dabei.",
     profile_missing: "Bitte lege zuerst deinen Anzeigenamen fest.",
     access_not_approved: "Dein Zugang ist noch nicht freigegeben.",
     universe_not_granted: "Für diese Partie fehlt dir die Freigabe.",
@@ -74,15 +85,17 @@ function Countdown({ lobbyOpenedAt }: { lobbyOpenedAt: string }) {
 }
 
 export default function LobbyOverview({
-  initialMySeason,
+  initialMySeasons,
   initialOpenLobbies,
+  limits,
   universeId,
   universeName,
   universeActive,
   showUniverse,
 }: {
-  initialMySeason: MySeasonSummary | null;
+  initialMySeasons: MySeasonSummary[];
   initialOpenLobbies: LobbySummary[];
+  limits: SeasonLimits;
   universeId: string;
   universeName: string;
   universeActive: boolean;
@@ -90,26 +103,25 @@ export default function LobbyOverview({
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [mySeason, setMySeason] = useState(initialMySeason);
+  const [mySeasons, setMySeasons] = useState(initialMySeasons);
   const [openLobbies, setOpenLobbies] = useState(initialOpenLobbies);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sobald sich der eigene Partie-Status auf "running" ändert (5 Spieler
-  // erreicht oder 12-Stunden-Frist abgelaufen), direkt zur Partie
-  // weiterleiten -- aber nur bei diesem Übergang selbst (lobby -> running),
-  // während man auf dem Dashboard sitzt. Ohne den Vergleich mit dem vorigen
-  // Status würde das auch dann feuern, wenn man das Dashboard einfach nur
-  // besucht, während die eigene Partie schon länger läuft (z. B. über den
-  // "Zum Dashboard"-Button aus dem Spiel) -- und einen Sekunden später
-  // ungefragt zurück ins Spiel schicken.
-  const prevStatusRef = useRef(initialMySeason?.status ?? null);
+  // Sobald eine eigene Partie von "lobby" auf "running" wechselt (5 Spieler
+  // erreicht oder 12-Stunden-Frist abgelaufen), direkt zu ihr weiterleiten --
+  // aber nur bei diesem Übergang selbst, während man auf dem Dashboard sitzt.
+  // Ohne den Vergleich mit dem vorigen Status würde das auch dann feuern, wenn
+  // man das Dashboard einfach nur besucht, während eine eigene Partie schon
+  // länger läuft (z. B. über den "Zum Dashboard"-Button aus dem Spiel) -- und
+  // einen Sekunden später ungefragt zurück ins Spiel schicken.
+  const prevStatusRef = useRef(new Map(initialMySeasons.map((s) => [s.id, s.status])));
   useEffect(() => {
-    if (prevStatusRef.current === "lobby" && mySeason?.status === "running") {
-      router.push(`/season/${mySeason.id}`);
-    }
-    prevStatusRef.current = mySeason?.status ?? null;
-  }, [mySeason, router]);
+    const prev = prevStatusRef.current;
+    const started = mySeasons.find((s) => prev.get(s.id) === "lobby" && s.status === "running");
+    prevStatusRef.current = new Map(mySeasons.map((s) => [s.id, s.status]));
+    if (started) router.push(`/season/${started.id}`);
+  }, [mySeasons, router]);
 
   useEffect(() => {
     const channel = supabase
@@ -128,7 +140,9 @@ export default function LobbyOverview({
           setOpenLobbies((list) =>
             list.map((l) => (l.id === seasonId ? { ...l, occupancy: l.occupancy + delta } : l)),
           );
-          setMySeason((s) => (s && s.id === seasonId ? { ...s, occupancy: s.occupancy + delta } : s));
+          setMySeasons((list) =>
+            list.map((s) => (s.id === seasonId ? { ...s, occupancy: s.occupancy + delta } : s)),
+          );
         },
       )
       .on(
@@ -156,8 +170,12 @@ export default function LobbyOverview({
             if (row.status !== "lobby") {
               setOpenLobbies((list) => list.filter((l) => l.id !== row.id));
             }
-            setMySeason((s) =>
-              s && s.id === row.id ? { ...s, status: row.status as "lobby" | "running" } : s,
+            // Beendete, abgebrochene oder aufgelöste Partien fallen aus der
+            // Liste -- und geben damit einen der aktiven Plätze wieder frei.
+            setMySeasons((list) =>
+              row.status === "lobby" || row.status === "running"
+                ? list.map((s) => (s.id === row.id ? { ...s, status: row.status as "lobby" | "running" } : s))
+                : list.filter((s) => s.id !== row.id),
             );
           }
         },
@@ -204,34 +222,6 @@ export default function LobbyOverview({
     if (data) router.push(`/season/${data}`);
   }
 
-  if (mySeason) {
-    return (
-      <div className="dashcard dashcard-accent">
-        <h2>Deine Partie{showUniverse ? ` · ${universeName}` : ""}</h2>
-        <div className="seasonrow">
-          <span>Partie {mySeason.id.slice(0, 8)}</span>
-          <span className="seasonstatus">
-            {mySeason.status === "running" ? "Läuft" : "Lobby offen"}
-          </span>
-        </div>
-        <p className="dashsub">
-          {mySeason.occupancy} / 5 Plätzen belegt
-          {mySeason.status === "lobby" && (
-            <>
-              {" "}
-              · Start spätestens in <Countdown lobbyOpenedAt={mySeason.lobbyOpenedAt} />
-            </>
-          )}
-        </p>
-        {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der App und
-            blendet über (app/template.tsx), statt die Seite neu zu laden. */}
-        <Link className="btn-primary" href={`/season/${mySeason.id}`}>
-          Zur Partie
-        </Link>
-      </div>
-    );
-  }
-
   if (joining) {
     const lobby = joining.kind === "join" ? openLobbies.find((l) => l.id === joining.seasonId) : null;
     return (
@@ -268,40 +258,97 @@ export default function LobbyOverview({
     );
   }
 
+  const atActiveLimit = mySeasons.length >= limits.activeMax;
+  const openingsLeft = Math.max(0, limits.openedMax - limits.openedToday);
+
   return (
-    <div className="dashcard dashcard-accent">
-      <h2>Offene Partien{showUniverse ? ` · ${universeName}` : ""}</h2>
-      {error && <p className="autherror">{error}</p>}
-      {openLobbies.length === 0 && (
-        <>
+    <>
+      {mySeasons.length > 0 && (
+        <div className="dashcard dashcard-accent">
+          <h2>
+            {mySeasons.length === 1 ? "Deine Partie" : "Deine Partien"}
+            {showUniverse ? ` · ${universeName}` : ""}
+          </h2>
+          {mySeasons.map((season) => (
+            <div className="seasonrow" key={season.id}>
+              <span>
+                Partie {season.id.slice(0, 8)} · {season.occupancy} / 5
+                {season.status === "lobby" && (
+                  <>
+                    {" · Start spätestens in "}
+                    <Countdown lobbyOpenedAt={season.lobbyOpenedAt} />
+                  </>
+                )}
+              </span>
+              <span className="seasonstatus">{season.status === "running" ? "Läuft" : "Lobby offen"}</span>
+              {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der
+                  App und blendet über (app/template.tsx), statt die Seite neu
+                  zu laden. */}
+              <Link className="btn-secondary" href={`/season/${season.id}`}>
+                Zur Partie
+              </Link>
+            </div>
+          ))}
           <p className="dashsub">
-            {universeActive
-              ? showUniverse
-                ? "Aktuell ist in diesem Universum keine Lobby offen."
-                : "Aktuell ist keine Lobby offen."
-              : showUniverse
-                ? "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."
-                : "Zurzeit können keine neuen Partien eröffnet werden."}
+            {mySeasons.length} von {limits.activeMax} Partien gleichzeitig belegt
           </p>
-          {universeActive && (
-            <button className="btn-primary" onClick={() => { setError(null); setJoining({ kind: "create" }); }} disabled={pending}>
-              {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
-            </button>
-          )}
-        </>
-      )}
-      {openLobbies.map((lobby) => (
-        <div className="seasonrow" key={lobby.id}>
-          <span>
-            Partie {lobby.id.slice(0, 8)} · {lobby.occupancy} / 5
-            {" · Start spätestens in "}
-            <Countdown lobbyOpenedAt={lobby.lobbyOpenedAt} />
-          </span>
-          <button className="btn-secondary" onClick={() => { setError(null); setJoining({ kind: "join", seasonId: lobby.id }); }} disabled={pending}>
-            {pending ? "Einen Moment …" : "Beitreten"}
-          </button>
         </div>
-      ))}
-    </div>
+      )}
+
+      <div className={"dashcard" + (mySeasons.length === 0 ? " dashcard-accent" : "")}>
+        <h2>Offene Partien{showUniverse ? ` · ${universeName}` : ""}</h2>
+        {error && <p className="autherror">{error}</p>}
+        {atActiveLimit ? (
+          <p className="dashsub">
+            Du spielst bereits {limits.activeMax} Partien gleichzeitig. Sobald eine davon endet, kannst du
+            einer weiteren beitreten oder eine eröffnen.
+          </p>
+        ) : (
+          <>
+            {openLobbies.length === 0 && (
+              <>
+                <p className="dashsub">
+                  {universeActive
+                    ? showUniverse
+                      ? "Aktuell ist in diesem Universum keine Lobby offen."
+                      : "Aktuell ist keine Lobby offen."
+                    : showUniverse
+                      ? "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."
+                      : "Zurzeit können keine neuen Partien eröffnet werden."}
+                </p>
+                {universeActive && (
+                  <>
+                    <button
+                      className="btn-primary"
+                      onClick={() => { setError(null); setJoining({ kind: "create" }); }}
+                      disabled={pending || openingsLeft === 0}
+                    >
+                      {pending ? "Einen Moment …" : "Neue Partie eröffnen"}
+                    </button>
+                    <p className="dashsub">
+                      {openingsLeft === 0
+                        ? `Du hast heute schon ${limits.openedMax} Partien eröffnet. Morgen geht es wieder.`
+                        : `Heute noch ${openingsLeft} von ${limits.openedMax} Eröffnungen frei.`}
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+            {openLobbies.map((lobby) => (
+              <div className="seasonrow" key={lobby.id}>
+                <span>
+                  Partie {lobby.id.slice(0, 8)} · {lobby.occupancy} / 5
+                  {" · Start spätestens in "}
+                  <Countdown lobbyOpenedAt={lobby.lobbyOpenedAt} />
+                </span>
+                <button className="btn-secondary" onClick={() => { setError(null); setJoining({ kind: "join", seasonId: lobby.id }); }} disabled={pending}>
+                  {pending ? "Einen Moment …" : "Beitreten"}
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </>
   );
 }

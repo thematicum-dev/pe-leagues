@@ -2,7 +2,7 @@ import { signOut } from "@/app/auth/actions";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/access/context";
-import LobbyOverview, { type LobbySummary, type MySeasonSummary } from "./LobbyOverview";
+import LobbyOverview, { type LobbySummary, type MySeasonSummary, type SeasonLimits } from "./LobbyOverview";
 import UniverseSwitcher from "./UniverseSwitcher";
 import InviteFriends from "./InviteFriends";
 
@@ -28,60 +28,68 @@ export default async function DashboardPage() {
   // Alles ab hier ist auf das aktive Universum beschränkt -- in der Abfrage
   // wie auch in der Datenbank (siehe seasons_select in
   // supabase/migrations/20260830100200_universe_seasons.sql).
-  const { data: myRow } = await supabase
+  const { data: myRows } = await supabase
     .from("season_players")
     .select("season_id, seasons!inner(id, status, lobby_opened_at, universe_id)")
     .eq("profile_id", user.id)
     .in("seasons.status", ["lobby", "running"])
-    .eq("seasons.universe_id", activeUniverse.id)
+    .eq("seasons.universe_id", activeUniverse.id);
+
+  const myActiveSeasons = (myRows ?? [])
+    .map((row) => (Array.isArray(row.seasons) ? row.seasons[0] : row.seasons))
+    .filter((s): s is NonNullable<typeof s> => s != null)
+    .sort((a, b) => a.lobby_opened_at.localeCompare(b.lobby_opened_at));
+  const myIds = new Set(myActiveSeasons.map((s) => s.id));
+
+  // Grenzen aus der Datenbank, die sie auch durchsetzt (join_season,
+  // create_and_join_season) -- die Oberfläche rechnet nichts davon selbst nach.
+  const { data: limitsRow } = await supabase
+    .rpc("my_season_limits", { p_universe_id: activeUniverse.id })
     .maybeSingle();
+  const limitsData = limitsRow as {
+    active_count: number; active_max: number; opened_today: number; opened_max: number;
+  } | null;
+  const limits: SeasonLimits = {
+    activeMax: limitsData?.active_max ?? 3,
+    openedToday: limitsData?.opened_today ?? 0,
+    openedMax: limitsData?.opened_max ?? 3,
+  };
 
-  const myActiveSeason = myRow
-    ? (Array.isArray(myRow.seasons) ? myRow.seasons[0] : myRow.seasons)
-    : null;
+  const { data: lobbies } = await supabase
+    .from("seasons")
+    .select("id, lobby_opened_at")
+    .eq("status", "lobby")
+    .eq("universe_id", activeUniverse.id)
+    .order("lobby_opened_at", { ascending: true });
 
-  let mySeason: MySeasonSummary | null = null;
-  let openLobbies: LobbySummary[] = [];
-
-  if (myActiveSeason) {
-    const { count } = await supabase
+  // Belegung für eigene Partien und offene Lobbys in einer Abfrage.
+  const occupancyIds = [...new Set([...myIds, ...(lobbies ?? []).map((l) => l.id)])];
+  const occupancy = new Map<string, number>();
+  if (occupancyIds.length > 0) {
+    const { data: playerRows } = await supabase
       .from("season_players")
-      .select("id", { count: "exact", head: true })
-      .eq("season_id", myActiveSeason.id);
-
-    mySeason = {
-      id: myActiveSeason.id,
-      status: myActiveSeason.status as "lobby" | "running",
-      lobbyOpenedAt: myActiveSeason.lobby_opened_at,
-      occupancy: count ?? 0,
-    };
-  } else {
-    const { data: lobbies } = await supabase
-      .from("seasons")
-      .select("id, lobby_opened_at")
-      .eq("status", "lobby")
-      .eq("universe_id", activeUniverse.id)
-      .order("lobby_opened_at", { ascending: true });
-
-    const lobbyIds = (lobbies ?? []).map((l) => l.id);
-    const occupancy = new Map<string, number>();
-
-    if (lobbyIds.length > 0) {
-      const { data: playerRows } = await supabase
-        .from("season_players")
-        .select("season_id")
-        .in("season_id", lobbyIds);
-      for (const row of playerRows ?? []) {
-        occupancy.set(row.season_id, (occupancy.get(row.season_id) ?? 0) + 1);
-      }
+      .select("season_id")
+      .in("season_id", occupancyIds);
+    for (const row of playerRows ?? []) {
+      occupancy.set(row.season_id, (occupancy.get(row.season_id) ?? 0) + 1);
     }
+  }
 
-    openLobbies = (lobbies ?? []).map((l) => ({
+  const mySeasons: MySeasonSummary[] = myActiveSeasons.map((s) => ({
+    id: s.id,
+    status: s.status as "lobby" | "running",
+    lobbyOpenedAt: s.lobby_opened_at,
+    occupancy: occupancy.get(s.id) ?? 0,
+  }));
+
+  // Lobbys, in denen man schon sitzt, stehen oben unter "Deine Partien".
+  const openLobbies: LobbySummary[] = (lobbies ?? [])
+    .filter((l) => !myIds.has(l.id))
+    .map((l) => ({
       id: l.id,
       lobbyOpenedAt: l.lobby_opened_at,
       occupancy: occupancy.get(l.id) ?? 0,
     }));
-  }
 
   return (
     <main className="dashwrap">
@@ -131,8 +139,9 @@ export default async function DashboardPage() {
             Der key erzwingt das Neuaufsetzen mit den neuen Daten. */}
         <LobbyOverview
           key={activeUniverse.id}
-          initialMySeason={mySeason}
+          initialMySeasons={mySeasons}
           initialOpenLobbies={openLobbies}
+          limits={limits}
           universeId={activeUniverse.id}
           universeName={activeUniverse.name}
           universeActive={activeUniverse.isActive}

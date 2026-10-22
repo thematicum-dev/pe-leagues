@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import AbortControl from "./AbortControl";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
@@ -1171,6 +1172,7 @@ export default function MultiplayerGame({
               Zum Dashboard
             </Link>
           </div>
+          <AbortControl seasonId={seasonId} />
         </div>
       </div>
     );
@@ -1500,6 +1502,9 @@ export default function MultiplayerGame({
             {pending ? "Wird abgeschickt …" : <>Halbjahr abschließen {Object.keys(bids).length > 0 && `· ${gebote(Object.keys(bids).length)}`}</>}
           </button>
         </div>
+        {/* Abbrechen steht ganz unten, abgesetzt vom Abschließen des
+            Halbjahres; die Nachfrage an Mitspieler erscheint als Dialog. */}
+        <AbortControl seasonId={seasonId} />
       </div>
 
       <div className="tabs">

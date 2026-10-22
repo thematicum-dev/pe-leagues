@@ -26,7 +26,10 @@ const STATUS_LABEL: Record<string, string> = {
 function progressLabel(s: AdminSeasonRow): string {
   if (s.status === "lobby") return `${s.human_count}/5 Plätze belegt`;
   if (s.status === "running") return `Halbjahr ${s.current_half_year}/20 · ${s.submitted_count}/${s.human_count} abgegeben`;
-  if (s.status === "cancelled") return s.cancelled_reason === "empty" ? "Ohne Mitspieler geschlossen" : "Vom Ersteller aufgelöst";
+  if (s.status === "cancelled") {
+    if (s.cancelled_reason === "aborted") return "Im Spiel abgebrochen";
+    return s.cancelled_reason === "empty" ? "Ohne Mitspieler geschlossen" : "Vom Ersteller aufgelöst";
+  }
   return "—";
 }
 
