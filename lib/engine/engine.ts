@@ -1736,6 +1736,14 @@ export function teamScoreOf(c) {
 export const teamMove = (a: number, b: number) => `Team-Score ${a.toFixed(1).replace(".", ",")} → ${b.toFixed(1).replace(".", ",")}`;
 
 // Einarbeitung nach der Verpflichtung: Day-1-ready braucht keine
+/* Die Kandidatin hinter einer Hire-Entscheidung. Plätze 0 bis 2 tragen ihre
+   alten Namen (veteran, aplayer, development), ab Platz 3 heißen sie c3, c4.
+   Auswertung und Ansicht lesen dieselbe Zuordnung. */
+export function candOfChoice(item, choice) {
+  const idx = choice === "veteran" ? 0 : choice === "aplayer" ? 1 : choice === "development" ? 2
+    : /^c[0-9]$/.test(String(choice)) ? Number(String(choice).slice(1)) : -1;
+  return idx >= 0 ? item.candidates[idx] ?? null : null;
+}
 export const onboardOf = (cand) => (cand && cand.trait === "day1" ? 0 : 1);
 // Starkes Netzwerk: Search-Mandate dieser Beteiligung liefern ein Halbjahr schneller
 export const searchLagOf = (c) => (["ceo", "cfo", "r3"].some((k) => c[k] && c[k].skill > 0 && c[k].trait === "network") ? 0 : 1);

@@ -375,7 +375,7 @@ export function TeamStrip({ c, sector, hi = null, compact = false }: Any) {
 
 /* ---------- Draft-Ansicht ----------
    Wischen über natives Scroll-Snapping, eine Raste je Karte. Antippen
-   irgendwo auf der Karte dreht sie um, in beide Richtungen. "Draften"
+   irgendwo auf der Karte dreht sie um, in beide Richtungen. "Hiren"
    verpflichtet die Karte in der Mitte.                                    */
 export function Draft({ item, holding, analysis, hire, reject }: Any) {
   const seat = item.seat;
@@ -426,7 +426,7 @@ export function Draft({ item, holding, analysis, hire, reject }: Any) {
         <div className="dbar">
           <button onClick={() => reject(item)}>Alle ablehnen</button>
           <button className="solid" onClick={() => { haptic("confirm"); hire(item, k); }}>
-            {k && k.name ? `${k.name.split(" ")[0]} draften` : "Draften"}
+            {k && k.name ? `${k.name.split(" ")[0]} hiren` : "Hiren"}
           </button>
         </div>
         <p className="dhint">
@@ -576,7 +576,10 @@ export const DRAFT_CSS = `
 .pel .dhead .sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);}
 .pel .dtitle{font-size:22px;font-weight:700;letter-spacing:-.03em;margin:4px 0 8px;}
 
-.pel .ddeck{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:12px 8% 6px;
+/* Das Deck wischt nur seitwärts. overflow-x:auto macht auch die y-Achse
+   scrollbar, und schon ein paar Pixel Überhang ließen die Karten beim
+   Wischen hoch und runter wackeln. */
+.pel .ddeck{display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;padding:12px 8% 6px;
   scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
 .pel .ddeck::-webkit-scrollbar{display:none;}
 .pel .dslot{flex:0 0 84%;max-width:340px;scroll-snap-align:center;perspective:1400px;}
@@ -615,8 +618,11 @@ export const DRAFT_CSS = `
 /* Die verdeckte Seite nimmt keine Eingaben an: Ihre Tippfläche läge sonst über der sichtbaren. */
 .pel .dcard.flip .dface.front,.pel .dcard:not(.flip) .dface.back{visibility:hidden;pointer-events:none;
   transition:transform .3s cubic-bezier(.6,0,.9,.4),visibility 0s linear .3s;}
-.pel .dcard.flip .dface.front{transform:rotateY(-90deg);}
-.pel .dcard:not(.flip) .dface.back{transform:rotateY(90deg);}
+/* Auf der Kante stehend ragt die vordere Kante perspektivisch um gut 13 %
+   über die Karte hinaus. scaleY hält die verdeckte Seite innerhalb der Karte,
+   sonst wird das Deck darum vertikal scrollbar. */
+.pel .dcard.flip .dface.front{transform:rotateY(-90deg) scaleY(.86);}
+.pel .dcard:not(.flip) .dface.back{transform:rotateY(90deg) scaleY(.86);}
 .pel .dtap{position:absolute;inset:0;z-index:5;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:20px;
   background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .pel .dtap:hover:not(:disabled){background:transparent;}

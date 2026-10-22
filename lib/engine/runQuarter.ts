@@ -28,7 +28,7 @@ import {
   COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
-  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, EVENTS, maturePeople, buildInit, initsOf,
+  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, candOfChoice, EVENTS, maturePeople, buildInit, initsOf,
   botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
@@ -71,11 +71,7 @@ function botOf(f: RuntimeFund) {
    Shortlist. Die alte Liste hatte genau drei feste Plätze, deren Namen
    ("veteran", "aplayer", "development") weiter für die Plätze 0 bis 2 gelten;
    das Deck mit fünf Karten spricht die Plätze als "c0" bis "c4" an.      */
-function candidateByChoice(item: ShortlistItem, choice: HireIntent["choice"]) {
-  const idx = choice === "veteran" ? 0 : choice === "aplayer" ? 1 : choice === "development" ? 2
-    : /^c[0-9]$/.test(String(choice)) ? Number(String(choice).slice(1)) : -1;
-  return idx >= 0 ? item.candidates[idx] ?? null : null;
-}
+const candidateByChoice = (item: ShortlistItem, choice: HireIntent["choice"]) => candOfChoice(item, choice);
 
 function pushFeed(news: Any[], q: number, emoji: string, tone: "neu" | "pos" | "neg", text: string, slot?: number) {
   news.push({ halfYear: q, emoji, tone, text, ...(slot != null ? { slot } : {}) });
