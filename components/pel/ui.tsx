@@ -1235,7 +1235,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       </More>
 
       <Section title="Reifegrad" flush>
-        <Stages c={c} compact={quarter} />
+        <Stages c={c} />
       </Section>
 
       <Section title="Führung" right={<TeamScore c={c} base={c.tm0} />} flush>
@@ -1261,10 +1261,10 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       </Section>
 
       <Section title="Wertsteigerung" right={freeSlots > 0
-        ? <span className="bslots" aria-label={`${freeSlots} Werkbänke frei`}>
-            Werkbänke<span>{Array.from({ length: Math.min(freeSlots, MAX_SLOTS) }, (_, i) => <i key={i} />)}</span>
+        ? <span className="bslots" aria-label={`Fonds-Kapazität: noch ${freeSlots} Programme im ganzen Portfolio frei`}>
+            Fonds-Kapazität<span>{Array.from({ length: Math.min(freeSlots, MAX_SLOTS) }, (_, i) => <i key={i} />)}</span>
           </span>
-        : "Kapazität belegt"}>
+        : "Fonds ausgelastet"}>
         <Levers c={c} lev={lev} quarter={quarter} freeSlots={freeSlots} act={act} sp={sp} />
         {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
@@ -1284,8 +1284,8 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
                   + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind abgerufen.` : "")
                 : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
-              + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
-            : "Operating-Kapazität im Portfolio ausgeschöpft."}
+              + (freeSlots > 0 && initsOf(c).length === 1 ? ` ${c.initP ? "Growth" : "Performance"} ist frei.` : "")
+            : "Fonds-Kapazität ausgeschöpft: Alle Programme im Portfolio sind belegt."}
         </div>
         )}
         {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
@@ -1375,25 +1375,30 @@ function Levers({ c, lev, quarter, freeSlots, act, sp }) {
       <button className={"blever " + fam + (run ? " run" : "") + sp(d)} disabled={!!run || busy}
         onClick={() => act.init(d)}>
         <span>
-          <span className="art"><Icon k={icon} /></span>
+          <span className="art"><Icon k={icon} />{run && <span className="blvbadge"><Icon k="clock" />Läuft</span>}</span>
           <span className="t">{title}</span>
-          <span className="s">{run ? (run.name || "Maßnahme") : progs(d)}</span>
-          <span className="f">
-            {run ? `läuft · noch ${hj(run.doneQ - quarter)}` : busy ? "Kapazität belegt" : `${INITS[d].length} Programme`}
-            {!run && !busy && <Icon k="chevR" />}
-          </span>
+          <span className="s">{progs(d)}</span>
+          {/* Läuft etwas, steht es klein im Fuß: welches Programm, wie lange noch */}
+          {run ? (
+            <span className="f now">{LEVER_SHORT[run.id] || run.name || "Maßnahme"} · noch {run.doneQ - quarter} HJ</span>
+          ) : (
+            <span className="f">
+              {busy ? "Fonds ausgelastet" : `${INITS[d].length} Programme`}
+              {!busy && <Icon k="chevR" />}
+            </span>
+          )}
         </span>
       </button>
     );
   };
   return (
     <div className="blevers">
-      {prog("plat", c.initP, "sliders", "Performance", "l")}
-      {prog("acc", c.initA, "sprout", "Growth", "a")}
+      {prog("plat", c.initP, "sliders", "Performance-Initiativen", "l")}
+      {prog("acc", c.initA, "sprout", "Growth-Initiativen", "a")}
       <button className={"blever p mep" + (c.ltip ? " on" : "") + (mepFix ? " done" : "") + sp("ltip")}
         disabled={mepFix} role="switch" aria-checked={!!c.ltip} onClick={() => { haptic(8); act.ltip(); }}>
         <span>
-          <span className="art"><Icon k="users" />{c.ltip && <span className="bmepon"><Icon k="check" />Aktiv</span>}</span>
+          <span className="art"><Icon k="users" />{c.ltip && <span className="blvbadge"><Icon k="check" />Aktiv</span>}</span>
           <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}{mepFix && <Icon k="lock" />}</span>
           <span className="s">{mepFix ? "Bindend bis zum Exit"
             : mepNew ? "Tippen nimmt es zurück. Bindend ab Halbjahresende" : "Management am Exit beteiligen"}</span>
@@ -1867,32 +1872,28 @@ export function Pips({ v, cls }) {
    Prozesse, Wachstum. Inhaltlich dieselben fünf Stufen wie zuvor — nur liest
    man eine Reihe geneigter Segmente schneller als eine Punktreihe, und der
    Zustandstext rechts sagt weiterhin, woran es gerade liegt.               */
-export function Stages({ c, compact }) {
+export function Stages({ c }) {
   const pl = peopleLvl(c), A = accEff(c), OS = overstretch(c);
-  const sc = (c.searches || [])[0];
-  const runP = sc ? (sc.waiting ? "Shortlist" : "Search") : null;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
+  /* Rechts steht der Stand, nicht was läuft: Welches Programm wie lange noch
+     braucht, zeigt die Karte des Hebels unter Wertsteigerung, die laufende
+     Suche die Position unter Führung. */
+  const lvl = (v) => (v < 1.5 ? "unter Bench." : v < 2.5 ? "Benchmark" : v < 3.5 ? "über Bench." : "Best-in-Class");
   return (
     <div className="bability">
       <div className="babrow">
         <span className="babic p"><Icon k="person" /></span><span className="bablab">People</span><Pips v={pl} cls="p" />
-        <span className={"babst " + (vac ? "warn" : runP ? "run" : "")}>
-          {vac ? `${vac} vakant` : runP ? runP : pl.toFixed(1)}
+        <span className={"babst " + (vac ? "warn" : "")}>
+          {vac ? `${vac} vakant` : pl.toFixed(1).replace(".", ",")}
         </span>
       </div>
       <div className="babrow">
         <span className="babic l"><Icon k="sliders" /></span><span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
-        <span className={"babst " + (c.initP ? "run" : c.plat < 1.5 ? "warn" : "")}>
-          {c.initP ? `${c.initP.doneQ - (compact || 0)} HJ`
-            : c.plat < 1.5 ? "unter Bench." : c.plat < 2.5 ? "Benchmark" : c.plat < 3.5 ? "über Bench." : "Best-in-Class"}
-        </span>
+        <span className={"babst " + (c.plat < 1.5 ? "warn" : "")}>{lvl(c.plat)}</span>
       </div>
       <div className="babrow">
         <span className="babic a"><Icon k="sprout" /></span><span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
-        <span className={"babst " + (OS > 0 ? "warn" : c.initA ? "run" : c.acc < 1.5 ? "warn" : "")}>
-          {OS > 0 ? "überdehnt" : c.initA ? `${c.initA.doneQ - (compact || 0)} HJ`
-            : c.acc < 1.5 ? "unter Bench." : c.acc < 2.5 ? "Benchmark" : c.acc < 3.5 ? "über Bench." : "Best-in-Class"}
-        </span>
+        <span className={"babst " + (OS > 0 || c.acc < 1.5 ? "warn" : "")}>{OS > 0 ? "überdehnt" : lvl(c.acc)}</span>
       </div>
       {OS > 0 && <div className="babwarn">
         <Icon k="alert" />Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken

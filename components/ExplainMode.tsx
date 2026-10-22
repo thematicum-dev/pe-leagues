@@ -833,9 +833,9 @@ function GuidedRun({ dark, setDark, back }) {
         <p className="why"><b>Tu jetzt das:</b> Setz die MEP auf. Bei einer Halteperiode von mehreren Jahren rechnet sich das fast immer — und die Wirkung beginnt sofort, nicht erst beim Exit.</p>
       </>) },
     { id: "plat", spot: "plat", sat: () => !!(c && c.initP),
-      eyebrow: "Performance", title: "Die erste Werkbank belegen",
+      eyebrow: "Performance", title: "Das erste Programm starten",
       body: () => (<>
-        <p>Performance und Growth laufen parallel, je eine Werkbank. Im Katalog steht bei jeder Maßnahme, ob sie zu diesem Fall passt:</p>
+        <p>Performance und Growth laufen parallel, je ein Programm. Im Katalog steht bei jeder Maßnahme, ob sie zu diesem Fall passt:</p>
         <dl>
           <Kpi t="Eignung">Ob überhaupt ein Defizit da ist, an dem die Maßnahme ansetzen kann. Cost-out auf einer Marge über Branchenniveau bringt nichts.</Kpi>
           <Kpi t="Reifegrad">Wie weit diese Dimension ausgebaut ist, 0 bis 5. Ab Stufe {PLAT_BENCH} — dem Branchenniveau — bringt jede weitere Auflage weniger als die davor.</Kpi>
@@ -846,7 +846,7 @@ function GuidedRun({ dark, setDark, back }) {
       eyebrow: "Growth", title: "Wachstum wirkt nur, soweit es getragen wird",
       body: () => (<>
         <p>Growth ist gedeckelt durch Team und Prozessreife: <b>wirksam ist der kleinste Wert aus Growth-Stufe, People + 1 und Performance + 1</b>. Alles darüber ist Überdehnung — es kostet Marge und Assetqualität, ohne zu wirken.</p>
-        <p className="why"><b>Tu jetzt das:</b> Belege auch die zweite Werkbank. Wachstum ist empirisch der größte Werthebel der Assetklasse, wirkt aber langsamer als ein Kostenprogramm — deshalb früh anfangen.</p>
+        <p className="why"><b>Tu jetzt das:</b> Starte auch ein Growth-Programm. Wachstum ist empirisch der größte Werthebel der Assetklasse, wirkt aber langsamer als ein Kostenprogramm — deshalb früh anfangen.</p>
       </>) },
     { id: "hold", spot: "close", sat: () => q >= PRAC_EXIT_FROM,
       eyebrow: "Halteperiode", title: "Laufen lassen und beobachten",
@@ -857,7 +857,7 @@ function GuidedRun({ dark, setDark, back }) {
           <Kpi t="Cash Conversion">Was vom EBITDA nach Investitionen und Working Capital übrig bleibt. Sie entscheidet, wie schnell du entschuldest.</Kpi>
           <Kpi t="Total Value">NAV plus bereits ausgeschüttete Beträge, geteilt durch dein eingesetztes Eigenkapital.</Kpi>
         </dl>
-        <p className="why"><b>Tu jetzt das:</b> Schließ die Halbjahre ab. Wird eine Werkbank frei, belege sie neu — Maßnahmen lassen sich wiederholen, jede weitere Auflage bringt aber weniger. Leerlauf ist die teuerste Entscheidung im Portfolio, weil sie sich nicht wie eine anfühlt.</p>
+        <p className="why"><b>Tu jetzt das:</b> Schließ die Halbjahre ab. Ist ein Programm fertig, starte das nächste — Maßnahmen lassen sich wiederholen, jede weitere Auflage bringt aber weniger. Leerlauf ist die teuerste Entscheidung im Portfolio, weil sie sich nicht wie eine anfühlt.</p>
       </>) },
     { id: "proc", spot: "proc", sat: () => !!proc || !!offer || !!over,
       eyebrow: "Exit", title: "Wann verkaufen ist die eigentliche Frage",

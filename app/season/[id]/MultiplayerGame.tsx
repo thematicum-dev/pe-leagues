@@ -43,6 +43,7 @@ import {
   eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initsOf, investableOf, irrOf,
   recycleRoom, scoreOf, tvccOf, tvpiOf, x,
+  candOfChoice, ebitdaOf, onboardOf, retainerOf, searchLagOf, seatFromCand, severanceOf, signBonusOf,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -717,6 +718,28 @@ export default function MultiplayerGame({
       // runQuarter setzt readyQ = halfYear + 1, und gespielt wird quarter + 1
       p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 2 }))];
     }
+    /* Wer aus der Shortlist eingestellt wird, sitzt ab dem Klick auf der
+       Position, mit wahrem Profil wie im Übungsmodus: Mit der Verpflichtung
+       steht es fest, und zurücknehmen lässt sie sich nicht. Sign-on und
+       Abfindung buchen wie in der Auswertung (runQuarter, Schritt 2) auf die
+       Nettoverschuldung. Eine abgelehnte Shortlist zeigt die neue Suche. */
+    hireDecisions.filter((d) => d.holdingUid === c.uid).forEach((d) => {
+      const item = shortlistAll.find((it: Any) => it.holdingUid === c.uid && it.seat === d.seat);
+      if (!item) return;
+      if (d.choice === "reject") {
+        p.netDebt += retainerOf(d.seat, ebitdaOf(p)) * 0.5;
+        p.searches = (p.searches || []).map((se: Any) => (se.seat === d.seat
+          ? { seat: d.seat, readyQ: quarter + 1 + searchLagOf(p) } : se));
+        return;
+      }
+      const cand = candOfChoice(item, d.choice);
+      if (!cand) return;
+      const prev = p[d.seat].skill;
+      p.netDebt += signBonusOf(d.seat, cand.skill, ebitdaOf(p)) + (prev > 0 ? severanceOf(d.seat, prev, ebitdaOf(p)) : 0);
+      p[d.seat] = seatFromCand(cand, quarter + 1);
+      p.searches = (p.searches || []).filter((se: Any) => se.seat !== d.seat);
+      p.onboard = onboardOf(cand);
+    });
     /* Eine vorgemerkte Maßnahme muss dieselbe Frist zeigen, die die Auswertung
        ihr dann gibt: buildInit() setzt doneQ = halfYear + initDurationOf(),
        und das Halbjahr, über das hier entschieden wird, ist quarter + 1.
