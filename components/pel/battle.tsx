@@ -1799,7 +1799,7 @@ export const BATTLE_CSS = `
 .pel .blever.run:disabled,.pel .blever.done:disabled{filter:none;}
 .pel .blever.run:disabled > span,.pel .blever.done:disabled > span{opacity:1;}
 .pel .blever.run .f{color:var(--gold);}
-.pel .blever.run .s{color:var(--ink);font-weight:600;}
+.pel .blever .f.now{text-transform:none;letter-spacing:0;font-size:11px;font-weight:650;color:var(--gold);justify-content:flex-start;}
 /* MEP an- und abschalten per Tipp auf die Karte: aus = gedämpfter Rahmen, Token nur
    umrandet; an = voller Goldrahmen mit Schein, getönte Fläche, "Aktiv"-Marke. */
 .pel .blever.mep:not(.on){background:linear-gradient(150deg,color-mix(in srgb, var(--fam) 42%, var(--card)),

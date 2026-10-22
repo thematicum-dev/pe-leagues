@@ -1377,19 +1377,24 @@ function Levers({ c, lev, quarter, freeSlots, act, sp }) {
         <span>
           <span className="art"><Icon k={icon} />{run && <span className="blvbadge"><Icon k="clock" />Läuft</span>}</span>
           <span className="t">{title}</span>
-          <span className="s">{run ? (run.name || "Maßnahme") : progs(d)}</span>
-          <span className="f">
-            {run ? `noch ${run.doneQ - quarter} HJ` : busy ? "Fonds ausgelastet" : `${INITS[d].length} Programme`}
-            {!run && !busy && <Icon k="chevR" />}
-          </span>
+          <span className="s">{progs(d)}</span>
+          {/* Läuft etwas, steht es klein im Fuß: welches Programm, wie lange noch */}
+          {run ? (
+            <span className="f now">{LEVER_SHORT[run.id] || run.name || "Maßnahme"} · noch {run.doneQ - quarter} HJ</span>
+          ) : (
+            <span className="f">
+              {busy ? "Fonds ausgelastet" : `${INITS[d].length} Programme`}
+              {!busy && <Icon k="chevR" />}
+            </span>
+          )}
         </span>
       </button>
     );
   };
   return (
     <div className="blevers">
-      {prog("plat", c.initP, "sliders", "Performance", "l")}
-      {prog("acc", c.initA, "sprout", "Growth", "a")}
+      {prog("plat", c.initP, "sliders", "Performance-Initiativen", "l")}
+      {prog("acc", c.initA, "sprout", "Growth-Initiativen", "a")}
       <button className={"blever p mep" + (c.ltip ? " on" : "") + (mepFix ? " done" : "") + sp("ltip")}
         disabled={mepFix} role="switch" aria-checked={!!c.ltip} onClick={() => { haptic(8); act.ltip(); }}>
         <span>
