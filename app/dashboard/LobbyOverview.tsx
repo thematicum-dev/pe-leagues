@@ -260,6 +260,9 @@ export default function LobbyOverview({
 
   const atActiveLimit = mySeasons.length >= limits.activeMax;
   const openingsLeft = Math.max(0, limits.openedMax - limits.openedToday);
+  // Eigene Lobbys stehen oben unter "Deine Partien" und fehlen deshalb in
+  // openLobbies -- "keine Lobby offen" wäre dann schlicht falsch.
+  const ownLobbyOpen = mySeasons.some((s) => s.status === "lobby");
 
   return (
     <>
@@ -309,17 +312,22 @@ export default function LobbyOverview({
               <>
                 <p className="dashsub">
                   {universeActive
-                    ? showUniverse
-                      ? "Aktuell ist in diesem Universum keine Lobby offen."
-                      : "Aktuell ist keine Lobby offen."
+                    ? ownLobbyOpen
+                      ? "Außer deiner eigenen ist gerade keine Lobby offen."
+                      : showUniverse
+                        ? "Aktuell ist in diesem Universum keine Lobby offen."
+                        : "Aktuell ist keine Lobby offen."
                     : showUniverse
                       ? "Dieses Universum ist stillgelegt — hier werden keine neuen Partien mehr eröffnet."
                       : "Zurzeit können keine neuen Partien eröffnet werden."}
                 </p>
                 {universeActive && (
                   <>
+                    {/* Wartet der Spieler schon in einer eigenen Lobby, ist das
+                        Warten der nächste Schritt -- eine weitere Lobby bleibt
+                        möglich, verteilt die Mitspieler aber auf zwei. */}
                     <button
-                      className="btn-primary"
+                      className={ownLobbyOpen ? "btn-secondary" : "btn-primary"}
                       onClick={() => { setError(null); setJoining({ kind: "create" }); }}
                       disabled={pending || openingsLeft === 0}
                     >
