@@ -17,10 +17,13 @@ interface AdminUserRow {
   seasons_won: number;
   max_score: number | null;
   avg_score: number | null;
-  max_tvpi: number | null;
-  avg_tvpi: number | null;
+  // null, wenn alle Partien vor dem 18.10.2026 endeten (Endstand ohne TVCC)
+  max_tvcc: number | null;
+  avg_tvcc: number | null;
   max_irr: number | null;
   avg_irr: number | null;
+  max_tvpi: number | null;
+  avg_tvpi: number | null;
 }
 
 const STATUS_LABEL: Record<AdminUserRow["access_status"], string> = {
@@ -30,14 +33,17 @@ const STATUS_LABEL: Record<AdminUserRow["access_status"], string> = {
   none: "Ohne Anfrage",
 };
 
+// Wie in der Rangliste (app/leaderboard/PlayerRanking.tsx): Wertung, TVCC
+// und IRR vorn, der TVPI geht nicht in die Wertung ein und steht nur leise dabei.
+const de = (v: number, digits: number) => Number(v).toFixed(digits).replace(".", ",");
 function fmtScore(v: number | null): string {
-  return v == null ? "—" : v.toFixed(2);
+  return v == null ? "—" : de(v, 2);
 }
-function fmtTvpi(v: number | null): string {
-  return v == null ? "—" : v.toFixed(2) + "×";
+function fmtMultiple(v: number | null): string {
+  return v == null ? "—" : de(v, 2) + "×";
 }
 function fmtIrr(v: number | null): string {
-  return v == null ? "—" : (v * 100).toFixed(1).replace(".", ",") + " %";
+  return v == null ? "—" : de(v * 100, 1) + " %";
 }
 function fmtDate(v: string | null): string {
   return v == null ? "—" : new Date(v).toLocaleDateString("de-DE");
@@ -84,9 +90,12 @@ export default async function AdminUsersPage() {
             {u.universes.length === 0 ? "keine" : u.universes.map((x) => x.name).join(", ")}
           </div>
           <div className="dashsub mono">
-            {u.seasons_played} Partien · {u.seasons_won} gewonnen · Score max {fmtScore(u.max_score)} / ⌀ {fmtScore(u.avg_score)}
-            {" · TVPI max "}{fmtTvpi(u.max_tvpi)}{" / ⌀ "}{fmtTvpi(u.avg_tvpi)}
-            {" · IRR max "}{fmtIrr(u.max_irr)}{" / ⌀ "}{fmtIrr(u.avg_irr)}
+            {u.seasons_played} Partien · {u.seasons_won} gewonnen · Wertung ⌀ {fmtScore(u.avg_score)} / max {fmtScore(u.max_score)}
+            {" · TVCC ⌀ "}{fmtMultiple(u.avg_tvcc)}{" / max "}{fmtMultiple(u.max_tvcc)}
+            {" · IRR ⌀ "}{fmtIrr(u.avg_irr)}{" / max "}{fmtIrr(u.max_irr)}
+          </div>
+          <div className="dashsub mono" style={{ fontSize: 11, opacity: 0.6 }}>
+            TVPI ⌀ {fmtMultiple(u.avg_tvpi)} / max {fmtMultiple(u.max_tvpi)} (info)
           </div>
 
           {u.access_status === "none" ? (
