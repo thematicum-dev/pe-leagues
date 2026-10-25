@@ -1,5 +1,5 @@
--- Rangliste nach der tatsächlichen Wertung: TVCC und IRR als führende
--- Kennzahlen, der TVPI nur noch zur Information.
+-- Rangliste und Admin-Nutzerübersicht nach der tatsächlichen Wertung: TVCC
+-- und IRR als führende Kennzahlen, der TVPI nur noch zur Information.
 --
 -- Seit dem 18.10.2026 rechnet scoreOf() (lib/engine/engine.ts) je zur Hälfte
 -- mit TVCC und IRR, und computeFinalRanking() (lib/engine/runQuarter.ts)
@@ -87,3 +87,114 @@ comment on function public.global_leaderboard(uuid) is
 
 revoke all on function public.global_leaderboard(uuid) from public, anon;
 grant execute on function public.global_leaderboard(uuid) to authenticated;
+
+-- Dieselbe Umstellung für die Admin-Nutzerübersicht (/admin/users). Sonst
+-- unverändert gegenüber 20260830100300_access_admin_functions.sql: neu sind
+-- nur max_tvcc/avg_tvcc, der TVPI rückt in der Spaltenfolge ans Ende.
+drop function if exists public.admin_list_users();
+
+create function public.admin_list_users()
+returns table (
+  id uuid,
+  email text,
+  display_name text,
+  created_at timestamptz,
+  access_status text,
+  access_requested_at timestamptz,
+  access_decided_at timestamptz,
+  access_note text,
+  request_message text,
+  universes jsonb,
+  seasons_played bigint,
+  seasons_won bigint,
+  max_score numeric,
+  avg_score numeric,
+  max_tvcc numeric,
+  avg_tvcc numeric,
+  max_irr numeric,
+  avg_irr numeric,
+  max_tvpi numeric,
+  avg_tvpi numeric
+)
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not_admin';
+  end if;
+
+  return query
+  with ranked as (
+    select
+      s.id as season_id,
+      (r ->> 'profileId') as profile_id_text,
+      (r ->> 'score')::numeric as score,
+      (r ->> 'tvcc')::numeric as tvcc,
+      (r ->> 'irr')::numeric as irr,
+      (r ->> 'tvpi')::numeric as tvpi,
+      row_number() over (partition by s.id order by (r ->> 'score')::numeric desc) as season_rank
+    from public.seasons s
+    cross join lateral jsonb_array_elements(s.final_ranking) as r
+    where s.status = 'finished'
+  ),
+  entries as (
+    select profile_id_text::uuid as profile_id, score, tvcc, irr, tvpi, season_rank
+    from ranked
+    where profile_id_text is not null
+  ),
+  stats as (
+    select
+      profile_id,
+      count(*) as seasons_played,
+      count(*) filter (where season_rank = 1) as seasons_won,
+      max(score) as max_score, avg(score) as avg_score,
+      max(tvcc) as max_tvcc, avg(tvcc) as avg_tvcc,
+      max(irr) as max_irr, avg(irr) as avg_irr,
+      max(tvpi) as max_tvpi, avg(tvpi) as avg_tvpi
+    from entries
+    group by profile_id
+  )
+  select
+    u.id,
+    u.email::text,
+    p.display_name,
+    u.created_at,
+    coalesce(p.access_status, 'none'),
+    p.access_requested_at,
+    p.access_decided_at,
+    p.access_note,
+    p.request_message,
+    coalesce(
+      (
+        select jsonb_agg(jsonb_build_object('id', un.id, 'key', un.key, 'name', un.name)
+                         order by un.sort_order, un.name)
+        from public.profile_universes pu
+        join public.universes un on un.id = pu.universe_id
+        where pu.profile_id = p.id
+      ),
+      '[]'::jsonb
+    ),
+    coalesce(st.seasons_played, 0), coalesce(st.seasons_won, 0),
+    st.max_score, st.avg_score, st.max_tvcc, st.avg_tvcc, st.max_irr, st.avg_irr, st.max_tvpi, st.avg_tvpi
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+  left join stats st on st.profile_id = u.id
+  order by
+    case coalesce(p.access_status, 'none')
+      when 'pending' then 0
+      when 'none' then 1
+      when 'rejected' then 2
+      else 3
+    end,
+    u.created_at desc;
+end;
+$$;
+
+comment on function public.admin_list_users() is
+  'Admin-Übersicht aller Konten inkl. E-Mail, Zugangsstatus, zugeteilten Universen und Partien-Statistik. Offene Anfragen zuerst.';
+
+revoke all on function public.admin_list_users() from public, anon;
+grant execute on function public.admin_list_users() to authenticated;
