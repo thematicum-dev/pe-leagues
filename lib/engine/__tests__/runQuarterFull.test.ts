@@ -72,6 +72,11 @@ describe("runQuarter über eine vollständige Partie", () => {
 
       // Offene Shortlists annehmen (immer den A-Player)
       const myShortlist = state.shortlist[String(me.slot)] || [];
+      // Haltung und Porträt müssen die Shortlist des Mehrspielerpfads überstehen
+      myShortlist.forEach((it) => it.candidates.forEach((k) => {
+        expect(["hell", "dunkel"]).toContain(k.side);
+        expect(k.portrait).toMatch(/^[fm]\d\d$/);
+      }));
       if (myShortlist.length) {
         decisions.hires = myShortlist.map((it) => ({ holdingUid: it.holdingUid, seat: it.seat, choice: "aplayer" as const }));
       }

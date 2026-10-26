@@ -353,7 +353,7 @@ describe("Kennzahlen über viele Partien und Spielweisen", () => {
         // Genau eine Beteiligung kaufen und nie verkaufen
         if (me.holdings.length === 0 && state.deals.length && hy <= 3) {
           const x = state.deals[0] as Any;
-          d.bids = [{ dealId: x.id, multiple: x.askMult * 1.05, leverage: x.levCap }];
+          d.bids = [{ dealId: x.id, multiple: x.askMult * 1.15, leverage: x.levCap }];
         }
         state = runQuarter({ state, halfYear: hy, decisionsBySlot: { 0: d }, rng } as Any).state;
         const f = state.funds[0] as Any;

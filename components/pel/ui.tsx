@@ -8,13 +8,13 @@ import type { Rng } from "@/lib/engine";
 import {
   ADDON_HEADROOM, BASE_RATE, BIL_DISC, CAPITAL,
   CLS_LABEL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST, END_PRESSURE_FROM,
-  ENTRY_FEE, FAIL_SUNK, INITS, INVEST_PERIOD, 
+  ENTRY_FEE, FAIL_SUNK, LEV_CARD, INITS, INVEST_PERIOD, 
   IRR_BENCH, LEV_FREE, LEV_STEP, LIQ_DISC, LM_DEAL, LTIP_SHARE, MAX_PROC,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PARTIAL_DELIVERY, PERIODS, POACH, PROC_FEE, PROC_Q, 
   RECYCLE_CAP, REPEAT_MAX, RESERVE_PROC, RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES,
   SECTORS, TVCC_BENCH, accCap, accEff, addonAsk, addonCheck, addonEquityNeeded,
   addonMandate, addonMaxEb, ADDON_FAIL_BASE, ADDON_MAX_SHARE, 
-  cagrOf, cagrPrem, cappedSkill, ceilingFactor, clamp, ddCostOf, dealMoic,
+  cagrOf, cagrPrem, ceilingFactor, clamp, ddCostOf, dealMoic,
   dealMultiple, driftBandOf, driftEstOf, ebitdaOf, effSkill, endPressure, eur,
   evOf, exitNetOf, fairOf, fitLabel, healthOf, hj,
   impliedMoM, initGain, initRuns, initSuccess, initsOf, investableOf, 
@@ -22,16 +22,17 @@ import {
   fundBridgeStep, FUND_BRIDGE_GROUPS,
   fundBridge, tailEndOf, initDurationOf,
   DEAL_YEARS,
-  isCapped, markMultiple, navValueOf, 
+  markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x,
+  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import {
-  AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Meter, More, Row, Section,
+  AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Icon, Meter, More, Row, Section,
   SectorEmblem, StatRadar, StatRow, StatTile, StatePill, identityOf, splitDesc,
 } from "./battle";
 import { haptic } from "./haptics";
 import { BRIEFING_CSS } from "./briefing";
+import { DRAFT_CSS, Draft, SeatCard, SeatSheet, seatName } from "./draft";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -596,7 +597,7 @@ export const CSS = `
 .pel .kpil{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);}
 .pel .kpiv{font-size:16px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .kpiv.teal{color:var(--teal);} .pel .kpiv.ox{color:var(--ox);}
-` + BATTLE_CSS + BRIEFING_CSS;
+` + BATTLE_CSS + BRIEFING_CSS + DRAFT_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
@@ -760,7 +761,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
   const ask = q4(d.askMult);
   const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
   const [mult, setMult] = useState(ask);
-  const [lev, setLev] = useState(q4(Math.min(d.levCap, 3.5)));
+  const [lev, setLev] = useState(q4(Math.min(d.levCap, LEV_CARD)));
   const eb = ebitdaOf(d);
   // Das Equity Ticket enthält die Transaktionskosten — sonst wird ein Gebot an der
   // Liquiditätsgrenze angeboten und fällt beim Auktionsschluss stillschweigend raus.
@@ -1030,6 +1031,8 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
 }
 
 export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false }) {
+  // Geöffnete Karte einer besetzten Position (SeatSheet)
+  const [openSeat, setOpenSeat] = useState<string | null>(null);
   const spot = useContext(CoachCtx);
   const sp = (k) => (spot === k ? " spot" : "");
   const health = healthOf(c, market);
@@ -1065,7 +1068,8 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
   /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
      Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
-  const exitStatus = c.holdQ < MIN_HOLD ? `Exit ab ${MIN_HOLD} Halbjahren Haltedauer — noch ${MIN_HOLD - c.holdQ}.`
+  // Die Mindesthaltedauer zeigt der Exit-Pfad, dafür braucht es keine Zeile.
+  const exitStatus = c.holdQ < MIN_HOLD ? ""
     : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
     : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
     : endPressure(quarter) > 0.05
@@ -1094,21 +1098,35 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const { lead } = useMemo(() => splitDesc(c.desc), [c.desc]);
 
   return (
-    <div className={"bcard tier-" + tier} id={"h_" + c.uid}
+    <div className={"bcard hold tier-" + tier} id={"h_" + c.uid}
       style={{ "--sec": SECCOLOR[c.sector], "--own": id.own }}>
       <i className="bedge" />
 
-      <CardHero id={id} sector={c.sector} name={(c.cv ? "🔄 " : "") + c.name} claim={lead} tier={tier}
+      <CardHero id={id} sector={c.sector} name={c.name} claim={lead} tier={tier}
+        badge={
+          /* Die eine Zahl, nach der eine Beteiligung beurteilt wird, als
+             Medaillon neben dem Namen — wie der Score auf einer Battle Card. */
+          <span className="bmedal" role="img" aria-label={`Total Value je eingesetztem Euro ${mTot.toFixed(2)}×`}>
+            <span>
+              <span className={"v " + (mTot >= 1 ? "teal" : "ox")}>{mTot.toFixed(2).replace(".", ",")}×</span>
+              <span className="l">MOIC</span>
+            </span>
+          </span>
+        }
         meta={<>
           <span>{c.holdQ} HJ gehalten</span>
           <span>Einstieg {x(c.entryMult)}</span>
           {st < 1 && <span>{Math.round(st * 100)} % Anteil</span>}
         </>}
         state={<StatePill tone={inProc ? "gold" : health.attention ? "att" : ""}>
-          {sold ? "✓ Verkauf vorgemerkt" : inProc ? "📣 Im Prozess" : health.attention ? "◉ Needs attention" : "○ On track"}
+          {sold ? <><Icon k="check" />Verkauf vorgemerkt</>
+            : inProc ? <><Icon k="megaphone" />Im Prozess</>
+            : health.attention ? <><i className="bdot" />Needs attention</>
+            : <><i className="bdot ring" />On track</>}
         </StatePill>}
-        abilities={(c.flag || c.ltip || health.top) && (
+        abilities={(c.flag || c.ltip || health.top || c.cv) && (
           <div className="babils">
+            {c.cv && <Ability kind="good" icon="repeat">Continuation Vehicle</Ability>}
             {c.flag && (isAngle(c.flag)
               ? <Ability kind="angle">{c.flag}</Ability>
               : <Ability kind="risk">{c.flag}</Ability>)}
@@ -1117,17 +1135,11 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
           </div>
         )} />
 
-      {/* Die eine Zahl, nach der eine Beteiligung beurteilt wird — direkt unter
-          dem Bild, bevor die Einzelheiten kommen. */}
-      <div className="bscore">
-        <span className="l">Total Value<br />je eingesetztem Euro
-          <span className="s">
-            {eur(val + out)} auf {eur(cost)} Einstand
-            {out > 0.5 ? ` · inkl. ${eur(out)} Rückfluss` : ""}
-          </span>
-        </span>
-        <span className={"v " + (mTot >= 1 ? "teal" : "ox")}>{mTot.toFixed(2)}×</span>
-      </div>
+      {/* Woraus das Medaillon besteht: Total Value gegen Einstand. */}
+      <p className="bvalline">
+        <b>{eur(val + out)}</b> Total Value auf {eur(cost)} Einstand
+        {out > 0.5 ? ` · inkl. ${eur(out)} Rückfluss` : ""}
+      </p>
 
       <Headline items={[
         { k: "Umsatz LTM", v: eur(c.revenue) },
@@ -1138,10 +1150,10 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       <StatRow items={[
         { icon: "growth", k: "Wachstum", v: cagr == null ? "—" : pctS(cagr),
           tone: !c.dd || cagr == null ? "" : cagrPrem(c) >= 0 ? "teal" : "ox",
-          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : "🔒 Markt", subTone: c.dd ? "" : "lock" },
+          sub: c.dd ? `Markt ${pctS(SECTORS[c.sector].g)}` : <><Icon k="lock" />Markt</>, subTone: c.dd ? "" : "lock" },
         { icon: "margin", k: "Marge", v: pct(c.margin),
           tone: !c.dd ? "" : c.margin >= c.benchMargin ? "teal" : "ox",
-          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : "🔒 Bench.", subTone: c.dd ? "" : "lock" },
+          sub: c.dd ? `Bench. ${pct(c.benchMargin)}` : <><Icon k="lock" />Bench.</>, subTone: c.dd ? "" : "lock" },
         { icon: "cash", k: "Cash Conv.", v: conv == null ? "—" : pct(conv),
           tone: conv == null ? "dim" : conv >= 60 ? "teal" : conv >= 35 ? "" : "ox",
           sub: "vor Zins", info: <Info k="conv" /> },
@@ -1157,7 +1169,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
           damit an einer Stelle. */}
       {!c.dd && act.study && (
         <div className="bcallout">
-          <span className="bcicon">📊</span>
+          <span className="bcicon"><Icon k="chart" /></span>
           <div className="bcbody">
             <div className="bchead">
               <b>Branchenreferenz fehlt</b>
@@ -1208,7 +1220,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         <Track c={c} />
         <div className="bacts">
           <StatementsButton statements={statements}
-            label={`📑 Financial Statements${finYears
+            label={`Financial Statements${finYears
               ? ` · ${finYears} ${finYears === 1 ? "Jahr" : "Jahre"} Halteperiode`
               : " · Eröffnungsbilanz"}`} />
           <p className="hint" style={{ marginTop: 6 }}>
@@ -1223,38 +1235,37 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
       </More>
 
       <Section title="Reifegrad" flush>
-        <Stages c={c} compact={quarter} />
+        <Stages c={c} />
       </Section>
 
-      <Section title="Führung" right={`${(c.done || []).length} Programme`} flush>
+      <Section title="Führung" right={<TeamScore c={c} base={c.tm0} />} flush>
         <div className="bseats">
           {seatDefs.map(([k, nm]) => {
-            const sk = c[k].skill, se = (c.searches || []).find((z) => z.seat === k);
-            const searching = !!se;
+            const se = (c.searches || []).find((z) => z.seat === k);
             return (
-              <button key={k}
-                className={("bseat" + (sk <= 0 ? " vac pulse" : "") + (searching ? " busy" : "")
-                  + (k === "cfo" ? sp("hire") : "")).trim()}
-                disabled={searching} onClick={() => { haptic(8); act.search(k); }}>
-                <div className="rn">{nm}</div>
-                <div className="sk">{searching ? "🔍" : sk > 0 ? sk.toFixed(1) : "—"}</div>
-                <div className="rn2">{searching ? (se.waiting ? "Shortlist" : "läuft") : sk <= 0 ? "vakant"
-                  : isCapped(c, k) ? `wirkt ${cappedSkill(c, k).toFixed(1)}` : eur(payOf(k, sk, eb))}</div>
-              </button>
+              <SeatCard key={k} c={c} seat={k} nm={nm}
+                searching={!!se} se={se} className={k === "cfo" ? sp("hire") : ""}
+                onClick={() => {
+                  haptic(8);
+                  // Besetzt: erst die Karte, der Ersatz ist eine Entscheidung darauf. Vakant: gleich suchen.
+                  if (c[k].skill > 0) setOpenSeat(k); else act.search(k);
+                }} />
             );
           })}
         </div>
+        {c.mx && <ChemLine c={c} />}
+        {openSeat && c[openSeat].skill > 0 && (
+          <SeatSheet c={c} seat={openSeat}
+            close={() => setOpenSeat(null)} search={(k) => act.search(k)} />
+        )}
       </Section>
 
-      <Section title="Wertsteigerung" right={freeSlots > 0 ? `${freeSlots} Werkbänke frei` : "Kapazität belegt"}>
-        <div className="bactgrid">
-          <button className={sp("plat").trim()} disabled={!!c.initP || freeSlots <= 0} onClick={() => act.init("plat")}>
-            🏗 Performance
-          </button>
-          <button className={sp("acc").trim()} disabled={!!c.initA || freeSlots <= 0} onClick={() => act.init("acc")}>
-            🚀 Growth
-          </button>
-        </div>
+      <Section title="Wertsteigerung" right={freeSlots > 0
+        ? <span className="bslots" aria-label={`Fonds-Kapazität: noch ${freeSlots} Programme im ganzen Portfolio frei`}>
+            Fonds-Kapazität<span>{Array.from({ length: Math.min(freeSlots, MAX_SLOTS) }, (_, i) => <i key={i} />)}</span>
+          </span>
+        : "Fonds ausgelastet"}>
+        <Levers c={c} lev={lev} quarter={quarter} freeSlots={freeSlots} act={act} sp={sp} />
         {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
             Ein Add-on wird im Halbjahr des Signings vollzogen. Die
@@ -1265,7 +1276,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
 
             Nur Statusmeldungen: Steht nichts an, bleibt die Zeile leer. */}
         {(initsOf(c).length > 0 || freeSlots <= 0) && (
-        <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 8, lineHeight: 1.45 }}>
+        <div className="bstatus">
           {initsOf(c).length
             ? initsOf(c).map((I) => (I.ma
                 ? `${I.name || "Zukauf"}: Closing zum Ende dieses Halbjahres.`
@@ -1273,8 +1284,8 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
                   + (I.equity > 0.05 ? ` ${eur(I.equity)} Fondskapital sind abgerufen.` : "")
                 : `${I.name || "Maßnahme"} läuft, Ergebnis in ${hj(I.doneQ - quarter)}.`)
                 + (I.drag ? ` Belastet die Marge um ${I.drag.toFixed(1).replace(".", ",")} pp.` : "")).join(" ")
-              + (freeSlots > 0 && initsOf(c).length === 1 ? " Die zweite Werkbank ist frei." : "")
-            : "Operating-Kapazität im Portfolio ausgeschöpft."}
+              + (freeSlots > 0 && initsOf(c).length === 1 ? ` ${c.initP ? "Growth" : "Performance"} ist frei.` : "")
+            : "Fonds-Kapazität ausgeschöpft: Alle Programme im Portfolio sind belegt."}
         </div>
         )}
         {/* Zukaufshistorie. "Wie oft wurde hier zugekauft und wann?" war aus der
@@ -1283,57 +1294,49 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
             Verlauf. Gescheiterte Integrationen stehen mit dabei — sie sind der
             Grund für die Schuld, die trotzdem in der Bilanz steht. */}
         {!!(c.addons || []).length && (
-          <div style={{ fontSize: 10.5, color: "var(--ink2)", marginTop: 6, lineHeight: 1.45 }}>
-            🏢 {(c.addons || []).length === 1 ? "Ein Zukauf" : `${(c.addons || []).length} Zukäufe`}:{" "}
+          <div className="bstatus">
+            <Icon k="building" />{(c.addons || []).length === 1 ? "Ein Zukauf" : `${(c.addons || []).length} Zukäufe`}:{" "}
             {(c.addons || []).map((a, i) =>
               `Halbjahr ${a.q} · ${eur(a.eb)} EBITDA zu ${x(a.mult)}${a.ok ? "" : " (Integration gescheitert)"}`
               + (i < (c.addons || []).length - 1 ? "; " : ".")).join("")}
           </div>
         )}
-        {!c.ltip && (
-          <button className={sp("ltip").trim()} style={{ width: "100%", marginTop: 10 }} onClick={act.ltip}>
-            📜 MEP aufsetzen · {Math.round(LTIP_SHARE * 100)} % Sweet Equity
-          </button>
-        )}
-        {act.inject && (
-          <>
-            <button className={"" + (c.breach ? " ox" : "")} style={{ width: "100%", marginTop: 10 }}
-              onClick={() => { haptic(8); act.inject(); }}>
-              💶 Eigenkapital nachschießen
-            </button>
-            {!!c.breach && (
-              <p className="hint" style={{ marginTop: 6 }}>
-                Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
-              </p>
-            )}
-          </>
+        {act.inject && !!c.breach && (
+          <p className="hint" style={{ marginTop: 8 }}>
+            Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
+          </p>
         )}
       </Section>
 
       {inProc && !sold && (
         <div className="bnote gold">
-          📣 <b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
+          <Icon k="megaphone" /><b>Verkaufsprozess läuft.</b> Gebote in {hj(c.proc.resolveQ - quarter)}. Bis dahin bewegt sich
           der Markt weiter — der Preis steht erst, wenn die Gebote da sind.
         </div>
       )}
       {locked && (
         <div className="bnote">
-          🔔 Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
+          <Icon k="bell" />Restbeteiligung im Lock-up, Platzierung in {hj(c.lockUntil - quarter)} zum dann gültigen Kurs.
         </div>
       )}
       {blocked && (
         <div className="bnote ox">
-          🚫 Nach dem abgebrochenen Prozess für {hj(c.block - quarter)} gesperrt.
+          <Icon k="ban" />Nach dem abgebrochenen Prozess für {hj(c.block - quarter)} gesperrt.
         </div>
       )}
 
       {!practice && !inProc && !locked && (
-        <Section title="Exit">
+        <Section title="Exit" right={c.holdQ < MIN_HOLD ? `möglich in ${hj(MIN_HOLD - c.holdQ)}` : "möglich"}>
+          {/* Ein Knoten je Halbjahr bis zur Mindesthaltedauer, am Ende die Flagge. */}
+          <div className="bexitpath" role="img" aria-label={`Haltedauer ${Math.min(c.holdQ, MIN_HOLD)} von ${MIN_HOLD} Halbjahren`}>
+            {Array.from({ length: MIN_HOLD - 1 }, (_, i) => <i key={i} className={i < c.holdQ ? "on" : ""} />)}
+            <b className={c.holdQ >= MIN_HOLD ? "on" : ""}><Icon k="flag" /></b>
+          </div>
           <div className="bactgrid">
             <button className={"solid" + sp("proc")} disabled={!canProc || procCount >= MAX_PROC} onClick={act.proc}>
-              Verkaufsprozess
+              {(!canProc || procCount >= MAX_PROC) && <Icon k="lock" />}Verkaufsprozess
             </button>
-            <button disabled={!canNow} onClick={act.bil}>Bilateral</button>
+            <button disabled={!canNow} onClick={act.bil}>{!canNow && <Icon k="lock" />}Bilateral</button>
           </div>
           {/* GP-led Secondary und IPO sind abgeschaltet. Engine und Server führen
               beide Wege weiter (runQuarter.ts) — zurückholen heißt nur, die
@@ -1346,6 +1349,72 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         </Section>
       )}
       <div className="bend" />
+    </div>
+  );
+}
+
+/* Die Hebel der Wertsteigerung als vier kleine Karten, in der Farbe ihrer
+   Reifegrad-Familie: Performance türkis, Growth violett, People (MEP) gold,
+   Eigenkapital neutral. Jede Karte sagt, was dahinter liegt, und im Fuß, was
+   gerade gilt: wie viele Programme, ob eines läuft, was es kostet. */
+const LEVER_SHORT = {
+  opex: "Cost-out", nwc: "NWC", erp: "ERP", ai: "KI-Automatisierung",
+  pen: "Pricing", exp: "Expansion", ma: "Add-on M&A",
+};
+function Levers({ c, lev, quarter, freeSlots, act, sp }) {
+  const progs = (d) => INITS[d].map((I) => LEVER_SHORT[I.id] || I.n).join(", ");
+  /* Das MEP ist ein Schalter, solange das Halbjahr läuft, in dem es aufgesetzt
+     wurde (ltipQ). Danach ist es bindend: Wer es kurz vor dem Exit abstreifen
+     könnte, hätte Rating-Bonus und halbes Retention-Risiko die ganze Haltedauer
+     lang gehabt, ohne je das Sweet Equity zu zahlen. */
+  const mepNew = !!c.ltip && c.ltipQ === quarter;
+  const mepFix = !!c.ltip && !mepNew;
+  const prog = (d, run, icon, title, fam) => {
+    const busy = freeSlots <= 0;
+    return (
+      <button className={"blever " + fam + (run ? " run" : "") + sp(d)} disabled={!!run || busy}
+        onClick={() => act.init(d)}>
+        <span>
+          <span className="art"><Icon k={icon} />{run && <span className="blvbadge"><Icon k="clock" />Läuft</span>}</span>
+          <span className="t">{title}</span>
+          <span className="s">{progs(d)}</span>
+          {/* Läuft etwas, steht es klein im Fuß: welches Programm, wie lange noch */}
+          {run ? (
+            <span className="f now">{LEVER_SHORT[run.id] || run.name || "Maßnahme"} · noch {run.doneQ - quarter} HJ</span>
+          ) : (
+            <span className="f">
+              {busy ? "Fonds ausgelastet" : `${INITS[d].length} Programme`}
+              {!busy && <Icon k="chevR" />}
+            </span>
+          )}
+        </span>
+      </button>
+    );
+  };
+  return (
+    <div className="blevers">
+      {prog("plat", c.initP, "sliders", "Performance-Initiativen", "l")}
+      {prog("acc", c.initA, "sprout", "Growth-Initiativen", "a")}
+      <button className={"blever p mep" + (c.ltip ? " on" : "") + (mepFix ? " done" : "") + sp("ltip")}
+        disabled={mepFix} role="switch" aria-checked={!!c.ltip} onClick={() => { haptic(8); act.ltip(); }}>
+        <span>
+          <span className="art"><Icon k="users" />{c.ltip && <span className="blvbadge"><Icon k="check" />Aktiv</span>}</span>
+          <span className="t">{c.ltip ? "MEP aktiv" : "MEP aufsetzen"}{mepFix && <Icon k="lock" />}</span>
+          <span className="s">{mepFix ? "Bindend bis zum Exit"
+            : mepNew ? "Tippen nimmt es zurück. Bindend ab Halbjahresende" : "Management am Exit beteiligen"}</span>
+          <span className="f"><span className="tok">{Math.round(LTIP_SHARE * 100)} % Sweet Equity</span></span>
+        </span>
+      </button>
+      {act.inject && (
+        <button className={"blever " + (c.breach ? "ox" : "n")} onClick={() => { haptic(8); act.inject(); }}>
+          <span>
+            <span className="art"><Icon k="coins" /></span>
+            <span className="t">Eigenkapital</span>
+            <span className="s">{c.breach ? "Covenant gerissen: frisches Kapital heilt den Bruch" : `Nachschießen, Leverage ${x(lev)} senken`}</span>
+            <span className="f">Fondskapital<Icon k="chevR" /></span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1803,35 +1872,31 @@ export function Pips({ v, cls }) {
    Prozesse, Wachstum. Inhaltlich dieselben fünf Stufen wie zuvor — nur liest
    man eine Reihe geneigter Segmente schneller als eine Punktreihe, und der
    Zustandstext rechts sagt weiterhin, woran es gerade liegt.               */
-export function Stages({ c, compact }) {
+export function Stages({ c }) {
   const pl = peopleLvl(c), A = accEff(c), OS = overstretch(c);
-  const sc = (c.searches || [])[0];
-  const runP = sc ? (sc.waiting ? "Shortlist" : "Search") : null;
   const vac = ["ceo", "cfo", "r3"].filter((k) => c[k].skill <= 0).length;
+  /* Rechts steht der Stand, nicht was läuft: Welches Programm wie lange noch
+     braucht, zeigt die Karte des Hebels unter Wertsteigerung, die laufende
+     Suche die Position unter Führung. */
+  const lvl = (v) => (v < 1.5 ? "unter Bench." : v < 2.5 ? "Benchmark" : v < 3.5 ? "über Bench." : "Best-in-Class");
   return (
     <div className="bability">
       <div className="babrow">
-        <span className="bablab">People</span><Pips v={pl} cls="p" />
-        <span className={"babst " + (vac ? "warn" : runP ? "run" : "")}>
-          {vac ? `${vac} vakant` : runP ? runP : pl.toFixed(1)}
+        <span className="babic p"><Icon k="person" /></span><span className="bablab">People</span><Pips v={pl} cls="p" />
+        <span className={"babst " + (vac ? "warn" : "")}>
+          {vac ? `${vac} vakant` : pl.toFixed(1).replace(".", ",")}
         </span>
       </div>
       <div className="babrow">
-        <span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
-        <span className={"babst " + (c.initP ? "run" : c.plat < 1.5 ? "warn" : "")}>
-          {c.initP ? `${c.initP.doneQ - (compact || 0)} HJ`
-            : c.plat < 1.5 ? "unter Bench." : c.plat < 2.5 ? "Benchmark" : c.plat < 3.5 ? "über Bench." : "Best-in-Class"}
-        </span>
+        <span className="babic l"><Icon k="sliders" /></span><span className="bablab">Performance</span><Pips v={c.plat} cls="l" />
+        <span className={"babst " + (c.plat < 1.5 ? "warn" : "")}>{lvl(c.plat)}</span>
       </div>
       <div className="babrow">
-        <span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
-        <span className={"babst " + (OS > 0 ? "warn" : c.initA ? "run" : c.acc < 1.5 ? "warn" : "")}>
-          {OS > 0 ? "überdehnt" : c.initA ? `${c.initA.doneQ - (compact || 0)} HJ`
-            : c.acc < 1.5 ? "unter Bench." : c.acc < 2.5 ? "Benchmark" : c.acc < 3.5 ? "über Bench." : "Best-in-Class"}
-        </span>
+        <span className="babic a"><Icon k="sprout" /></span><span className="bablab">Growth</span><Pips v={c.acc} cls="a" />
+        <span className={"babst " + (OS > 0 || c.acc < 1.5 ? "warn" : "")}>{OS > 0 ? "überdehnt" : lvl(c.acc)}</span>
       </div>
-      {OS > 0 && <div style={{ fontSize: 11, color: "var(--ox)" }}>
-        ⚠️ Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
+      {OS > 0 && <div className="babwarn">
+        <Icon k="alert" />Überdehnt — nur {A.toFixed(1)} von {c.acc.toFixed(1)} wirken
       </div>}
     </div>
   );
@@ -2447,6 +2512,10 @@ export function Shelf({ holdings, market, dryPowder, quarter, onPick }) {
               </span>
               <span className="bshelfmeta">
                 {h.top ? h.top.t : "auf Kurs"} <span style={{ opacity: .55 }}>· {c.holdQ} HJ · {SECLABEL[c.sector]}</span>
+                {/* Teamstufe (chemOf): nur wo sie wirkt, also ab dem Closing mit mx */}
+                {c.mx && chemOf(c) !== 0 && (
+                  <span style={{ color: chemOf(c) > 0 ? "var(--teal)" : "var(--ox)" }}> · Team: {CHEM_LABEL(chemOf(c))}</span>
+                )}
               </span>
             </span>
             <svg viewBox="0 0 56 24" className="bshelfspark" role="img"
@@ -2985,11 +3054,14 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
           const dur = initDurationOf(c, dim, k.id);
           const chk = k.ma ? addonCheck(c, market, { ...mandate, runs }) : null;
           const risk = k.ma ? failBreakdown(chk) : null;
-          // Dieselbe Zeile, die buildInit() beim Start rechnet
+          /* Dieselbe Zeile, die buildInit() beim Start rechnet — mit der
+             Kompetenz, die genau dieses Programm braucht (PROGRAM_COMP). */
+          const Ek = effSkill(c, seat, k.id) * (c.onboard > 0 ? 0.7 : 1);
+          const riskTaker = c[seat].skill > 0 && c[seat].trait === "risk" && k.cls === "hard";
           const p = k.ma ? clamp(1 - chk.fail, 0.05, 0.98)
-            : clamp(initSuccess(E, k.cls) + (k.sm || 0) + rep.sm, 0.1, 0.97);
+            : clamp(initSuccess(Ek, k.cls) + (k.sm || 0) + rep.sm + (riskTaker ? 0.05 : 0), 0.1, 0.97);
           const FI = fitLabel(k.id, c);
-          const g = initGain(E) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
+          const g = initGain(Ek) * (k.gm || 1) * rep.gm * FI.f * ceilingFactor(lvl);
           const noFin = k.ma && !chk.ok;
           /* Wie viel des Reifegradgewinns die Beteiligung überhaupt tragen kann.
              Growth wirkt nur bis min(People + 1, Performance + 1) — accEff();
@@ -3205,9 +3277,67 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   );
 }
 
+/* Team-Score (teamScoreOf) im Kopf des Führungsbereichs, mit der
+   Veränderung seit dem Kauf. */
+function TeamScore({ c, base }) {
+  const v = teamScoreOf(c);
+  const d = typeof base === "number" ? v - base : null;
+  const f1 = (n) => Math.abs(n).toFixed(1).replace(".", ",");
+  // Der Ring trägt das Metall der Seltenheit, in der das Team als Karte stünde.
+  return (
+    <span className="bteam">
+      <span>Team-Score</span>
+      <span className="ring" data-tier={tierOf(v)}><span><b className="mono">{v.toFixed(1).replace(".", ",")}</b></span></span>
+      {d != null && Math.abs(d) >= 0.05 && (
+        <span className={"mono d " + (d > 0 ? "up" : "dn")} title="seit dem Kauf">{d > 0 ? "▲" : "▼"} {f1(d)}</span>
+      )}
+      <Info t="Team-Score">
+        Eine Zahl für das Top-Team, auf der Skala des Assessments (1 bis 5): wie gut die Führung zu
+        diesem Case passt. Je Position zählen die drei Kompetenzen, gewichtet mit dem Bedarf des Cases —
+        dieselbe Eignung, die der Maßnahmenpicker zeigt. CFO und Fachfunktion wirken höchstens bis
+        Leadership des CEO + 1,5, eine Vakanz zählt wie ein Interim auf 2,0, ein eingespieltes Team
+        bekommt seinen Bonus dazu. Der Pfeil zeigt
+        die Veränderung seit dem Kauf; jede Verpflichtung und jeder Abgang steht mit dem neuen Wert in
+        den Meldungen.
+      </Info>
+    </span>
+  );
+}
+
+/* Chemie im Top-Team (chemOf): eine Zeile unter den drei Positionen. Die
+   Farben zeigen die Mini-Karten selbst. Gemischte Farben kosten nichts, sie
+   bringen nur keinen Bonus. */
+function ChemLine({ c }) {
+  const v = chemOf(c);
+  const pct = CHEM.toFixed(2).replace(".", ",");
+  return (
+    <p className="hint" style={{ margin: "8px 16px 0" }}>
+      <span>
+        Team: <b style={{ color: v > 0 ? "var(--teal)" : undefined }}>{CHEM_LABEL(v)}</b>
+        {v > 0 ? ` · jede Kompetenz +${pct}` : " · eingespielt erst mit drei Positionen gleicher Farbe"}
+        <Info t="Chemie im Top-Team">
+          Jede Führungskraft hat eine Farbe, weiß oder schwarz. Keine ist besser. Sind alle drei Positionen
+          besetzt und haben dieselbe Farbe, ist das Team eingespielt: Jede Kompetenz wirkt um {pct} besser,
+          bei den Programmen wie im Tagesgeschäft. Gemischte Farben und Vakanzen kosten nichts, sie bringen
+          nur keinen Bonus. Die Farbe einer Kandidatin steht auf ihrer Karte; die Altmannschaft bringt ihre
+          Farbe mit.
+        </Info>
+      </span>
+    </p>
+  );
+}
+
+/* Die Shortlist. Ein Deck mit Kompetenzprofilen (seit dem 19.10.2026)
+   öffnet die Draft-Ansicht; eine Shortlist aus der Zeit davor, die in einer
+   laufenden Partie noch offen ist, bleibt bei ihrer Tabelle.            */
 export function Shortlist({ item, holding, analysis, hire, reject }) {
+  if (item.cands.some((k) => k.prof)) {
+    // Eigener Schlüssel je Shortlist: Die nächste beginnt wieder bei der ersten Karte, Vorderseite oben
+    const key = `${item.uid || item.holdingUid}:${item.seat}:${item.cands.map((k) => k.name).join("|")}`;
+    return <Draft key={key} item={item} holding={holding} analysis={analysis} hire={hire} reject={reject} />;
+  }
   const eb = holding ? ebitdaOf(holding) : 0;
-  const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[holding ? holding.sector : "Software"].n;
+  const nm = seatName(item.seat, holding ? holding.sector : undefined);
   const precise = analysis >= 4;
   const ceoSk = holding ? holding.ceo.skill : 2;
   const cap = item.seat === "ceo" ? 5 : ceoSk + 1.5;

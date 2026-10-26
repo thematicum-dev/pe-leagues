@@ -42,7 +42,7 @@ function countEvents(seed: number, compat: Any, halfYears = 12) {
     const decisions: TurnDecisions = {};
     if (holdings.length < 5 && state.deals.length) {
       const d = state.deals[0] as Any;
-      decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.05, leverage: Math.min(d.levCap, 2.8) }];
+      decisions.bids = [{ dealId: d.id, multiple: d.askMult * 1.15, leverage: Math.min(d.levCap, 2.8) }];
     }
     const before = state.feed.length;
     const out = runQuarter({ state, halfYear: hy, decisionsBySlot: { 0: decisions }, rng, compat });
@@ -66,7 +66,10 @@ describe("Zufallsereignisse während der Halteperiode", () => {
   it("trifft eine Beteiligung seltener als nach dem alten Stand", () => {
     let neu = { events: 0, holdingHalves: 0 };
     let alt = { events: 0, holdingHalves: 0 };
-    for (let seed = 0; seed < 12; seed++) {
+    /* 30 Startwerte: Mit zwölf lag die Streuung der Quote (rund ±1,5 pp) in
+       der Größenordnung des Abstands, und jede Verschiebung des
+       Zufallsstroms an anderer Stelle konnte den Test kippen.            */
+    for (let seed = 0; seed < 30; seed++) {
       const a = countEvents(4000 + seed, {});
       const b = countEvents(4000 + seed, LEGACY_COMPAT);
       neu = { events: neu.events + a.events, holdingHalves: neu.holdingHalves + a.holdingHalves };

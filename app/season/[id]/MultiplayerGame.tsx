@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import AbortControl from "./AbortControl";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
@@ -39,10 +40,11 @@ import {
   BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
   IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_SLOTS,
   PERIODS, PROC_FEE, PROC_Q, END_PRESSURE_FROM,
-  SECCOLOR, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
+  SECCOLOR, SECLABEL, SECNAMES, SECTORS, dealMoic, ddCapOf, dpiOf,
   eur, exitNetOf, fairOf, healthOf,
   addonCheck, gebote, grossMoicOf, hj, initById, initDurationOf, initsOf, investableOf, irrOf,
   recycleRoom, scoreOf, tvccOf, tvpiOf, x,
+  candOfChoice, ebitdaOf, onboardOf, retainerOf, searchLagOf, seatFromCand, severanceOf, signBonusOf,
 } from "@/lib/engine";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -717,6 +719,28 @@ export default function MultiplayerGame({
       // runQuarter setzt readyQ = halfYear + 1, und gespielt wird quarter + 1
       p.searches = [...(c.searches || []), ...staged.map((s) => ({ seat: s.seat, readyQ: quarter + 2 }))];
     }
+    /* Wer aus der Shortlist eingestellt wird, sitzt ab dem Klick auf der
+       Position, mit wahrem Profil wie im Übungsmodus: Mit der Verpflichtung
+       steht es fest, und zurücknehmen lässt sie sich nicht. Sign-on und
+       Abfindung buchen wie in der Auswertung (runQuarter, Schritt 2) auf die
+       Nettoverschuldung. Eine abgelehnte Shortlist zeigt die neue Suche. */
+    hireDecisions.filter((d) => d.holdingUid === c.uid).forEach((d) => {
+      const item = shortlistAll.find((it: Any) => it.holdingUid === c.uid && it.seat === d.seat);
+      if (!item) return;
+      if (d.choice === "reject") {
+        p.netDebt += retainerOf(d.seat, ebitdaOf(p)) * 0.5;
+        p.searches = (p.searches || []).map((se: Any) => (se.seat === d.seat
+          ? { seat: d.seat, readyQ: quarter + 1 + searchLagOf(p) } : se));
+        return;
+      }
+      const cand = candOfChoice(item, d.choice);
+      if (!cand) return;
+      const prev = p[d.seat].skill;
+      p.netDebt += signBonusOf(d.seat, cand.skill, ebitdaOf(p)) + (prev > 0 ? severanceOf(d.seat, prev, ebitdaOf(p)) : 0);
+      p[d.seat] = seatFromCand(cand, quarter + 1);
+      p.searches = (p.searches || []).filter((se: Any) => se.seat !== d.seat);
+      p.onboard = onboardOf(cand);
+    });
     /* Eine vorgemerkte Maßnahme muss dieselbe Frist zeigen, die die Auswertung
        ihr dann gibt: buildInit() setzt doneQ = halfYear + initDurationOf(),
        und das Halbjahr, über das hier entschieden wird, ist quarter + 1.
@@ -752,7 +776,8 @@ export default function MultiplayerGame({
        Spieler entscheidet über den Rest des Halbjahres auf veralteten Zahlen. */
     const inj = stagedInjectionByHolding[c.uid];
     if (inj) { p.netDebt = c.netDebt - inj.amount; p.equityIn = (c.equityIn || 0) + inj.amount; }
-    if (ltipStaged.includes(c.uid)) p.ltip = true;
+    // Vorgemerkt heißt: in diesem Halbjahr aufgesetzt, also noch per Tipp zurücknehmbar
+    if (ltipStaged.includes(c.uid)) { p.ltip = true; p.ltipQ = quarter; }
     // Vorgemerkte Benchmarkstudie sofort sichtbar machen: die Karte zeigt
     // Branchenreferenz und Marktwachstum ab dem Klick, nicht erst nach der
     // Auswertung — genauso wie im Übungsmodus, wo runStudy() direkt wirkt.
@@ -937,7 +962,10 @@ export default function MultiplayerGame({
   function hireStage(item: Any, cand: Any) {
     haptic(10);
     const idx = item.candidates.indexOf(cand);
-    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : "development";
+    /* Plätze 0 bis 2 unter ihren alten Namen: Die versteht auch eine
+       Auswertung, die das Deck mit fünf Karten noch nicht kennt. */
+    const choice: HireChoice = idx === 0 ? "veteran" : idx === 1 ? "aplayer" : idx === 2 ? "development"
+      : (`c${idx}` as HireChoice);
     setHireDecisions((arr) => [...arr, { holdingUid: item.holdingUid, seat: item.seat, choice }]);
     setShortlistCursor((i) => i + 1);
   }
@@ -1144,6 +1172,7 @@ export default function MultiplayerGame({
               Zum Dashboard
             </Link>
           </div>
+          <AbortControl seasonId={seasonId} />
         </div>
       </div>
     );
@@ -1283,7 +1312,7 @@ export default function MultiplayerGame({
                   const d = (state.market[s] / SECTORS[s].m - 1) * 100;
                   return (
                     <tr key={s}>
-                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
+                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{SECLABEL[s]}</td>
                       <td>{x(state.market[s])}
                         <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                           {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %
@@ -1358,7 +1387,7 @@ export default function MultiplayerGame({
                       cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),
                       search: (seat: Seat) => setSearches((arr) => [...arr, { holdingUid: c.uid, seat }]),
                       init: (dim: "plat" | "acc") => setInitPick({ uid: c.uid, dim }),
-                      ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
+                      ltip: () => setLtipStaged((p) => (p.includes(c.uid) ? p.filter((u) => u !== c.uid) : [...p, c.uid])),
                       study: () => setStudyStaged((p) => (p.includes(c.uid) ? p : [...p, c.uid])),
                       inject: () => setInjectPick(c.uid),
                     }} />
@@ -1473,6 +1502,9 @@ export default function MultiplayerGame({
             {pending ? "Wird abgeschickt …" : <>Halbjahr abschließen {Object.keys(bids).length > 0 && `· ${gebote(Object.keys(bids).length)}`}</>}
           </button>
         </div>
+        {/* Abbrechen steht ganz unten, abgesetzt vom Abschließen des
+            Halbjahres; die Nachfrage an Mitspieler erscheint als Dialog. */}
+        <AbortControl seasonId={seasonId} />
       </div>
 
       <div className="tabs">

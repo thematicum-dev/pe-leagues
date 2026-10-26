@@ -123,7 +123,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
             <div>
               <h1>Partie {season.id.slice(0, 8)}</h1>
               <div className="dashsub">
-                {STATUS_LABEL[season.status] ?? season.status}
+                {season.cancelled_reason === "aborted" ? "Abgebrochen" : STATUS_LABEL[season.status] ?? season.status}
               </div>
             </div>
             <Link href="/dashboard" className="btn-secondary">

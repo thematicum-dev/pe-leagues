@@ -176,16 +176,16 @@ function round(v: number) { return Math.round(v * 1e6) / 1e6; }
 /* Sollwert, erzeugt vor dem Umbau durch denselben Spielverlauf gegen den
    damaligen Code (globaler SEED, bare rnd()/nrm()/pick()/band()). */
 const GOLDEN_RESULT = {
-  finalRngPosition: 939687543,
+  finalRngPosition: 644885692,
   holdingsCount: 2,
   realizedCount: 5,
-  cash: 40.417132,
-  undrawn: 40.417132,
-  drawn: 459.582868,
-  nav: 205.409127,
-  tvpi: 1.688561,
-  dpi: 1.280643,
-  irr: 0.095142,
+  cash: 55.976709,
+  undrawn: 55.976709,
+  drawn: 444.023291,
+  nav: 141.104916,
+  tvpi: 1.34054,
+  dpi: 1.022752,
+  irr: 0.055774,
   /* Zweimal angepasst: mit der Neukalibrierung der Wertungsmarken
      (TVPI_BENCH 2,0 -> 1,5, IRR_BENCH 15 % -> 14 %), die nur score berührte,
      und mit der Senkung der Programmkosten um 20 %. Letztere verschiebt
@@ -220,31 +220,50 @@ const GOLDEN_RESULT = {
      (TVCC_BENCH 1,6). Bewegt sich nur score: Der Fonds hat 459,6 von 500
      abgerufen, TVCC = 1,6886 × 459,6 / 500 = 1,552, normiert 0,970 statt
      0,993 -- die Wertung sinkt um die Hälfte der Differenz, 0,760918 ->
-     0,749304. */
-  score: 0.749304,
-  carry: 74.249754,
+     0,749304.
+     Ein achtes Mal mit der Kappung der Zielgröße am Equity Ticket
+     (TICKET_MAX, fitTicket in newDeal). Diesmal verschiebt sich der ganze
+     Verlauf, finalRngPosition eingeschlossen: Die Ziele sind kleiner, die
+     Partie kauft und baut andere Unternehmen, und jede Beteiligung zieht ihre
+     eigenen Zufallszahlen. Das ist der Zweck der Änderung, keine Nebenwirkung
+     — vorher hielt die Beispielbeteiligung ein Ticket, das allein ein Sechstel
+     des Fonds band, und lieferte 97 Mio. € EBITDA-Beitrag; jetzt 27. Das
+     Landmark-Objekt ist der Rohwert aus newLandmark — gekappt wird es erst
+     bei der Ankündigung (announceLandmark), die diese Partie nicht spielt.
+     Ein neuntes Mal mit dem Manager-Draft: Die Shortlist ist ein Deck aus
+     fünf Kandidatenkarten mit Kompetenzprofil (makeCandidates) und zieht
+     dafür mehr Zufallszahlen als die alten drei Schablonen. Ab dem ersten
+     Search-Mandat in Halbjahr 3 läuft der ganze Strom anders, Markt und
+     Landmark eingeschlossen. Die laufende Wirkung des Managements greift
+     hier nicht — die Beteiligungen dieser Partie tragen kein `mx`.
+     Ein zehntes Mal mit der Chemie im Top-Team: Jede Kandidatenkarte zieht
+     eine weitere Zufallszahl für ihre Haltung (hell/dunkel). Die Haltung
+     der Amtsinhaber zieht keine (sideOf), die Chemie selbst wirkt ohne `mx`
+     nicht. Ab dem ersten Search-Mandat läuft der Strom wieder anders. */
+  score: 0.526948,
+  carry: 0,
   landmark: {
-    sector: "Consumer",
-    revenue: 250.534344,
-    margin: 17.946246,
-    askMult: 11.137611,
-    name: "Obereck Nutrition Gruppe",
+    sector: "Software",
+    revenue: 214.483139,
+    margin: 25.339055,
+    askMult: 19,
+    name: "Velseil Bau Software Gruppe",
   },
-  healthMoic: 1.897106,
-  healthCount: 2,
+  healthMoic: 0.769153,
+  healthCount: 5,
   bridge: {
-    entry: 82.956383,
-    ebitda: 97.00887,
-    mult: -72.436625,
-    delev: -5.32971,
+    entry: 74.929541,
+    ebitda: -19.056304,
+    mult: 34.361294,
+    delev: 11.511001,
     exit: 90,
   },
   marketFinal: {
-    Industrials: 8.229613,
-    Healthcare: 10.191985,
-    Software: 10.948592,
-    Services: 10.215668,
-    Consumer: 9.397558,
+    Industrials: 8.795126,
+    Healthcare: 10.087508,
+    Software: 18.2,
+    Services: 12.862874,
+    Consumer: 6.362204,
   },
   firstHoldingUid: "c5",
 };

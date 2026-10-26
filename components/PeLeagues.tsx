@@ -17,11 +17,11 @@ import {
   END_PRESSURE_FROM, INIT_SLOTS, INVEST_PERIOD, IPO_DISC, IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL,
   LTIP_SHARE, MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, PROC_FEE, PROC_Q, REPEAT_MAX, RESERVE_PROC,
   exitNetOf, mepCut, fundEquityIn, liquidateHoldings,
-  RESERVE_PROP, ROLE3, SECCOLOR, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
+  RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
   closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
-  navValueOf, newDeal, newLandmark, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
+  navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
 
@@ -284,8 +284,10 @@ export default function PeLeagues() {
         hist: [{ rev: d.revenue, eb, nd: eb * w.lev, mg: d.margin * (1 - hit), ql: d.quality * (1 - hit / 2), eq: eb * w.mult - eb * w.lev, mult: w.mult, st: 1, out: 0 }],
         // Gerade erworben: im unrealisierten Block des Ausgangsstands noch nicht da
         uClose: { ebitda: 0, mult: 0, delev: 0, rest: 0 },
+        mx: true,   // laufende Wirkung des Managements (mgmtFx)
       };
-      Object.assign(c, { baseLoad: seatLoad(c) });
+      // Team-Score beim Kauf: Bezug für "seit Kauf" im Führungsbereich
+      Object.assign(c, { baseLoad: seatLoad(c), tm0: teamScoreOf(c) });
       spendFund(f, c.entryEquity, q);
       f.investedTotal = (f.investedTotal || 0) + c.entryEquity;
       f.holdings.push(c);
@@ -317,12 +319,13 @@ export default function PeLeagues() {
         const seat = ["ceo", "cfo", "r3"].find((s2) => c[s2].skill < amb - 0.5);
         if (seat && rng.rnd() < 0.8) {
           const eb = ebitdaOf(c);
-          const sk = clamp(amb + rng.nrm(0.5), 1, 4.5);
-          const cost = retainerOf(seat, eb) + signBonusOf(seat, sk, eb)
+          // Dasselbe Deck und dieselbe Draft-Regel wie im Mehrspielerpfad
+          const cand = botDraft(rng, k, seat, amb, c);
+          const cost = retainerOf(seat, eb) + signBonusOf(seat, cand.skill, eb)
             + (c[seat].skill > 0 ? severanceOf(seat, c[seat].skill, eb) : 0);
           c.netDebt += cost; bookOff(c, "mgmt", cost);
-          c[seat] = { skill: sk };
-          c.onboard = 1;
+          c[seat] = seatFromCand(cand, q);
+          c.onboard = onboardOf(cand);
           return;
         }
         if (!c.ltip && rng.rnd() < 0.5) c.ltip = true;
@@ -432,7 +435,7 @@ export default function PeLeagues() {
     if (rng.rnd() < 0.18) {
       const s = rng.pick(SECNAMES);
       mk[s] = clamp(mk[s] * 1.18, 0, SECTORS[s].m * 1.5);
-      news.push({ q, e: "📈", tone: "pos", t: `Multiple-Expansion in <b>${s}</b>: Bewertungen ziehen deutlich an.` });
+      news.push({ q, e: "📈", tone: "pos", t: `Multiple-Expansion in <b>${SECLABEL[s]}</b>: Bewertungen ziehen deutlich an.` });
     }
     // Sektorrezession: trifft Bewertung und operatives Geschäft aller Beteiligten gleichzeitig
     if (rng.rnd() < 0.14) {
@@ -456,7 +459,7 @@ export default function PeLeagues() {
       }));
       news.push({
         q, e: "📉", tone: "neg",
-        t: `Sektorabschwung in <b>${s}</b>: Multiple-Kontraktion −16 %, Umsätze brechen ein.${hit ? ` Betrifft ${hit} deiner Beteiligungen.` : ""}`,
+        t: `Sektorabschwung in <b>${SECLABEL[s]}</b>: Multiple-Kontraktion −16 %, Umsätze brechen ein.${hit ? ` Betrifft ${hit} deiner Beteiligungen.` : ""}`,
       });
     }
 
@@ -525,10 +528,13 @@ export default function PeLeagues() {
     setMarketHist((p) => [...p, { ...mk }]);
     setTvpiHist((p) => [...p, F.map((fd) => scoreOf(fd, mk, q))]);
     const nd = makeDeals(F[0].attrs.sourcing, mk);
-    if (q === LM_ANNOUNCE && landmark) {
-      news.push({ q, e: "📣", tone: "neu", t: `Trophy Asset angekündigt: <b>${landmark.name}</b> kommt in zwei Halbjahren an den Markt. Halte Pulver trocken.` });
+    let lm = landmark;
+    if (q === LM_ANNOUNCE && lm) {
+      lm = announceLandmark(lm, mk);
+      setLandmark(lm);
+      news.push({ q, e: "📣", tone: "neu", t: `Trophy Asset angekündigt: <b>${lm.name}</b> kommt in zwei Halbjahren an den Markt. Halte Pulver trocken.` });
     }
-    if (q === LM_DEAL && landmark) nd.unshift({ ...landmark, askMult: clamp(mk[landmark.sector] * (0.7 + 0.006 * landmark.quality) * 1.06, 5, 19) });
+    if (q === LM_DEAL && lm) nd.unshift({ ...lm, askMult: landmarkAsk(lm, mk) });
     setDeals(nd);
     setFeed((p) => [...news.reverse(), ...p].slice(0, 60));
     if (resolved.length) setExitQueue((p) => [...p, ...resolved]);
@@ -581,13 +587,23 @@ export default function PeLeagues() {
   const freeSlots = maxSlots - busySlots;
 
   function startSearch(c, seat) {
+    // Ersatz für eine besetzte Position: Die Person geht sofort, wie in runQuarter (vacateForSearch)
+    const leaving = c[seat].skill > 0;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-        ...chargeOff(h, "mgmt", retainerOf(seat, ebitdaOf(h))),
-        searches: [...(h.searches || []), { seat, readyQ: decQ + 1 }],
+      ...f, holdings: f.holdings.map((h) => {
+        if (h.uid !== c.uid) return h;
+        const lag = searchLagOf(h);
+        const v = { ...h };
+        const sev = vacateForSearch(v, seat);
+        return {
+          ...chargeOff(v, "mgmt", retainerOf(seat, ebitdaOf(h)) + sev),
+          searches: [...(h.searches || []), { seat, readyQ: decQ + lag }],
+        };
       }),
     }));
     const nm = seat === "ceo" ? "CEO" : seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    const tmMove = leaving && c.mx ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [seat]: { skill: 0 } }))}.` : "";
+    if (leaving) setFeed((p) => [{ q: quarter, e: "🚪", tone: "neu", t: `<b>${c.name}</b>: Der bisherige ${nm} geht — Abfindung ${eur(severanceOf(seat, c[seat].skill, ebitdaOf(c)))}. Die Position ist bis zur Verpflichtung vakant.${tmMove}` }, ...p]);
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Search-Mandat für einen neuen ${nm} erteilt — Retainer ${eur(retainerOf(seat, ebitdaOf(c)))}.` }, ...p]);
   }
 
@@ -601,14 +617,16 @@ export default function PeLeagues() {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", signBonusOf(item.seat, cand.skill, ebitdaOf(h))
           + (had ? severanceOf(item.seat, h[item.seat].skill, ebitdaOf(h)) : 0)),
-        [item.seat]: { skill: cand.skill, dev: cand.dev, poach: cand.poach },
-        searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: 1,
+        [item.seat]: seatFromCand(cand, decQ),   // wie runQuarter: das Halbjahr der Entscheidung
+        searches: (h.searches || []).filter((se) => se.seat !== item.seat), onboard: onboardOf(cand),
       }),
     }));
     const nm = item.seat === "ceo" ? "CEO" : item.seat === "cfo" ? "CFO" : ROLE3[c.sector].n;
+    // Mit der Verpflichtung steht das wahre Profil fest: Team-Score mit den wahren Werten
+    const tmMove = c.mx ? ` ${teamMove(teamScoreOf(c), teamScoreOf({ ...c, [item.seat]: seatFromCand(cand) }))}.` : "";
     setFeed((p) => [{
       q: quarter, e: "🤝", tone: "pos",
-      t: `<b>${c.name}</b>: Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}`,
+      t: `<b>${c.name}</b>: ${cand.name ? `${cand.name} ist neuer ${nm} (${cand.label}), Score ${cand.skill.toFixed(1).replace(".", ",")} (geschätzt ${cand.shown.toFixed(1).replace(".", ",")})` : `Neuer ${nm} an Bord — Rating ${cand.skill.toFixed(1)}`}, Signing Bonus ${eur(signBonusOf(item.seat, cand.skill, ebitdaOf(c)))}, Gehalt ${eur(payOf(item.seat, cand.skill, ebitdaOf(c)))} p.a.${had ? ` Plus ${eur(severanceOf(item.seat, c[item.seat].skill, ebitdaOf(c)))} Abfindung für den Vorgänger.` : ""}${tmMove}`,
     }, ...p]);
   }
 
@@ -619,7 +637,7 @@ export default function PeLeagues() {
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
       ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
         ...chargeOff(h, "mgmt", retainerOf(item.seat, ebitdaOf(h)) * 0.5),
-        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + 1 } : se),
+        searches: (h.searches || []).map((se) => se.seat === item.seat ? { seat: item.seat, readyQ: decQ + searchLagOf(h) } : se),
       }),
     }));
     setFeed((p) => [{ q: quarter, e: "🔍", tone: "neu", t: `<b>${c.name}</b>: Shortlist abgelehnt, Suchmandat wird neu aufgesetzt.` }, ...p]);
@@ -696,11 +714,15 @@ export default function PeLeagues() {
         + ` — die Nettoverschuldung sinkt entsprechend, die Kostenbasis des Deals steigt um den Anteil des Fonds.` }, ...p]);
   }
 
+  // Zurücknehmen nur im Halbjahr des Aufsetzens (ltipQ), danach ist das MEP bindend
   function toggleLtip(c) {
+    const undo = c.ltip && c.ltipQ === quarter;
+    if (c.ltip && !undo) return;
     setFunds((F) => F.map((f, i) => i !== 0 ? f : {
-      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h, ltip: true }),
+      ...f, holdings: f.holdings.map((h) => h.uid !== c.uid ? h : { ...h, ltip: !undo, ltipQ: undo ? null : quarter }),
     }));
-    setFeed((p) => [{ q: quarter, e: "📜", tone: "neu", t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
+    setFeed((p) => undo ? p.filter((n) => !(n.q === quarter && n.mep === c.uid))
+      : [{ q: quarter, e: "📜", tone: "neu", mep: c.uid, t: `<b>${c.name}</b>: Managementbeteiligung (MEP) aufgesetzt — ${Math.round(LTIP_SHARE * 100)} % Sweet Equity, dafür halbes Retention-Risiko und +0,5 effektives Rating.` }, ...p]);
   }
 
   /* ---- Exit-Mechanik ---- */
@@ -1186,7 +1208,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
                   const d = (market[s] / SECTORS[s].m - 1) * 100;
                   return (
                     <tr key={s}>
-                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{s}</td>
+                      <td className="lab"><i className="sdot" style={{ background: SECCOLOR[s] }} />{SECLABEL[s]}</td>
                       <td>{x(market[s])}
                         <span style={{ color: d >= 0 ? "var(--teal)" : "var(--ox)", fontSize: 11 }}>
                           {" "}{d >= 0 ? "▲" : "▼"} {Math.abs(Math.round(d))} %
