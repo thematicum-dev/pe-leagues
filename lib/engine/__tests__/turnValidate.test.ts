@@ -46,7 +46,9 @@ describe("Abgaben in beliebiger Form", () => {
   it("bringen die Auswertung nie zum Werfen und nie zu NaN", () => {
     const fails: string[] = [];
     for (let seed = 1; seed <= 12; seed++) {
-      let { rng, state } = start(seed);
+      const s0 = start(seed);
+      const rng = s0.rng;
+      let state = s0.state;
       const jr = createRng(seed * 101);
       for (let hy = 1; hy <= PERIODS; hy++) {
         const refs = [...(state.deals as Any[]).map((d) => d.id), ...state.funds.flatMap((f) => (f.holdings as Any[]).map((h) => h.uid))];
@@ -67,7 +69,6 @@ describe("Abgaben in beliebiger Form", () => {
         if (JSON.stringify(state).includes("NaN") || /NaN|Infinity/.test(JSON.stringify(state, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? "NaN" : v))))
           fails.push(`Seed ${seed} HJ ${hy}: nicht endliche Zahl im Zustand`);
       }
-      void rng;
     }
     expect(fails).toEqual([]);
   });
