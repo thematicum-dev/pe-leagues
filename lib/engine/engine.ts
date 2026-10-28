@@ -2769,9 +2769,18 @@ export function unrealizedOut(c, market, net = 0, soldShare = 1) {
 
      Ohne `uClose` (Beteiligungen aus älteren Partien) bleibt es beim alten
      Verhalten: Dann ist `atStart` der volle Stand, und die Spalte rechnet wie
-     vorher.                                                                 */
+     vorher.
+
+     `uOpen` ist derselbe Stand, aber schon ohne das bis dahin Verkaufte, und
+     jede Realisierung im Halbjahr zieht ihren Teil davon ab (takeUnrealized).
+     Bis zum 28.10.2026 wurde stattdessen `uSold` vom Schlussstand abgezogen —
+     auch das, was ein Teilexit im selben Halbjahr gerade erst hinzugefügt
+     hatte, samt dem vorweggenommenen NAV-Abgang. Ging eine Beteiligung im
+     selben Halbjahr erst an die Börse und dann in die Tail-End-Verwertung,
+     stand in der Halbjahresspalte des Endstands "Unrealisiert, Übriges
+     +31,2" bei leerem Portfolio und "Realisiert, Übriges −31,5" daneben.   */
   const close = c.uClose || ch;
-  const offenClose = {
+  const offenClose = c.uOpen || {
     ebitda: close.ebitda - (sold.ebitda || 0),
     mult: close.mult - (sold.mult || 0),
     delev: close.delev - (sold.delev || 0),
@@ -2806,6 +2815,12 @@ export function unrealizedOut(c, market, net = 0, soldShare = 1) {
 export function closeUnrealized(c) {
   const ch = bridgeChain(c.hist || [], null);
   c.uClose = { ebitda: ch.ebitda, mult: ch.mult, delev: ch.delev, rest: ch.rest };
+  // Was davon noch im unrealisierten Block steht (siehe unrealizedOut)
+  const sold = c.uSold || {};
+  c.uOpen = {
+    ebitda: ch.ebitda - (sold.ebitda || 0), mult: ch.mult - (sold.mult || 0),
+    delev: ch.delev - (sold.delev || 0), rest: ch.rest - (sold.rest || 0),
+  };
   return c.uClose;
 }
 
@@ -2829,6 +2844,13 @@ export function takeUnrealized(c, market, net = 0, soldShare = 1) {
     delev: (sold.delev || 0) + u.delev,
     rest: (sold.rest || 0) + u.rest + abgang,
   };
+  if (c.uOpen) {
+    const a = u.atStart;
+    c.uOpen = {
+      ebitda: c.uOpen.ebitda - a.ebitda, mult: c.uOpen.mult - a.mult,
+      delev: c.uOpen.delev - a.delev, rest: c.uOpen.rest - a.rest,
+    };
+  }
   return u;
 }
 

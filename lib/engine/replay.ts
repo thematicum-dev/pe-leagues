@@ -83,8 +83,9 @@ export function rngStepBack(seed: number, steps = 1): number {
    mit, nicht mehr nur der Schlussverkauf. Ein Spielstand von vorher kennt sie
    an einem Covenant Breach oder Teilexit nicht, und sie geht in keine Formel
    ein — sie zu vergleichen hieße, alte Partien wegen einer Anzeige zu
-   verwerfen.                                                                */
-const RECORDING_KEYS = new Set(["fin", "per", "off", "nwcBal", "bridge"]);
+   verwerfen. uOut und uOpen aus demselben Grund: reine Anzeige der Value
+   Bridge, seit dem 28.10.2026 anders gerechnet (siehe unrealizedOut).       */
+const RECORDING_KEYS = new Set(["fin", "per", "off", "nwcBal", "bridge", "uOut", "uOpen"]);
 
 /* Tiefer Vergleich zweier Spielstände. Zahlen exakt, Schlüsselreihenfolge egal,
    fehlende und undefinierte Felder gleichwertig — ein Zustand aus der Datenbank
