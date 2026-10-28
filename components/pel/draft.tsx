@@ -385,20 +385,28 @@ export function Draft({ item, holding, analysis, hire, reject }: Any) {
   const [cur, setCur] = useState(0);
   const [flip, setFlip] = useState<Record<number, boolean>>({});
   const cards = item.cands;
+  /* Abstand einer Karte zur Mitte des Decks, im Bildschirm gemessen. Bis zum
+     28.10.2026 rechnete das mit offsetLeft. Das bezieht sich aber auf das
+     Modal, nicht auf das Deck: Am Handy beginnt das Sheet bei x = 0 und es
+     passte, am PC steht es mittig, alles war um den Rand verschoben — der
+     Knopf hirte eine andere Karte als die gezeigte, die letzte nie.      */
+  const offMid = (el: HTMLElement, s: Element) => {
+    const r = el.getBoundingClientRect(), c = s.getBoundingClientRect();
+    return c.left + c.width / 2 - (r.left + el.clientLeft + el.clientWidth / 2);
+  };
   const onScroll = () => {
     const el = deck.current;
     if (!el) return;
-    const mid = el.scrollLeft + el.clientWidth / 2;
     let best = 0, bd = 1e9;
-    Array.from(el.children).forEach((s: Any, i) => {
-      const d = Math.abs(s.offsetLeft + s.offsetWidth / 2 - mid);
+    Array.from(el.children).forEach((s, i) => {
+      const d = Math.abs(offMid(el, s));
       if (d < bd) { bd = d; best = i; }
     });
     if (best !== cur) { setCur(best); haptic("select"); }
   };
   const go = (i: number) => {
-    const el = deck.current, s = el && (el.children[i] as HTMLElement);
-    if (el && s) el.scrollTo({ left: s.offsetLeft - (el.clientWidth - s.offsetWidth) / 2, behavior: "smooth" });
+    const el = deck.current, s = el && el.children[i];
+    if (el && s) el.scrollTo({ left: el.scrollLeft + offMid(el, s), behavior: "smooth" });
   };
   const k = cards[cur];
   const team = useMemo(() => (holding && holding.mx ? holding : null), [holding]);
@@ -583,6 +591,13 @@ export const DRAFT_CSS = `
   scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
 .pel .ddeck::-webkit-scrollbar{display:none;}
 .pel .dslot{flex:0 0 84%;max-width:340px;scroll-snap-align:center;perspective:1400px;}
+/* Im vollen Sheet (520 px) schlägt die Karte bei 340 px an. Mit 8 % Rand
+   ließe sich die letzte dann nicht mehr mittig stellen: Der Rand muss bis
+   zur Mitte reichen, (520 − 340) / 2. */
+@media (min-width:560px){
+  .pel .ddeck{padding-left:90px;padding-right:90px;}
+  .pel .dslot{flex-basis:340px;}
+}
 .pel .dsolo{display:flex;justify-content:center;padding:12px 16px 0;perspective:1400px;}
 .pel .dsolo .dcard{width:min(340px, 100%);}
 .pel .ddots{display:flex;justify-content:center;gap:6px;padding-top:6px;}
