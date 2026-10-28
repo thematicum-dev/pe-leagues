@@ -28,11 +28,12 @@ import {
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, RECYCLE_CAP, RESERVE_PROC, RESERVE_PROP, SECNAMES,
   SECTORS, TVCC_BENCH, DD_COST,
   carryOf, cashflowsOf, clamp, dpiOf, ebitdaOf, fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS,
-  irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf, INITS,
+  irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf,
 } from "../engine";
 import { holdingStatements } from "../financials";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
 import type { RuntimeFund, RuntimeState, TurnDecisions } from "../turnTypes";
+import { decide, type Strategy } from "./pilotStrategies";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -53,7 +54,6 @@ function aiFund(slot: number, key: string): RuntimeFund {
   return { ...humanFund(slot), profileId: null, isAi: true, archetype: key, name: a.name, attrs: { ...a.attrs } } as Any;
 }
 
-type Strategy = "aggr" | "over" | "kons" | "chaos" | "passiv";
 interface Setup { seed: number; slots: (Strategy | "ki")[]; attrs?: Record<number, typeof DEFAULT_HUMAN_ATTRS> }
 
 function newSeason(s: Setup) {
@@ -67,101 +67,6 @@ function newSeason(s: Setup) {
   const boot = bootstrapInitialDeals(rng, state.market, state.funds);
   state = { ...state, deals: boot.deals, landmark: boot.landmark };
   return { rng, state };
-}
-
-/* ---------- Spielweisen ----------
-   Jede Spielweise sieht nur, was auch die Oberfläche zeigt (Zustand des
-   eigenen Fonds, Dealflow, offene Gebote und Shortlists) und zieht ihre
-   Zufallszahlen aus einem eigenen Strom — der Zufallsstrom der Partie bleibt
-   unberührt, wie auf dem Server. */
-function decide(kind: Strategy, state: RuntimeState, slot: number, hy: number, srng: ReturnType<typeof createRng>): TurnDecisions | null {
-  if (kind === "passiv") return null;
-  const me = state.funds.find((f) => f.slot === slot)! as Any;
-  const H = me.holdings as Any[];
-  const deals = state.deals as Any[];
-  const queue = (state.exitQueue[String(slot)] || []) as Any[];
-  const lists = (state.shortlist[String(slot)] || []) as Any[];
-  const d: TurnDecisions = {};
-  const byQuality = [...deals].sort((a, b) => b.quality - a.quality);
-
-  if (kind === "aggr" || kind === "over") {
-    // Beide bieten auf dieselben Deals — "over" immer ein Stück höher
-    const targets = byQuality.slice(0, 2);
-    if (H.length < MAX_SLOTS && hy <= 14) {
-      d.bids = targets.map((x) => ({
-        dealId: x.id, multiple: x.askMult * (kind === "over" ? 1.09 : 1.06),
-        leverage: x.levCap * (kind === "over" ? 0.7 : 1.0),
-      }));
-      d.dueDiligence = targets.slice(0, ddCapOf(me.attrs.analysis)).map((x) => x.id);
-    }
-    d.initiatives = [];
-    H.forEach((c) => {
-      if (!c.initP) d.initiatives!.push({ holdingUid: c.uid, dim: "plat", id: kind === "aggr" ? "opex" : "nwc" });
-      if (!c.initA) d.initiatives!.push(kind === "aggr"
-        ? { holdingUid: c.uid, dim: "acc", id: "ma", equity: 5 }
-        : { holdingUid: c.uid, dim: "acc", id: "pen" });
-    });
-    d.ltip = H.filter((c) => !c.ltip).map((c) => c.uid);
-    d.exitStarts = H.filter((c) => c.holdQ >= MIN_HOLD && !c.proc && !c.lockUntil && !(c.block > hy))
-      .slice(0, 2).map((c) => ({ holdingUid: c.uid, action: kind === "aggr" ? "process" : "bilateral", keepPct: 0.3 } as Any));
-    d.offerDecisions = queue.map((it) => ({ holdingUid: it.holdingUid, choice: "accept" as const, offerIndex: 0, keepPct: 0.5 }));
-    d.hires = lists.map((it) => ({ holdingUid: it.holdingUid, seat: it.seat, choice: "c0" as const }));
-    d.searches = H.flatMap((c) => (["ceo", "cfo", "r3"] as const)
-      .filter((s) => c[s].skill > 0 && c[s].skill < 2.4 && !(c.searches || []).some((z: Any) => z.seat === s))
-      .slice(0, 1).map((s) => ({ holdingUid: c.uid, seat: s })));
-    if (kind === "over") {
-      // Equity Cure, wenn der Covenant eng wird
-      d.equityInjections = H.filter((c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? 6) - 0.3)
-        .map((c) => ({ holdingUid: c.uid, amount: 0.5 * ebitdaOf(c) }));
-    }
-    return d;
-  }
-
-  if (kind === "kons") {
-    const cheap = [...deals].sort((a, b) => a.askMult - b.askMult)[0];
-    if (cheap && H.length < 4) d.bids = [{ dealId: cheap.id, multiple: cheap.askMult * (hy % 3 === 0 ? 0.8 : 1.0), leverage: cheap.levCap * 0.5 }];
-    d.studies = H.filter((c) => !c.dd).map((c) => c.uid);
-    d.exitStarts = H.filter((c) => c.holdQ >= 8 && !c.proc && !c.lockUntil)
-      .map((c) => ({ holdingUid: c.uid, action: "bilateral", keepPct: 0 } as Any));
-    d.offerDecisions = queue.map((it) => ({ holdingUid: it.holdingUid, choice: "reneg" as const, offerIndex: 1 }));
-    // Erst ablehnen, beim nächsten Mal nehmen
-    d.hires = lists.map((it) => ({ holdingUid: it.holdingUid, seat: it.seat, choice: (hy % 2 ? "reject" : "c1") as Any }));
-    d.initiatives = H.filter((c) => !c.initP).map((c) => ({ holdingUid: c.uid, dim: "plat" as const, id: "erp" }));
-    return d;
-  }
-
-  // chaos: zufällig, auch ungültig und feindlich
-  const pick = <T,>(xs: T[]) => xs[Math.floor(srng.rnd() * xs.length)];
-  const anyDeal = deals.length ? pick(deals) : null;
-  const junkNum = () => pick([NaN, -5, 0, 1e9, Infinity, -Infinity, 0.5, 3, 12, "7" as Any, null as Any]);
-  d.bids = [];
-  if (anyDeal) {
-    d.bids.push({ dealId: anyDeal.id, multiple: anyDeal.askMult * (0.7 + srng.rnd() * 0.6), leverage: anyDeal.levCap * srng.rnd() });
-    d.bids.push({ dealId: anyDeal.id, multiple: junkNum(), leverage: junkNum() });          // doppelt, ungültig
-  }
-  d.bids.push({ dealId: "gibt-es-nicht", multiple: 10, leverage: 3 });
-  d.dueDiligence = [...deals.map((x) => x.id), "gibt-es-nicht", deals[0]?.id].filter(Boolean) as string[];
-  const someH = H.length ? pick(H) : null;
-  const uid = someH ? someH.uid : "weg";
-  d.studies = [uid, uid];
-  d.ltip = [uid, "weg"];
-  d.searches = [{ holdingUid: uid, seat: pick(["ceo", "cfo", "r3"]) as Any }];
-  d.hires = lists.map((it) => ({ holdingUid: it.holdingUid, seat: it.seat, choice: pick(["c0", "c4", "veteran", "aplayer", "development", "reject", "c9"]) as Any }));
-  d.equityInjections = [{ holdingUid: uid, amount: junkNum() }, { holdingUid: uid, amount: 1e6 }];
-  const ids = [...INITS.plat.map((p: Any) => p.id), ...INITS.acc.map((p: Any) => p.id), "foo"];
-  d.initiatives = H.map((c) => ({
-    holdingUid: c.uid, dim: pick(["plat", "acc"]) as Any, id: pick(ids),
-    ...(srng.rnd() < 0.5 ? { equity: junkNum(), addEb: junkNum(), maxMult: junkNum() } : {}),
-  }));
-  // Exits auch vor der Mindesthaltedauer und mit unsinnigem Anteil
-  d.exitStarts = H.filter(() => srng.rnd() < 0.25).map((c) => ({
-    holdingUid: c.uid, action: pick(["process", "bilateral", "cv", "ipo", "verschenken"]) as Any, keepPct: junkNum(),
-  }));
-  d.offerDecisions = queue.map((it) => ({
-    holdingUid: it.holdingUid, choice: pick(["accept", "reneg", "abort", "egal"]) as Any,
-    offerIndex: pick([0, 1, 2, 5, -1, undefined as Any]), keepPct: junkNum(),
-  }));
-  return d;
 }
 
 /* ---------- Hilfen ---------- */
@@ -526,6 +431,27 @@ describe("Testprotokoll Mehrspieler — Engine", () => {
       expect(b.violations).toEqual([]);
       expect(JSON.stringify(jsonb(b.state))).toBe(JSON.stringify(jsonb(a.state)));
     });
+  });
+
+  /* start_season() vergibt Startwerte bis 2^63. Bis zum 29.10.2026 fielen sie
+     im Generator auf vier Zufallsströme zusammen — jede Partie sah eine von
+     vier Dealfolgen. */
+  it("gibt verschiedenen 64-Bit-Startwerten verschiedene Partien", () => {
+    const r = createRng(424242);
+    const firsts = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      /* wie floor(random() * 9223372036854775807) in SQL, als Zahl gelesen:
+         random() hat 52 Zufallsbits, hier aus zwei Ziehungen zusammengesetzt */
+      const frac = (Math.floor(r.rnd() * 2 ** 26) * 2 ** 26 + Math.floor(r.rnd() * 2 ** 26)) / 2 ** 52;
+      const seed = Math.floor(frac * 9223372036854775807);
+      const g = createRng(seed);
+      firsts.add([g.rnd(), g.rnd()].map((x) => x.toFixed(9)).join("/"));
+    }
+    expect(firsts.size).toBeGreaterThan(195);
+    // und der Deal-Fluss zweier Partien unterscheidet sich
+    const a = newSeason({ seed: 5000000000000000000, slots: MIXES[0].slots }).state.deals as Any[];
+    const b = newSeason({ seed: 7000000000000000000, slots: MIXES[0].slots }).state.deals as Any[];
+    expect(a.map((d) => d.name)).not.toEqual(b.map((d) => d.name));
   });
 
   it("ist deterministisch: zweimal dieselbe Partie, derselbe Endstand", () => {

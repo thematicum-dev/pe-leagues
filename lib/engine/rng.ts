@@ -28,7 +28,13 @@ export interface Rng {
 }
 
 export function createRng(seed: number): Rng {
-  let s = seed;
+  /* Zuerst in den Zustandsraum des Generators. start_season() vergibt einen
+     64-Bit-Startwert; mit ihm unverändert gerechnet, verlor s * LCG_A als
+     Gleitkommazahl seine unteren Stellen, und die erste Ziehung war immer 0,
+     0,25, 0,5 oder 0,75. Bis zum 29.10.2026 hatte jede Mehrspielerpartie
+     damit einen von nur vier Zufallsströmen: dieselben Deals, dieselben
+     Märkte. Startwerte unter 2^32 bleiben unverändert. */
+  let s = ((Math.trunc(seed) % LCG_M) + LCG_M) % LCG_M;
   let n = 0;
 
   function rnd(): number {
