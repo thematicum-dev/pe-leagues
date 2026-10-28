@@ -651,6 +651,43 @@ describe("Value Bridge des Fonds", () => {
      Geprüft wird die Aussage in ihrer schärfsten Form: Geht das Portfolio in
      einem Halbjahr auf null, ist im unrealisierten Block dieses Halbjahres
      nichts mehr zu erklären. */
+  /* Dasselbe am Laufzeitende, und mit Teilexits. Ging eine Beteiligung im
+     letzten Halbjahr erst an die Börse und dann in die Tail-End-Verwertung,
+     zog die zweite Realisierung den NAV-Abgang der ersten noch einmal ab: Im
+     Endstand stand bis zum 28.10.2026 "Unrealisiert, Übriges +31,2" bei leerem
+     Portfolio, daneben "Realisiert, Übriges −31,5". */
+  it("zeigt im letzten Halbjahr nichts Unrealisiertes, auch nach Teilexits", () => {
+    let geprueft = 0;
+    for (const seed of SEEDS) {
+      const rng = createRng(seed);
+      let state = baseState();
+      const boot = bootstrapInitialDeals(rng, state.market, state.funds);
+      state = { ...state, deals: boot.deals, landmark: boot.landmark };
+      for (let hy = 1; hy < PERIODS; hy++) {
+        const decisions = decideForHuman(state, hy, state.exitQueue[String(HUMAN_SLOT)]);
+        state = runQuarter({ state, halfYear: hy, decisionsBySlot: { [HUMAN_SLOT]: decisions }, rng }).state;
+      }
+      const me = state.funds[HUMAN_SLOT] as Any;
+      const bWas = fundBridge(me, state.market, PERIODS - 1);
+      // Im letzten Halbjahr alles, was geht, an die Börse — der Rest geht in die Tail-End-Verwertung
+      const ipo = (me.holdings as Any[]).filter((h) => !h.proc && !h.lockUntil);
+      if (!ipo.length) continue;
+      state = runQuarter({ state, halfYear: PERIODS, rng, decisionsBySlot: {
+        [HUMAN_SLOT]: { exitStarts: ipo.map((h) => ({ holdingUid: h.uid, action: "ipo", keepPct: 0 } as Any)) },
+      } }).state;
+      const f = state.funds[HUMAN_SLOT] as Any;
+      expect((f.realized as Any[]).some((r) => / \(IPO\)$/.test(r.name))).toBe(true);
+      const step = fundBridgeStep(fundBridge(f, state.market, PERIODS), bWas)!;
+      for (const k of ["uEbitda", "uMult", "uDelev", "uRest"]) {
+        expect(Math.abs(step[k]), `Seed ${seed}: ${k} im letzten Halbjahr`).toBeLessThan(0.01);
+      }
+      expect(FUND_BRIDGE_PARTS.reduce((a: number, k: string) => a + (step[k] || 0), 0),
+        `Seed ${seed}: Summe der Posten`).toBeCloseTo(step.gain, 6);
+      geprueft++;
+    }
+    expect(geprueft, "keine Beteiligung im letzten Halbjahr an die Börse gebracht").toBeGreaterThan(1);
+  });
+
   it("lässt nichts Unrealisiertes stehen, wenn das Portfolio leer wird", () => {
     let geprueft = 0;
     for (const seed of [7, 99, 31337, 555, 4242, 2026]) {
