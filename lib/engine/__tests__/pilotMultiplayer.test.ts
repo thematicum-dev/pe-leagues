@@ -26,9 +26,9 @@ import { createRng } from "../rng";
 import {
   ARCHES, CAPITAL, CARRY, DEFAULT_HUMAN_ATTRS, INVEST_PERIOD, IRR_BENCH, IRR_CAP, IRR_FLOOR,
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, RECYCLE_CAP, RESERVE_PROC, RESERVE_PROP, SECNAMES,
-  SECTORS, TVCC_BENCH, DD_COST, ENTRY_FEE,
+  SECTORS, TVCC_BENCH, DD_COST,
   carryOf, cashflowsOf, clamp, dpiOf, ebitdaOf, fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS,
-  investableOf, irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf, INITS,
+  irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf, INITS,
 } from "../engine";
 import { holdingStatements } from "../financials";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
@@ -208,7 +208,9 @@ interface Stats {
 }
 
 function playSeason(s: Setup, opts: { roundtrip?: boolean } = {}) {
-  let { rng, state } = newSeason(s);
+  const season = newSeason(s);
+  const rng = season.rng;
+  let state = season.state;
   const violations: string[] = [];
   const v = (msg: string) => { if (violations.length < 200) violations.push(`[Seed ${s.seed}] ${msg}`); };
   const stats: Stats = {

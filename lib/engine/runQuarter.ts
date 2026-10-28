@@ -38,6 +38,7 @@ import {
   liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
+import { sanitizeDecisions } from "./turnValidate.ts";
 
 type Archetype = (typeof ARCHES)[number];
 function archetypeByKey(key: string): Archetype {
@@ -514,7 +515,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => (f.holdings as Any[]).forEach((c) => closeUnrealized(c)));
   const exitQueueBySlot: Record<string, ExitQueueItem[]> = { ...input.state.exitQueue };
   const shortlistBySlot: Record<string, ShortlistItem[]> = { ...input.state.shortlist };
-  const decisionsBySlot = input.decisionsBySlot;
+  // Jede Abgabe zuerst in die erwartete Form (siehe turnValidate.ts)
+  const decisionsBySlot: Record<number, TurnDecisions> = {};
+  Object.entries(input.decisionsBySlot || {}).forEach(([slot, d]) => { decisionsBySlot[Number(slot)] = sanitizeDecisions(d); });
   const compat: EngineCompat = input.compat ?? {};
 
   // 0 — Due-Diligence-Kosten für den aktuellen Dealflow verrechnen
