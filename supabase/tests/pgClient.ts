@@ -102,7 +102,8 @@ export function clientAs(role: "service_role" | "authenticated" | "anon", sub: s
 }
 
 // Die Signatur von supabase-js: der Service-Schlüssel ergibt service_role
-export function createClient(_url: string, _key: string, _opts?: unknown) {
+export function createClient(...args: [url: string, key: string, opts?: unknown]) {
+  void args;
   return clientAs("service_role");
 }
 export type SupabaseClient = ReturnType<typeof createClient>;
