@@ -369,6 +369,14 @@ export interface EngineCompat {
   /* Bis 28.10.2026 lag die Mindesthaltedauer bei sechs Halbjahren statt
      MIN_HOLD; die KI-Fonds verkauften entsprechend später (runQuarter, KI-Exits). */
   legacyMinHold?: boolean;
+  /* Bis 29.10.2026 prüfte die Auswertung einige Regeln nur in der Ansicht und
+     nicht an der Abgabe: Exits vor der Mindesthaltedauer und Due Diligence
+     über dem Kontingent gingen durch. Ein Gebot, das am vollen Portfolio
+     scheiterte, verschwand ohne Meldung; offene Gebote und Shortlists blieben
+     stehen, wenn die Beteiligung schon verkauft war; und das Gebot eines
+     Finanzinvestors konnte den Namen des Verkäufers selbst oder eines
+     menschlichen Mitspielers tragen (siehe makeOffers).                     */
+  legacyLaxTurnChecks?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -377,7 +385,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
   legacyDealSize: true, legacyCandidates: true, legacyMgmt: true, legacyReplaceSearch: true,
-  legacyMinHold: true,
+  legacyMinHold: true, legacyLaxTurnChecks: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -1808,7 +1816,16 @@ export const PROC_Q = 2;           // Dauer eines Verkaufsprozesses in Halbjahre
 export const IPO_EBITDA = 25;      // Mindest-EBITDA für ein Börsenfenster
 
 // Gebote am Ende eines Verkaufsprozesses
-export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: number; holdings: unknown[] }[], neg, q) {
+/* `seller` ist der verkaufende Fonds. Ohne ihn gilt die alte Regel des
+   Übungsmodus (Platz 0 ist der Spieler, alle anderen sind Kandidaten). Mit ihm
+   bietet nie der Verkäufer selbst und nie ein menschlicher Mitspieler: Ein
+   Secondary Buyout wird nicht vollzogen — die Beteiligung landet nicht im
+   Portfolio des Käufers, und dessen Kapital bleibt unberührt. Unter dem Namen
+   eines Mitspielers hätte das Gebot behauptet, er habe geboten. Gibt es keinen
+   KI-Fonds mit Kapital, bietet ein Finanzinvestor von außerhalb der Kohorte,
+   damit die Zahl der Gebote nicht von der Besetzung der Partie abhängt. */
+export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: number; holdings: unknown[]; isAi?: boolean }[], neg, q,
+  seller: unknown = null) {
   const fair = fairOf(c, market, neg, q);
   const out = [];
   const fit = rng.rnd() < 0.6;
@@ -1818,11 +1835,12 @@ export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: num
     risk: 0.12,
     note: fit ? "Synergien im Kerngeschäft, aber Fusionskontrolle offen" : "Fremder Sektor, rein finanzgetriebenes Interesse",
   });
-  const sponsors = funds.filter((f, i) => i > 0 && f.cash > fair * 0.9 && f.holdings.length < MAX_SLOTS);
-  if (sponsors.length) {
-    const s = rng.pick(sponsors);
+  const sponsors = funds.filter((f, i) => (seller ? f !== seller && f.isAi : i > 0)
+    && f.cash > fair * 0.9 && f.holdings.length < MAX_SLOTS);
+  if (sponsors.length || seller) {
+    const buyer = sponsors.length ? rng.pick(sponsors).name : "Finanzinvestor";
     out.push({
-      buyer: s.name, kind: "sponsor", price: fair * (0.90 + rng.rnd() * 0.12), risk: 0,
+      buyer, kind: "sponsor", price: fair * (0.90 + rng.rnd() * 0.12), risk: 0,
       note: "Secondary Buyout — sieht nur die veröffentlichten Kennzahlen",
     });
   }
@@ -2132,8 +2150,16 @@ export function applyProceeds(f, net, costBasis, quarter, keep = 0, compat: Engi
   }
 }
 
-// Wert in den Händen der Investoren: ausgeschüttet + NAV + noch nicht reinvestierte Erlöse
-export const totalValueOf = (f, market) => (f.distTotal || 0) + navOf(f, market) + (f.recyc || 0);
+/* Wert in den Händen der Investoren: ausgeschüttet + NAV + noch nicht
+   reinvestierte Erlöse. Aufgelaufene, unbezahlte Gebühren (siehe spendFund)
+   werden mit der nächsten Ausschüttung verrechnet — sie mindern also, was aus
+   NAV und einbehaltenen Erlösen noch zurückfließt, aber nie darunter: Über das
+   Commitment hinaus zahlen die Investoren nichts. Am Laufzeitende, ohne NAV,
+   verfällt der Rest. Bis zum 29.10.2026 zählte die Verbindlichkeit gar nicht,
+   und ein Fonds mit ausgeschöpftem Commitment stand während der Laufzeit um
+   die offenen Gebühren zu gut da. */
+const openValueOf = (f, market) => Math.max(0, navOf(f, market) + (f.recyc || 0) - (f.accrued || 0));
+export const totalValueOf = (f, market) => (f.distTotal || 0) + openValueOf(f, market);
 export const drawnOf = (f) => Math.max(1, f.drawn || 0);
 export const rvpiOf = (f, market) => navOf(f, market) / drawnOf(f);
 // Brutto-MOIC auf Dealebene: misst Auswahl und Wertsteigerung, nicht das Deployment
@@ -2217,7 +2243,8 @@ export function cashflowsOf(f, market, quarter) {
   const add = (q: number, v: number) => byQ.set(q, (byQ.get(q) || 0) + v);
   (f.calls || []).forEach((c) => add(c.q, -c.amt));
   (f.dists || []).forEach((d) => add(d.q, d.amt * drag));
-  const terminal = (navOf(f, market) + (f.recyc || 0)) * drag;
+  // Dieselbe Verrechnung wie in totalValueOf: Offene Gebühren mindern die Schlusszahlung
+  const terminal = openValueOf(f, market) * drag;
   if (terminal > 0) add(quarter, terminal);
   /* Ein Halbjahr, in dem sich Abruf und Ausschüttung genau aufheben, ist keine
      Zahlung und gehört nicht in die Reihe — sonst bestünde die Reihe eines

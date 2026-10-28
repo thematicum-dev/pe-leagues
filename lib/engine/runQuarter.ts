@@ -32,7 +32,7 @@ import {
   botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
+  recycleRoom, dealMoic, clamp, ddCostOf, ddCapOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
   liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
@@ -343,6 +343,8 @@ function applyImmediateDecisions(
   (decisions.exitStarts || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c || c.proc || c.lockUntil) return;
+    // Die Mindesthaltedauer gilt auch für eine Abgabe, die an der Ansicht vorbeikommt
+    if (!compat.legacyLaxTurnChecks && c.holdQ < MIN_HOLD) return;
     /* Die Sperre nach einem abgebrochenen Prozess gilt nur für den nächsten
        Prozess — bilateral bleibt möglich, wie die Karte sagt und wie der
        Übungsmodus es immer gehalten hat. Bis zum 18.10.2026 verwarf diese
@@ -520,7 +522,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     if (f.isAi) return;
     const decisions = decisionsBySlot[f.slot] || {};
-    const ids = new Set((decisions.dueDiligence || []).filter((id) => deals.some((d) => d.id === id)));
+    let ids = new Set((decisions.dueDiligence || []).filter((id) => deals.some((d) => d.id === id)));
+    // Das Kontingent je Halbjahr, wie es die Deal-Karte zählt (ddCapOf)
+    if (!compat.legacyLaxTurnChecks) ids = new Set([...ids].slice(0, ddCapOf(f.attrs.analysis)));
     ddBySlot[f.slot] = ids;
     ids.forEach((id) => {
       const deal = deals.find((d) => d.id === id);
@@ -552,7 +556,16 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
        scheiterte. Drei verschiedene Lehren, eine leere Zeitung.            */
     const humanBids: { f: RuntimeFund; mult: number; reason?: string }[] = [];
     F.forEach((f, i) => {
-      if (f.holdings.length >= MAX_SLOTS) return;
+      if (f.holdings.length >= MAX_SLOTS) {
+        /* Auch das gehört in die Meldungen: Wer mit fünf Beteiligungen auf zwei
+           Deals bietet und den ersten gewinnt, hat für den zweiten keinen Platz
+           mehr. Bis zum 29.10.2026 fiel dieses Gebot wortlos weg. */
+        if (!f.isAi && !compat.legacyLaxTurnChecks
+          && ((decisionsBySlot[f.slot] || {}).bids || []).some((b) => b.dealId === d.id)) {
+          humanBids.push({ f, mult: 0, reason: "voll" });
+        }
+        return;
+      }
       if (!f.isAi) {
         const decisions = decisionsBySlot[f.slot] || {};
         const bid = (decisions.bids || []).find((b) => b.dealId === d.id);
@@ -586,7 +599,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const tellBidders = (winner: RuntimeFund | null, winMult: number) => {
       humanBids.forEach((b) => {
         if (winner && b.f.slot === winner.slot) return;
-        if (b.reason === "kapital") {
+        if (b.reason === "voll") {
+          pushFeed(news, q, "🏦", "neg",
+            `Gebot für ${d.name} nicht berücksichtigt: Dein Portfolio ist mit ${MAX_SLOTS} Beteiligungen voll.`, b.f.slot);
+        } else if (b.reason === "kapital") {
           pushFeed(news, q, "🏦", "neg",
             `Gebot für ${d.name} nicht abgegeben: Das Eigenkapital bei ${x(b.mult)} übersteigt dein investierbares Kapital `
             + `von ${eur(investableOf(b.f, q))}. Weniger bieten oder mehr Fremdkapital einsetzen.`, b.f.slot);
@@ -849,7 +865,14 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       c.revenue *= 1 - 0.12 * stress;
       c.margin -= 1.5 * stress;
       c.drift = (c.drift || 0) - 1.0;
+      const was = c.breach || 0;
       c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
+      /* Der Abschwung kommt nach der Covenant-Prüfung des Halbjahres. Reißt der
+         Covenant erst hier, vollstrecken die Kreditgeber schon im nächsten
+         Halbjahr — bis zum 29.10.2026 ohne jede Vorwarnung im Feed. */
+      if (!f.isAi && was === 0 && c.breach > 0 && !compat.legacyLaxTurnChecks) {
+        pushFeed(news, q, "⚠️", "neg", `${c.name} reißt nach dem Sektorabschwung den Covenant. Ohne Equity Cure folgt im nächsten Halbjahr das Enforcement.`, f.slot);
+      }
     }));
     pushFeed(news, q, "📉", "neg", `Sektorabschwung in ${SECLABEL[s]}: Multiple-Kontraktion, Umsätze brechen ein.`);
   }
@@ -893,7 +916,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       if (c.proc && q >= c.proc.resolveQ) {
         resolved.push({
           holdingUid: c.uid, name: c.name,
-          offers: makeOffers(rng, c, mk, F as Any, f.attrs.negotiation, q),
+          offers: makeOffers(rng, c, mk, F as Any, f.attrs.negotiation, q, compat.legacyLaxTurnChecks ? null : f),
         });
         c.proc = null;
       }
@@ -962,6 +985,19 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   }
   if (!landmark && q < LM_ANNOUNCE) {
     landmark = newLandmark(rng, mk);
+  }
+
+  /* Offene Gebote und Shortlists gehören zu Beteiligungen, die es noch gibt.
+     Wer eine Beteiligung verkauft, während dort eine Shortlist wartet, sah
+     sie bis zum 29.10.2026 im nächsten Halbjahr trotzdem. */
+  if (!compat.legacyLaxTurnChecks) {
+    F.forEach((f) => {
+      if (f.isAi) return;
+      const key = String(f.slot);
+      const has = (uid: string) => (f.holdings as Any[]).some((h) => h.uid === uid);
+      if (exitQueueBySlot[key]) exitQueueBySlot[key] = exitQueueBySlot[key].filter((it) => has(it.holdingUid));
+      if (shortlistBySlot[key]) shortlistBySlot[key] = shortlistBySlot[key].filter((it) => has(it.holdingUid));
+    });
   }
 
   let finalFunds = F;
