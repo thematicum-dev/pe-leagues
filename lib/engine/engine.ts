@@ -366,6 +366,9 @@ export interface EngineCompat {
      fällt sofort an, und die Position ist bis zur Verpflichtung vakant
      (siehe vacateForSearch).                                               */
   legacyReplaceSearch?: boolean;
+  /* Bis 28.10.2026 lag die Mindesthaltedauer bei sechs Halbjahren statt
+     MIN_HOLD; die KI-Fonds verkauften entsprechend später (runQuarter, KI-Exits). */
+  legacyMinHold?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -374,6 +377,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
   legacyDealSize: true, legacyCandidates: true, legacyMgmt: true, legacyReplaceSearch: true,
+  legacyMinHold: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -586,7 +590,7 @@ export const CAPITAL = 500;
    sie umverteilen; sie ist der Startwert, nicht die Obergrenze.          */
 export const DEFAULT_HUMAN_ATTRS = { sourcing: 2, analysis: 3, negotiation: 2, operations: 3, financing: 2 };
 export const PERIODS = 20;         // 10 Jahre in Halbjahresschritten
-export const MIN_HOLD = 6;         // Mindesthaltedauer: 3 Jahre
+export const MIN_HOLD = 4;         // Mindesthaltedauer: 2 Jahre (bis 28.10.2026: 3 Jahre)
 /* Zielgrößen skalieren mit dem Fondsvolumen. Ein 500-Mio.-Fonds, der dieselben
    Unternehmen kauft wie ein 300-Mio.-Fonds, bekommt sein Kapital nicht investiert:
    Bei fünf Slots und im Schnitt 69 Mio. € Eigenkapital je Deal sind höchstens

@@ -26,7 +26,7 @@ import type { Rng } from "./rng.ts";
 import {
   SECTORS, SECNAMES, ARCHES, AI_PLAN, MAX_SLOTS, INIT_SLOTS, ENTRY_FEE, BASE_RATE, COV_FLOOR, COV_HEADROOM,
   COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
-  RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
+  RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, MIN_HOLD, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
   ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, candOfChoice, EVENTS, maturePeople, buildInit, initsOf,
   botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
@@ -927,7 +927,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       const irr = Math.pow(Math.max(0.05, mo), 2 / Math.max(1, c.holdQ)) - 1;
       const hurdle = a.key === "fin" ? 0.18 : a.key === "ops" ? 0.22 : 0.20;
       const patience = (a.key === "ops" ? 10 : 9) - (PERIODS - q <= 6 ? 2 : 0);
-      if (c.holdQ >= 6 && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
+      if (c.holdQ >= (compat.legacyMinHold ? 6 : MIN_HOLD) && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
         /* Auch die KI zahlt ihr Sweet Equity. Bis zum 11.09.2026 tat sie es
            nicht: Ihre Fonds setzten reihenweise MEPs auf (Retention, +0,5
            effektives Rating) und kassierten beim Exit trotzdem brutto,
