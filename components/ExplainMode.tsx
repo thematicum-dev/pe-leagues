@@ -19,7 +19,7 @@ import {
   ADDON_FAIL_BASE, ADDON_MAX_SHARE, BASE_RATE, BOOK, CAPITAL, COV_DEFAULT, COV_FLOOR, COV_HEADROOM, DD_COST,
   DEFAULT_HUMAN_ATTRS, ENTRY_FEE, EVENTS, EVENT_P, IRR_BENCH, LIQ_DISC, LTIP_SHARE, MAX_PROC,
   exitNetOf, mepCut,
-  MGMT_FEE, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
+  MGMT_FEE, MIN_HOLD, INVEST_PERIOD, PERIODS, END_PRESSURE_FROM, PLAT_BENCH, DECAY,
   BIL_FEE,
   MAX_SLOTS, PROC_FEE, PROC_Q, QUAL_COEF, REPEAT_MAX, ROLE3, SECNAMES, SECTORS, SIZE_SCALE,
   TVCC_BENCH, anyInit, bookOff, buildInit, chargeOff, clamp, ddCapOf, ddCostOf,
@@ -322,7 +322,7 @@ function Briefing({ dark, setDark, onStart }) {
 
 const PRAC_PERIODS = 10;                                  // fünf Jahre Halteperiode
 const PRAC_SLOTS = 2;                                     // Performance und Growth parallel
-const PRAC_EXIT_FROM = 6;                                 // ab drei Jahren liegt ein Angebot vor
+const PRAC_EXIT_FROM = MIN_HOLD;                          // ab der Mindesthaltedauer liegt ein Angebot vor
 const PRAC_ATTRS = DEFAULT_HUMAN_ATTRS;
 
 function practiceMarket() {
@@ -609,7 +609,7 @@ function GuidedRun({ dark, setDark, back }) {
 
   /* Vorzeitiger Verkauf. Ohne diese Möglichkeit trainiert die Einführung
      genau die Gewohnheit, die die Wertung bestraft: durchhalten bis zum Ende,
-     weil der Multiple ja noch steigt. Ab Halbjahr 6 liegt jede Periode ein
+     weil der Multiple ja noch steigt. Ab der Mindesthaltedauer liegt jede Periode ein
      Angebot auf dem Tisch — dieselbe Preisbildung wie in der Partie.        */
   function startProc() {
     haptic(12);
