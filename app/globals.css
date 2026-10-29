@@ -777,6 +777,13 @@ body {
   font-weight: 550;
 }
 
+.adminactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
 /* Freigabe-Werkzeuge im Admin-Bereich */
 .accessbox {
   display: flex;

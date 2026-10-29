@@ -1,4 +1,5 @@
 import { requireAdmin } from "../adminAuth";
+import AdvanceSeasonButton from "./AdvanceSeasonButton";
 import ResetSeasonButton from "./ResetSeasonButton";
 
 interface AdminSeasonRow {
@@ -123,7 +124,16 @@ export default async function AdminSeasonsPage() {
               <SubmissionStatus season={s} players={subsBySeason.get(s.id)!} />
             )}
           </div>
-          <ResetSeasonButton seasonId={s.id} />
+          <div className="adminactions">
+            {s.status === "running" && (
+              <AdvanceSeasonButton
+                seasonId={s.id}
+                halfYear={s.current_half_year}
+                missingCount={Math.max(0, s.human_count - s.submitted_count)}
+              />
+            )}
+            <ResetSeasonButton seasonId={s.id} />
+          </div>
         </div>
       ))}
     </div>

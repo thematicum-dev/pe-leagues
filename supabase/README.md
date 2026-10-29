@@ -46,6 +46,7 @@ Dateinamen-Reihenfolge angewendet:
 41. `20261022090100_season_abort.sql` – laufende Partie abbrechen: sofort, wenn man der einzige Mensch ist, sonst per Abstimmung (`request_season_abort()`, `respond_season_abort()`, `season_abort_status()`)
 42. `20261024090000_leaderboard_tvcc.sql` – `global_leaderboard()` und `admin_list_users()` liefern zusätzlich TVCC (max/⌀): Die Rangliste führt mit TVCC und IRR, aus denen die Wertung besteht, der TVPI steht nur noch zur Information
 43. `20261029090000_admin_season_submissions.sql` – `admin_season_submissions()`: Abgabestand je Spieler laufender Partien für die Admin-Übersicht (wer hat abgegeben, wer fehlt noch; ohne Inhalt der Abgabe)
+44. `20261029090100_admin_advance_season.sql` – `admin_advance_season()`: Admin schiebt eine laufende Partie sofort ins nächste Halbjahr (Frist auf jetzt, Auswertung anstoßen; fehlende Abgaben zählen wie nach Fristablauf)
 
 ## Zugangskontrolle und Universen
 
