@@ -1816,15 +1816,16 @@ export const PROC_Q = 2;           // Dauer eines Verkaufsprozesses in Halbjahre
 export const IPO_EBITDA = 25;      // Mindest-EBITDA für ein Börsenfenster
 
 // Gebote am Ende eines Verkaufsprozesses
-/* `seller` ist der verkaufende Fonds. Ohne ihn gilt die alte Regel des
-   Übungsmodus (Platz 0 ist der Spieler, alle anderen sind Kandidaten). Mit ihm
-   bietet nie der Verkäufer selbst und nie ein menschlicher Mitspieler: Ein
-   Secondary Buyout wird nicht vollzogen — die Beteiligung landet nicht im
-   Portfolio des Käufers, und dessen Kapital bleibt unberührt. Unter dem Namen
-   eines Mitspielers hätte das Gebot behauptet, er habe geboten. Gibt es keinen
-   KI-Fonds mit Kapital, bietet ein Finanzinvestor von außerhalb der Kohorte,
-   damit die Zahl der Gebote nicht von der Besetzung der Partie abhängt. */
-export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: number; holdings: unknown[]; isAi?: boolean }[], neg, q,
+/* `seller` ist der verkaufende Fonds. Ohne ihn gilt die alte Regel (Platz 0
+   ist der Spieler, jeder andere Fonds der Kohorte kann bieten) — nur noch für
+   die Wiederholung alter Halbjahre. Mit ihm bietet ein Finanzinvestor von
+   außerhalb der Kohorte, nie ein Fonds der Partie: Ein Secondary Buyout wird
+   nicht vollzogen, die Beteiligung landete nie im Portfolio des Käufers und
+   dessen Kapital blieb unberührt. Unter dem Namen eines Mitspielers (oder des
+   Verkäufers selbst) behauptete das Gebot also etwas, das nicht geschah. Der
+   Verkauf an andere Fonds der Partie ist bis auf Weiteres abgeschaltet
+   (29.10.2026); käme er zurück, bräuchte er ein Gebot des Käufers selbst. */
+export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: number; holdings: unknown[] }[], neg, q,
   seller: unknown = null) {
   const fair = fairOf(c, market, neg, q);
   const out = [];
@@ -1835,13 +1836,13 @@ export function makeOffers(rng: Rng, c, market, funds: { name: string; cash: num
     risk: 0.12,
     note: fit ? "Synergien im Kerngeschäft, aber Fusionskontrolle offen" : "Fremder Sektor, rein finanzgetriebenes Interesse",
   });
-  const sponsors = funds.filter((f, i) => (seller ? f !== seller && f.isAi : i > 0)
-    && f.cash > fair * 0.9 && f.holdings.length < MAX_SLOTS);
+  const sponsors = seller ? [] : funds.filter((f, i) => i > 0 && f.cash > fair * 0.9 && f.holdings.length < MAX_SLOTS);
   if (sponsors.length || seller) {
     const buyer = sponsors.length ? rng.pick(sponsors).name : "Finanzinvestor";
     out.push({
       buyer, kind: "sponsor", price: fair * (0.90 + rng.rnd() * 0.12), risk: 0,
-      note: "Secondary Buyout — sieht nur die veröffentlichten Kennzahlen",
+      note: seller ? "Secondary Buyout durch einen Finanzinvestor außerhalb der Kohorte — sieht nur die veröffentlichten Kennzahlen"
+        : "Secondary Buyout — sieht nur die veröffentlichten Kennzahlen",
     });
   }
   out.push({

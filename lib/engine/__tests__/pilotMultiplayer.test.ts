@@ -365,7 +365,8 @@ function playSeason(s: Setup, opts: { roundtrip?: boolean } = {}) {
             if (o.kind !== "sponsor") return;
             stats.sponsorOffers++;
             if (o.buyer === f.name) { stats.sponsorSelf++; v(`${tag}: Gebot für ${it.name} vom eigenen Fonds`); }
-            if (state.funds.some((x) => x.name === o.buyer && !x.isAi)) { stats.sponsorHuman++; v(`${tag}: Gebot für ${it.name} im Namen des Mitspielers ${o.buyer}, der nichts kauft`); }
+            // Verkauf an andere Fonds der Partie ist abgeschaltet: Kein Gebot trägt den Namen eines Fonds der Kohorte
+            if (state.funds.some((x) => x.name === o.buyer)) { stats.sponsorHuman++; v(`${tag}: Gebot für ${it.name} im Namen des Fonds ${o.buyer}, der nichts kauft`); }
             if (!(o.price > 0)) v(`${tag}: Sponsorgebot ohne Preis`);
           });
         });
