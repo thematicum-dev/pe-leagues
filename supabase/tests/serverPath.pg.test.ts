@@ -266,6 +266,13 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     const st = (await asUser(b, "select * from public.season_submission_status($1)", [season])).rows[0];
     expect(st.submitted_count).toBe(1);
     expect(st.missing_count).toBe(1);
+    // Der Admin sieht, wer abgegeben hat und wer fehlt, aber nicht was
+    const subs = (await asUser(admin, "select * from public.admin_season_submissions() where season_id = $1", [season])).rows as Any[];
+    expect(subs.length).toBe(2);
+    expect(subs.find((x) => x.profile_id === a).submitted_at).not.toBeNull();
+    expect(subs.find((x) => x.profile_id === b).submitted_at).toBeNull();
+    expect(subs[0]).not.toHaveProperty("payload");
+    expect(await code(asUser(a, "select * from public.admin_season_submissions()")), "Spieler liest Admin-Abgabestand").not.toBe("ok");
     expect((await asUser(a, "select public.request_season_evaluation($1) as d", [season])).rows[0].d, "fällig ohne zweite Abgabe").toBe(false);
     // Frist abgelaufen: keine Abgabe mehr, die Auswertung läuft ohne sie
     await su("update public.seasons set current_half_year_deadline = now() - interval '1 second' where id = $1", [season]);
