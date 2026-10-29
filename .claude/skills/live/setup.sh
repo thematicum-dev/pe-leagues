@@ -8,9 +8,10 @@ S=.claude/skills/live
 PORT="${PEL_LIVE_PORT:-3333}"
 
 if [ -e app/live-test ]; then echo "app/live-test existiert schon — erst teardown.sh"; exit 1; fi
-mkdir -p app/live-test app/live-test/practice
-cp "$S/harness/page.tsx" "$S/harness/fixture.ts" app/live-test/
+mkdir -p app/live-test app/live-test/practice app/live-test/pilot
+cp "$S/harness/page.tsx" "$S/harness/fixture.ts" "$S/harness/pilotFixture.ts" app/live-test/
 cp "$S/harness/practice.tsx" app/live-test/practice/page.tsx
+cp "$S/harness/pilot.tsx" app/live-test/pilot/page.tsx
 
 # Supabase-Platzhalter: createClient() wirft ohne diese Variablen beim Rendern.
 # Die URL wird nie erreichbar sein, das ist gewollt — nur der Realtime-Socket

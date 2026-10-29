@@ -116,6 +116,19 @@ function pushSale(news: Any[], q: number, f: RuntimeFund, c: Any, gross: number,
     f.slot);
 }
 
+/* Die Meldung an einen überbotenen Bieter. Nennt das Gebot, mit dem der
+   Gewinner vorn lag — und nicht nur den Preis nach dessen Verhandlungs-
+   abschlag, der unter dem eigenen Gebot liegen kann. Liegen beide Gebote auf
+   eine Nachkommastelle gerundet gleich, stehen zwei Stellen da; bei exakt
+   gleichem Gebot entscheidet das Verhandlungsgeschick, und das steht dabei. */
+function overbidText(deal: string, winner: string, winBid: number, winMult: number, own: number) {
+  const fine = x(winBid) === x(own);
+  const f = (v: number) => (fine ? v.toFixed(2).replace(".", ",") + "×" : x(v));
+  const price = Math.abs(winBid - winMult) >= 0.005 ? ` (Preis nach Verhandlung ${x(winMult)})` : "";
+  const tie = Math.abs(winBid - own) < 1e-9 ? " Bei gleichem Gebot entscheidet das Verhandlungsgeschick." : "";
+  return `Überboten bei ${deal}: ${winner} bekommt den Zuschlag mit einem Gebot von ${f(winBid)}${price}, dein Gebot lag bei ${f(own)}.${tie}`;
+}
+
 /* ---------- Sofortige Spielerentscheidungen ----------
    Wendet die "jederzeit im laufenden Halbjahr"-Aktionen eines menschlichen
    Fondsplatzes an, bevor die gebündelte Auflösung läuft. Mutiert f, das
@@ -599,7 +612,13 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
     /* Jedem menschlichen Bieter sagen, woran es lag — auch wenn die Auktion
        ganz ohne Zuschlag endet. `winner` bleibt dann null. */
-    const tellBidders = (winner: RuntimeFund | null, winMult: number) => {
+    /* `winBid` ist das Gebot, mit dem der Gewinner vorn lag, `winMult` der
+       Preis nach seinem Verhandlungsabschlag. Bis zum 29.10.2026 nannte die
+       Meldung nur den Preis — und ein Spieler las "Zuschlag bei 15,4×, dein
+       Gebot lag bei 15,5×", obwohl der Gewinner 15,7× geboten hatte. */
+    const tellBidders = (winner: RuntimeFund | null, winMult: number, winBid = winMult) => {
+      const wonAt = compat.legacyLaxTurnChecks || Math.abs(winBid - winMult) < 0.005
+        ? `bei ${x(winMult)}` : `mit einem Gebot von ${x(winBid)} (Preis nach Verhandlung ${x(winMult)})`;
       humanBids.forEach((b) => {
         if (winner && b.f.slot === winner.slot) return;
         if (b.reason === "voll") {
@@ -615,11 +634,13 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         } else if (b.mult < reserve) {
           pushFeed(news, q, "🥈", "neg",
             `${d.name}: Dein Gebot von ${x(b.mult)} lag unter dem Reservationspreis des Verkäufers — `
-            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal bei ${x(winMult)}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
+            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal ${wonAt}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
             b.f.slot);
         } else if (winner) {
           pushFeed(news, q, "🥈", "neg",
-            `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag bei ${x(winMult)}, dein Gebot lag bei ${x(b.mult)}.`,
+            compat.legacyLaxTurnChecks
+              ? `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag ${wonAt}, dein Gebot lag bei ${x(b.mult)}.`
+              : overbidText(d.name, winner.name, winBid, winMult, b.mult),
             b.f.slot);
         }
       });
@@ -630,6 +651,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const w = valid[0];
     const f = F[w.f];
     const eb = ebitdaOf(d);
+    const winBid = w.mult;
     w.mult = w.mult * (1 - 0.010 * f.attrs.negotiation);
     let hit = 0;
     if (d.type === "prop" && !f.isAi && !ddBySlot[f.slot]?.has(d.id)) {
@@ -685,7 +707,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     }
     // Marktbericht: jeder Zuschlag, von wem auch immer
     pushMarket(news, q, "🤝", `${f.name} kauft ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
-    tellBidders(f, w.mult);
+    tellBidders(f, w.mult, winBid);
   });
 
   /* 2 — KI-Fonds entwickeln ihre Beteiligungen */

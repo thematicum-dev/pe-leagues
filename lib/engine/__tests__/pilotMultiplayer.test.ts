@@ -203,6 +203,10 @@ function playSeason(s: Setup, opts: { roundtrip?: boolean } = {}) {
         if (!mine.length) v(`HJ ${hy}: Platz ${slot} bot auf ${deal.name} und erfährt nichts`
           + (process.env.PILOT_DEBUG ? ` | typ ${deal.type} bid ${JSON.stringify(bid)} hold ${pf.holdings.length} | ${news.filter((n) => n.text.includes(deal.name)).map((n) => n.slot + ":" + n.text).join(" || ")} | jetzt ${state.funds.find((f) => f.slot === slot)!.holdings.length}` : ""));
         mine.forEach((n) => {
+          // Das genannte Gebot des Gewinners liegt nie unter dem eigenen
+          const m = n.text.match(/mit einem Gebot von ([0-9.,]+)×.*dein Gebot lag bei ([0-9.,]+)×/);
+          if (n.text.startsWith("Überboten") && !m) v(`HJ ${hy}: Überboten-Meldung ohne Gebot des Gewinners: ${n.text}`);
+          if (m && parseFloat(m[1].replace(",", ".")) < parseFloat(m[2].replace(",", "."))) v(`HJ ${hy}: Meldung nennt ein niedrigeres Gewinnergebot: ${n.text}`);
           if (n.text.startsWith("Überboten")) stats.overbid++;
           else if (/Reservationspreis/.test(n.text)) stats.reserveMsg++;
           else if (/investierbares Kapital/.test(n.text)) stats.capitalMsg++;
