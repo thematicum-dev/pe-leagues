@@ -28,7 +28,7 @@ import {
   MAX_SLOTS, MGMT_FEE, MIN_HOLD, PERIODS, RECYCLE_CAP, RESERVE_PROC, RESERVE_PROP, SECNAMES,
   SECTORS, TVCC_BENCH, DD_COST,
   carryOf, cashflowsOf, clamp, dpiOf, ebitdaOf, fundBridge, fundBridgeStep, FUND_BRIDGE_PARTS,
-  irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf,
+  irrOf, navOf, scoreOf, tvccOf, tvpiOf, ddCostOf, ddCapOf, investableOf,
 } from "../engine";
 import { holdingStatements } from "../financials";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
@@ -462,5 +462,93 @@ describe("Testprotokoll Mehrspieler — Engine", () => {
     const a = playSeason({ seed: 42, slots: MIXES[0].slots });
     const b = playSeason({ seed: 42, slots: MIXES[0].slots });
     expect(JSON.stringify(b.state)).toBe(JSON.stringify(a.state));
+  });
+});
+
+/* ---------- Randfälle, einzeln gestellt ---------- */
+
+describe("Testprotokoll Mehrspieler — Randfälle", () => {
+  // Zwei Menschen auf Platz 0 und 1, drei KI-Fonds, die in Halbjahr 1 nicht mitbieten
+  function zwei(seed = 77) {
+    const s = newSeason({ seed, slots: ["kons", "kons", "ki", "ki", "ki"] });
+    // Nur ein Prozess-Deal, damit keine KI dazwischenbietet: Prozesse und KI ausschalten geht nicht,
+    // also bietet die KI hier nicht, weil ihr Kapital auf 0 steht
+    s.state.funds.forEach((f) => { if (f.isAi) { (f as Any).undrawn = 0; (f as Any).cash = 0; } });
+    return s;
+  }
+  const feedOf = (out: Any, slot: number) => (out.feed as Any[]).filter((n) => n.slot === slot).map((n) => n.text);
+
+  it("gleiches Gebot zweier Menschen: Verhandlungsgeschick entscheidet, der Unterlegene erfährt es", () => {
+    const { rng, state } = zwei();
+    (state.funds[1] as Any).attrs.negotiation = 4;
+    const d = (state.deals as Any[])[0];
+    const bid = { dealId: d.id, multiple: d.askMult * 1.05, leverage: d.levCap * 0.5 };
+    const out = runQuarter({ state, halfYear: 1, rng, decisionsBySlot: { 0: { bids: [bid] }, 1: { bids: [bid] } } });
+    expect((out.state.funds[1].holdings as Any[]).some((h) => h.name === d.name)).toBe(true);
+    const t = feedOf(out, 0).find((x) => x.includes(d.name))!;
+    expect(t).toMatch(/Überboten/);
+    expect(t).toMatch(/Bei gleichem Gebot entscheidet das Verhandlungsgeschick/);
+  });
+
+  it("Gebot genau auf dem Reservationspreis gilt, knapp darunter nicht", () => {
+    for (const [f, won] of [[1, true], [0.999, false]] as const) {
+      const { rng, state } = zwei(91);
+      const d = (state.deals as Any[]).find((x) => x.type === "process")!;
+      const reserve = d.askMult * RESERVE_PROC;
+      const out = runQuarter({ state, halfYear: 1, rng, decisionsBySlot: { 0: { bids: [{ dealId: d.id, multiple: reserve * f, leverage: 0 }] } } });
+      expect((out.state.funds[0].holdings as Any[]).some((h) => h.name === d.name), `Faktor ${f}`).toBe(won);
+      if (!won) expect(feedOf(out, 0).some((x) => x.includes(d.name) && /Reservationspreis/.test(x))).toBe(true);
+    }
+  });
+
+  it("volles Portfolio: das zweite Gebot wird gemeldet, nicht verschluckt", () => {
+    const { rng, state } = zwei(5);
+    const me = state.funds[0] as Any;
+    // fünf Beteiligungen aus einer Vorpartie übernehmen
+    const donor = playSeason({ seed: 7, slots: ["aggr", "ki", "ki", "ki", "ki"] }).snaps[8].funds[0] as Any;
+    me.holdings = (donor.holdings as Any[]).slice(0, MAX_SLOTS - 1).map((h) => ({ ...h }));
+    expect(me.holdings.length).toBe(MAX_SLOTS - 1);
+    const ds = (state.deals as Any[]).slice(0, 2);
+    const out = runQuarter({ state, halfYear: 1, rng, decisionsBySlot: { 0: { bids: ds.map((d) => ({ dealId: d.id, multiple: d.askMult * 1.2, leverage: d.levCap })) } } });
+    expect((out.state.funds[0].holdings as Any[]).length).toBe(MAX_SLOTS);
+    expect(feedOf(out, 0).some((x) => /Portfolio ist mit 6 Beteiligungen voll/.test(x))).toBe(true);
+  });
+
+  it("Exit vor der Mindesthaltedauer und Verkaufsprozess kurz vor Laufzeitende werden abgelehnt", () => {
+    const r = playSeason({ seed: 42, slots: ["kons", "ki", "ki", "ki", "ki"] });
+    // jüngste Beteiligung irgendwo in der Partie
+    const snap = r.snaps.find((s) => (s.funds[0].holdings as Any[]).some((h) => h.holdQ < MIN_HOLD))!;
+    const hy = r.snaps.indexOf(snap) + 1;
+    const c = (snap.funds[0].holdings as Any[]).find((h) => h.holdQ < MIN_HOLD);
+    const out = runQuarter({ state: snap, halfYear: hy, rng: createRng(1), decisionsBySlot: { 0: { exitStarts: [{ holdingUid: c.uid, action: "bilateral" }] } } });
+    expect((out.state.funds[0].holdings as Any[]).some((h) => h.uid === c.uid)).toBe(true);
+    // Prozess in Halbjahr 18: Gebote kämen erst nach dem Laufzeitende
+    const s17 = r.snaps[17];
+    const ripe = (s17.funds[0].holdings as Any[]).find((h) => h.holdQ >= MIN_HOLD && !h.proc);
+    expect(ripe, "reife Beteiligung in Halbjahr 18").toBeTruthy();
+    {
+      const o = runQuarter({ state: s17, halfYear: 18, rng: createRng(1), decisionsBySlot: { 0: { exitStarts: [{ holdingUid: ripe.uid, action: "process" }] } } });
+      expect((o.state.funds[0].holdings as Any[]).find((h) => h.uid === ripe.uid)?.proc).toBeFalsy();
+      expect(feedOf(o, 0).some((x) => /nicht gestartet: Die Gebote kämen erst nach dem Laufzeitende/.test(x))).toBe(true);
+    }
+  });
+
+  it("Equity Cure über dem investierbaren Kapital wird gekappt, einbehaltener Anteil über 100 % auch", () => {
+    const r = playSeason({ seed: 2026, slots: ["aggr", "ki", "ki", "ki", "ki"] });
+    const snap = r.snaps[10];
+    const me = snap.funds[0] as Any;
+    const c = (me.holdings as Any[])[0];
+    const inv = investableOf(me, 11);
+    const o = runQuarter({ state: snap, halfYear: 11, rng: createRng(3), decisionsBySlot: { 0: { equityInjections: [{ holdingUid: c.uid, amount: 1e6 }] } } });
+    const c2 = (o.state.funds[0].holdings as Any[]).find((h) => h.uid === c.uid);
+    expect((c2.equityIn || 0) - (c.equityIn || 0)).toBeLessThanOrEqual(inv / (c.st ?? 1) + 1e-6);
+    const ripe = (me.holdings as Any[]).find((h) => h.holdQ >= MIN_HOLD && !h.proc && !h.lockUntil);
+    expect(ripe, "reife Beteiligung in Halbjahr 11").toBeTruthy();
+    {
+      const o2 = runQuarter({ state: snap, halfYear: 11, rng: createRng(3), decisionsBySlot: { 0: { exitStarts: [{ holdingUid: ripe.uid, action: "bilateral", keepPct: 2 }] } } });
+      const f2 = o2.state.funds[0] as Any;
+      const net = (f2.proceeds || 0) - (me.proceeds || 0);
+      expect((f2.recycled || 0) - (me.recycled || 0)).toBeLessThanOrEqual(net + 1e-6);
+    }
   });
 });

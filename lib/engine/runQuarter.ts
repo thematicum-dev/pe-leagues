@@ -366,6 +366,13 @@ function applyImmediateDecisions(
     if (c.block && quarter < c.block && (intent.action === "process" || compat.legacyBlockAllExits)) return;
     const NEG = f.attrs.negotiation;
     if (intent.action === "process") {
+      /* Gebote kommen in Halbjahr quarter + PROC_Q und werden im Halbjahr
+         danach entschieden. Liegt das hinter dem Laufzeitende, ginge die
+         Beteiligung vorher in die Tail-End-Verwertung. */
+      if (!compat.legacyLaxTurnChecks && quarter + PROC_Q + 1 > PERIODS) {
+        pushFeed(news, quarter, "📣", "neg", `Verkaufsprozess für ${c.name} nicht gestartet: Die Gebote kämen erst nach dem Laufzeitende. Bilateral bleibt möglich.`, f.slot);
+        return;
+      }
       c.proc = { resolveQ: quarter + PROC_Q };
       pushFeed(news, quarter, "📣", "neu", `Verkaufsprozess für ${c.name} eröffnet.`, f.slot);
       return;
