@@ -489,7 +489,7 @@ export default function PeLeagues() {
     const resolved = [];
     F[0].holdings.forEach((c) => {
       if (c.proc && q >= c.proc.resolveQ) {
-        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(rng, c, mk, F, F[0].attrs.negotiation, q) });
+        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(rng, c, mk, F, F[0].attrs.negotiation, q, F[0]) });
         c.proc = null;
       }
     });

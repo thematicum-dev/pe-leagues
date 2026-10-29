@@ -1070,7 +1070,11 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const sold = !!c.proc?.sale;
   const locked = !!c.lockUntil;
   const ripe = c.holdQ >= MIN_HOLD && !locked;
-  const canProc = ripe && !inProc && !blocked;      // Prozess: gesperrt nach Abbruch
+  /* Gebote kommen PROC_Q Halbjahre nach dem Start und werden im Halbjahr
+     danach entschieden. Reicht die Restlaufzeit dafür nicht, käme die
+     Beteiligung vorher in die Tail-End-Verwertung — der Prozess wäre vergeblich. */
+  const procTooLate = PERIODS - quarter < PROC_Q + 2;
+  const canProc = ripe && !inProc && !blocked && !procTooLate;      // Prozess: gesperrt nach Abbruch
   const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
   /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
      Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
@@ -1078,6 +1082,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const exitStatus = c.holdQ < MIN_HOLD ? ""
     : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
     : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
+    : procTooLate && !inProc ? `Für einen Verkaufsprozess ist die Restlaufzeit zu kurz: Die Gebote kämen erst nach dem Laufzeitende. Bilateral bleibt möglich.`
     : endPressure(quarter) > 0.05
       ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
     : PERIODS - quarter <= END_PRESSURE_FROM + 2

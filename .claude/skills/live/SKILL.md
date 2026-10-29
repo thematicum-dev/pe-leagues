@@ -32,11 +32,18 @@ http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test?hy=8
 http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test/practice
 ```
 
-Zwei Routen, zwei Zwecke:
+Drei Routen, drei Zwecke:
 
 - **`/live-test`** rendert die Mehrspielerpartie auf einem fertigen Zustand.
   Gut für Ansichten, Karten und Meldungen — aber ein Halbjahr lässt sich dort
   nicht abschließen, das macht der Server.
+- **`/live-test/pilot`** ist die Mehrspielerpartie wie in Produktion:
+  Fondsplätze 1 bis 5 (wie `start_season()`), drei Menschen mit den
+  Spielweisen des Testprotokolls (`lib/engine/__tests__/pilotStrategies.ts`),
+  zwei KI-Fonds. `hy`, `slot` (1–3, wessen Sicht), `seed`, `idle=1` (der Platz
+  hat drei Halbjahre nichts abgegeben, Gebote und Shortlists stehen offen).
+  Für Browserdurchläufe mit Abgabe: Anfragen an `http://127.0.0.1:1/**` per
+  `page.route` abfangen, `rest/v1/turn_submissions` trägt die Abgabe.
 - **`/live-test/practice`** ist der Übungsmodus. Er rechnet seine Halbjahre im
   Browser und lässt sich deshalb wirklich durchspielen: kaufen, Maßnahmen
   starten, zwanzig Halbjahre abschließen, Berichte lesen. Das ist der Weg,

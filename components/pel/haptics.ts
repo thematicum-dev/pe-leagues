@@ -88,6 +88,11 @@ export function haptic(p: HapticKind | number | number[] = "tap") {
     lastAt = now;
     const pattern = normalize(typeof p === "string" ? PATTERNS[p] ?? PATTERNS.tap : p);
     if (typeof navigator.vibrate === "function") {
+      /* Vor dem ersten Tippen ist die Vibration ohnehin wirkungslos — Chrome
+         schreibt dann aber bei jedem Aufruf einen Fehler in die Konsole
+         (etwa wenn sich der Halbjahresbericht von selbst öffnet). */
+      const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+      if (ua && !ua.hasBeenActive) return;
       navigator.vibrate(pattern);
       return;
     }

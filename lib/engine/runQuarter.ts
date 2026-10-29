@@ -32,12 +32,13 @@ import {
   botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
-  recycleRoom, dealMoic, clamp, ddCostOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
+  recycleRoom, dealMoic, clamp, ddCostOf, ddCapOf, ROLE3, tvccOf, tvpiOf, irrOf, scoreOf, makeBridge,
   bookOff, periodFin, resetPeriod, eventPOf, exitNetOf, mepCut, fundEquityIn, addonEquityNeeded,
   addonMandate, addonMaxEb,
   liquidateHoldings, takeUnrealized, closeUnrealized, eur, x, SECLABEL,
 } from "./engine.ts";
 import type { EngineCompat } from "./engine.ts";
+import { sanitizeDecisions } from "./turnValidate.ts";
 
 type Archetype = (typeof ARCHES)[number];
 function archetypeByKey(key: string): Archetype {
@@ -113,6 +114,19 @@ function pushSale(news: Any[], q: number, f: RuntimeFund, c: Any, gross: number,
   pushMarket(news, q, "🏷️",
     `${f.name} verkauft${note ? ` (${note})` : ""} ${marketLine(c.name, c.sector, ebitdaOf(c), exitMultOf(c, gross, opts.stake))}.`,
     f.slot);
+}
+
+/* Die Meldung an einen überbotenen Bieter. Nennt das Gebot, mit dem der
+   Gewinner vorn lag — und nicht nur den Preis nach dessen Verhandlungs-
+   abschlag, der unter dem eigenen Gebot liegen kann. Liegen beide Gebote auf
+   eine Nachkommastelle gerundet gleich, stehen zwei Stellen da; bei exakt
+   gleichem Gebot entscheidet das Verhandlungsgeschick, und das steht dabei. */
+function overbidText(deal: string, winner: string, winBid: number, winMult: number, own: number) {
+  const fine = x(winBid) === x(own);
+  const f = (v: number) => (fine ? v.toFixed(2).replace(".", ",") + "×" : x(v));
+  const price = Math.abs(winBid - winMult) >= 0.005 ? ` (Preis nach Verhandlung ${x(winMult)})` : "";
+  const tie = Math.abs(winBid - own) < 1e-9 ? " Bei gleichem Gebot entscheidet das Verhandlungsgeschick." : "";
+  return `Überboten bei ${deal}: ${winner} bekommt den Zuschlag mit einem Gebot von ${f(winBid)}${price}, dein Gebot lag bei ${f(own)}.${tie}`;
 }
 
 /* ---------- Sofortige Spielerentscheidungen ----------
@@ -343,6 +357,8 @@ function applyImmediateDecisions(
   (decisions.exitStarts || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c || c.proc || c.lockUntil) return;
+    // Die Mindesthaltedauer gilt auch für eine Abgabe, die an der Ansicht vorbeikommt
+    if (!compat.legacyLaxTurnChecks && c.holdQ < MIN_HOLD) return;
     /* Die Sperre nach einem abgebrochenen Prozess gilt nur für den nächsten
        Prozess — bilateral bleibt möglich, wie die Karte sagt und wie der
        Übungsmodus es immer gehalten hat. Bis zum 18.10.2026 verwarf diese
@@ -350,6 +366,13 @@ function applyImmediateDecisions(
     if (c.block && quarter < c.block && (intent.action === "process" || compat.legacyBlockAllExits)) return;
     const NEG = f.attrs.negotiation;
     if (intent.action === "process") {
+      /* Gebote kommen in Halbjahr quarter + PROC_Q und werden im Halbjahr
+         danach entschieden. Liegt das hinter dem Laufzeitende, ginge die
+         Beteiligung vorher in die Tail-End-Verwertung. */
+      if (!compat.legacyLaxTurnChecks && quarter + PROC_Q + 1 > PERIODS) {
+        pushFeed(news, quarter, "📣", "neg", `Verkaufsprozess für ${c.name} nicht gestartet: Die Gebote kämen erst nach dem Laufzeitende. Bilateral bleibt möglich.`, f.slot);
+        return;
+      }
       c.proc = { resolveQ: quarter + PROC_Q };
       pushFeed(news, quarter, "📣", "neu", `Verkaufsprozess für ${c.name} eröffnet.`, f.slot);
       return;
@@ -512,7 +535,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => (f.holdings as Any[]).forEach((c) => closeUnrealized(c)));
   const exitQueueBySlot: Record<string, ExitQueueItem[]> = { ...input.state.exitQueue };
   const shortlistBySlot: Record<string, ShortlistItem[]> = { ...input.state.shortlist };
-  const decisionsBySlot = input.decisionsBySlot;
+  // Jede Abgabe zuerst in die erwartete Form (siehe turnValidate.ts)
+  const decisionsBySlot: Record<number, TurnDecisions> = {};
+  Object.entries(input.decisionsBySlot || {}).forEach(([slot, d]) => { decisionsBySlot[Number(slot)] = sanitizeDecisions(d); });
   const compat: EngineCompat = input.compat ?? {};
 
   // 0 — Due-Diligence-Kosten für den aktuellen Dealflow verrechnen
@@ -520,7 +545,9 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   F.forEach((f) => {
     if (f.isAi) return;
     const decisions = decisionsBySlot[f.slot] || {};
-    const ids = new Set((decisions.dueDiligence || []).filter((id) => deals.some((d) => d.id === id)));
+    let ids = new Set((decisions.dueDiligence || []).filter((id) => deals.some((d) => d.id === id)));
+    // Das Kontingent je Halbjahr, wie es die Deal-Karte zählt (ddCapOf)
+    if (!compat.legacyLaxTurnChecks) ids = new Set([...ids].slice(0, ddCapOf(f.attrs.analysis)));
     ddBySlot[f.slot] = ids;
     ids.forEach((id) => {
       const deal = deals.find((d) => d.id === id);
@@ -552,7 +579,16 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
        scheiterte. Drei verschiedene Lehren, eine leere Zeitung.            */
     const humanBids: { f: RuntimeFund; mult: number; reason?: string }[] = [];
     F.forEach((f, i) => {
-      if (f.holdings.length >= MAX_SLOTS) return;
+      if (f.holdings.length >= MAX_SLOTS) {
+        /* Auch das gehört in die Meldungen: Wer mit fünf Beteiligungen auf zwei
+           Deals bietet und den ersten gewinnt, hat für den zweiten keinen Platz
+           mehr. Bis zum 29.10.2026 fiel dieses Gebot wortlos weg. */
+        if (!f.isAi && !compat.legacyLaxTurnChecks
+          && ((decisionsBySlot[f.slot] || {}).bids || []).some((b) => b.dealId === d.id)) {
+          humanBids.push({ f, mult: 0, reason: "voll" });
+        }
+        return;
+      }
       if (!f.isAi) {
         const decisions = decisionsBySlot[f.slot] || {};
         const bid = (decisions.bids || []).find((b) => b.dealId === d.id);
@@ -583,10 +619,19 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
     /* Jedem menschlichen Bieter sagen, woran es lag — auch wenn die Auktion
        ganz ohne Zuschlag endet. `winner` bleibt dann null. */
-    const tellBidders = (winner: RuntimeFund | null, winMult: number) => {
+    /* `winBid` ist das Gebot, mit dem der Gewinner vorn lag, `winMult` der
+       Preis nach seinem Verhandlungsabschlag. Bis zum 29.10.2026 nannte die
+       Meldung nur den Preis — und ein Spieler las "Zuschlag bei 15,4×, dein
+       Gebot lag bei 15,5×", obwohl der Gewinner 15,7× geboten hatte. */
+    const tellBidders = (winner: RuntimeFund | null, winMult: number, winBid = winMult) => {
+      const wonAt = compat.legacyLaxTurnChecks || Math.abs(winBid - winMult) < 0.005
+        ? `bei ${x(winMult)}` : `mit einem Gebot von ${x(winBid)} (Preis nach Verhandlung ${x(winMult)})`;
       humanBids.forEach((b) => {
         if (winner && b.f.slot === winner.slot) return;
-        if (b.reason === "kapital") {
+        if (b.reason === "voll") {
+          pushFeed(news, q, "🏦", "neg",
+            `Gebot für ${d.name} nicht berücksichtigt: Dein Portfolio ist mit ${MAX_SLOTS} Beteiligungen voll.`, b.f.slot);
+        } else if (b.reason === "kapital") {
           pushFeed(news, q, "🏦", "neg",
             `Gebot für ${d.name} nicht abgegeben: Das Eigenkapital bei ${x(b.mult)} übersteigt dein investierbares Kapital `
             + `von ${eur(investableOf(b.f, q))}. Weniger bieten oder mehr Fremdkapital einsetzen.`, b.f.slot);
@@ -596,11 +641,13 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         } else if (b.mult < reserve) {
           pushFeed(news, q, "🥈", "neg",
             `${d.name}: Dein Gebot von ${x(b.mult)} lag unter dem Reservationspreis des Verkäufers — `
-            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal bei ${x(winMult)}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
+            + `kein Zuschlag.${winner ? ` ${winner.name} bekommt den Deal ${wonAt}.` : " Der Verkäufer zieht das Unternehmen zurück."}`,
             b.f.slot);
         } else if (winner) {
           pushFeed(news, q, "🥈", "neg",
-            `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag bei ${x(winMult)}, dein Gebot lag bei ${x(b.mult)}.`,
+            compat.legacyLaxTurnChecks
+              ? `Überboten bei ${d.name}: ${winner.name} bekommt den Zuschlag ${wonAt}, dein Gebot lag bei ${x(b.mult)}.`
+              : overbidText(d.name, winner.name, winBid, winMult, b.mult),
             b.f.slot);
         }
       });
@@ -611,6 +658,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     const w = valid[0];
     const f = F[w.f];
     const eb = ebitdaOf(d);
+    const winBid = w.mult;
     w.mult = w.mult * (1 - 0.010 * f.attrs.negotiation);
     let hit = 0;
     if (d.type === "prop" && !f.isAi && !ddBySlot[f.slot]?.has(d.id)) {
@@ -666,7 +714,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
     }
     // Marktbericht: jeder Zuschlag, von wem auch immer
     pushMarket(news, q, "🤝", `${f.name} kauft ${marketLine(d.name, d.sector, eb, w.mult)}.`, f.slot);
-    tellBidders(f, w.mult);
+    tellBidders(f, w.mult, winBid);
   });
 
   /* 2 — KI-Fonds entwickeln ihre Beteiligungen */
@@ -849,7 +897,14 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       c.revenue *= 1 - 0.12 * stress;
       c.margin -= 1.5 * stress;
       c.drift = (c.drift || 0) - 1.0;
+      const was = c.breach || 0;
       c.breach = c.netDebt / Math.max(0.5, ebitdaOf(c)) > (c.covLimit ?? COV_DEFAULT) ? (c.breach || 0) + 1 : 0;
+      /* Der Abschwung kommt nach der Covenant-Prüfung des Halbjahres. Reißt der
+         Covenant erst hier, vollstrecken die Kreditgeber schon im nächsten
+         Halbjahr — bis zum 29.10.2026 ohne jede Vorwarnung im Feed. */
+      if (!f.isAi && was === 0 && c.breach > 0 && !compat.legacyLaxTurnChecks) {
+        pushFeed(news, q, "⚠️", "neg", `${c.name} reißt nach dem Sektorabschwung den Covenant. Ohne Equity Cure folgt im nächsten Halbjahr das Enforcement.`, f.slot);
+      }
     }));
     pushFeed(news, q, "📉", "neg", `Sektorabschwung in ${SECLABEL[s]}: Multiple-Kontraktion, Umsätze brechen ein.`);
   }
@@ -893,7 +948,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
       if (c.proc && q >= c.proc.resolveQ) {
         resolved.push({
           holdingUid: c.uid, name: c.name,
-          offers: makeOffers(rng, c, mk, F as Any, f.attrs.negotiation, q),
+          offers: makeOffers(rng, c, mk, F as Any, f.attrs.negotiation, q, compat.legacyLaxTurnChecks ? null : f),
         });
         c.proc = null;
       }
@@ -962,6 +1017,19 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
   }
   if (!landmark && q < LM_ANNOUNCE) {
     landmark = newLandmark(rng, mk);
+  }
+
+  /* Offene Gebote und Shortlists gehören zu Beteiligungen, die es noch gibt.
+     Wer eine Beteiligung verkauft, während dort eine Shortlist wartet, sah
+     sie bis zum 29.10.2026 im nächsten Halbjahr trotzdem. */
+  if (!compat.legacyLaxTurnChecks) {
+    F.forEach((f) => {
+      if (f.isAi) return;
+      const key = String(f.slot);
+      const has = (uid: string) => (f.holdings as Any[]).some((h) => h.uid === uid);
+      if (exitQueueBySlot[key]) exitQueueBySlot[key] = exitQueueBySlot[key].filter((it) => has(it.holdingUid));
+      if (shortlistBySlot[key]) shortlistBySlot[key] = shortlistBySlot[key].filter((it) => has(it.holdingUid));
+    });
   }
 
   let finalFunds = F;
