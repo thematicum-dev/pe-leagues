@@ -760,6 +760,23 @@ body {
   font: inherit;
 }
 
+/* Abgabestand je Spieler in der Admin-Partienübersicht */
+.adminsubs {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--rule);
+}
+
+.adminsubs-done {
+  color: var(--teal);
+  font-weight: 550;
+}
+
+.adminsubs-missing {
+  color: var(--ox);
+  font-weight: 550;
+}
+
 /* Freigabe-Werkzeuge im Admin-Bereich */
 .accessbox {
   display: flex;
