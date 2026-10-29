@@ -24,7 +24,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
   TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
-  Offers, Sheet, Info, SeasonDrivers, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
+  Offers, Sheet, Info, SeasonDrivers, TrackRow, exitSheetOf, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -49,6 +49,19 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
+
+/* Der Käufer eines Exits steht nur in der Meldung, die finalizeExit schreibt
+   ("Exit X an Y: …") — die Realisierung selbst trägt ihn nicht. */
+function exitBuyerOf(feed: Any[], slot: number, name: string): string | null {
+  const head = `Exit ${name} an `;
+  for (let i = feed.length - 1; i >= 0; i--) {
+    const f = feed[i];
+    if (f && f.slot === slot && typeof f.text === "string" && f.text.startsWith(head)) {
+      return f.text.slice(head.length).split(":")[0];
+    }
+  }
+  return null;
+}
 
 /* Taktgrenzen für das Nachfassen nach der eigenen Abgabe (siehe den Effekt
    weiter unten). Der enge Takt gilt, solange die Auswertung tatsächlich
@@ -659,6 +672,41 @@ export default function MultiplayerGame({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!seen) setBriefOpen(true);
   }, [briefKey, quarter, alreadySubmitted]);
+
+  /* ---------- Exit-Fenster ----------
+     Ein Exit wird erst in der Auswertung vollzogen, nicht beim Klick. Bis zum
+     28.10.2026 erfuhr der Spieler davon nur über die Meldung: Das Fenster mit
+     der Value Bridge, das der Übungsmodus nach jedem Exit zeigt, gab es hier
+     nicht. Jetzt öffnet es sich nach dem Halbjahresbericht, einmal je
+     Realisierung und je Halbjahr — gemerkt wie beim Bericht. Danach bleibt es
+     über den Track Record erreichbar. */
+  const [exitSheets, setExitSheets] = useState<Any[]>([]);
+  const exitsKey = `pel:exits:${seasonId}:${quarter}`;
+  useEffect(() => {
+    if (quarter < 1 || alreadySubmitted) return;
+    const now = state.funds.find((f) => f.slot === humanSlot) as Any;
+    const was = history[history.length - 2]?.funds?.find((f: Any) => f.slot === humanSlot) as Any;
+    if (!now || !was) return;
+    const neu = (now.realized || []).slice((was.realized || []).length).filter((r: Any) => r && r.bridge);
+    if (!neu.length) return;
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(exitsKey) === "1";
+      window.localStorage.setItem(exitsKey, "1");
+    } catch { /* ohne Speicher: dann eben bei jedem Öffnen */ }
+    if (seen) return;
+    const pool = [...(now.holdings || []), ...(was.holdings || [])];
+    // Wie beim Bericht: erst nach dem Mounten, sonst weicht die Hydration ab
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExitSheets(neu.map((r: Any) => exitSheetOf(r, pool, exitBuyerOf(state.feed, humanSlot, r.name))));
+  }, [exitsKey, quarter, alreadySubmitted, state, history, humanSlot]);
+  // Eines nach dem anderen, sobald nichts anderes offen ist
+  useEffect(() => {
+    if (briefOpen || sheet || useProceedsItem || initPick || !exitSheets.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSheet(exitSheets[0]);
+    setExitSheets((q) => q.slice(1));
+  }, [briefOpen, sheet, useProceedsItem, initPick, exitSheets]);
 
   /* Abgabe und Rückkehr ins Spiel blenden über, statt hart umzuspringen.
      Nur Deckkraft: In der Wurzel stecken die fixierten Leisten. */
@@ -1419,10 +1467,8 @@ export default function MultiplayerGame({
               <div className="card">
                 <h3 className="disp">Track Record</h3>
                 {me.realized.map((r: Any, i: number) => (
-                  <div className="lb" key={i}>
-                    <span className="nm">{r.name}</span>
-                    <span className="mo" style={{ color: r.moic >= 1 ? "var(--teal)" : "var(--ox)" }}>{r.moic.toFixed(2)}×</span>
-                  </div>
+                  <TrackRow key={i} r={r} open={() => setSheet(exitSheetOf(r,
+                    [...me.holdings, ...(prevFund?.holdings || [])], exitBuyerOf(state.feed, humanSlot, r.name)))} />
                 ))}
               </div>
             )}
@@ -1565,12 +1611,12 @@ export default function MultiplayerGame({
           über ihm (gleicher z-index). Solange dort entschieden wird, bleiben
           sie weg — der Gebotsdialog rückt ohnehin erst nach der Entscheidung
           zum nächsten Angebot weiter. */}
-      {!briefOpen && !sheet && !initPick && !useProceedsItem && shortlistItem && (
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}
           holding={me.holdings.find((h: Any) => h.uid === shortlistItem.holdingUid)}
           analysis={me.attrs.analysis} hire={hireStage} reject={rejectStage} />
       )}
-      {!briefOpen && !sheet && !initPick && !useProceedsItem && !shortlistItem && exitQueueItem && (
+      {!briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && !shortlistItem && exitQueueItem && (
         <Offers item={exitQueueItem} holding={me.holdings.find((h: Any) => h.uid === exitQueueItem.holdingUid)}
           market={state.market} neg={NEG} decide={decideOfferStage} />
       )}

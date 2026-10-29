@@ -463,6 +463,12 @@ export const CSS = `
   transition:transform .12s cubic-bezier(.34,1.56,.64,1),background .15s ease,border-color .15s ease;}
 .pel .bseat:active:not(:disabled){transform:scale(.95);}
 .pel .lb[role="button"]:active{transform:scale(.985);}
+/* Track-Record-Zeile als Schaltfläche (TrackRow): sieht aus wie jede andere Zeile */
+.pel button.lbbtn{width:100%;margin:0;border:0;border-bottom:1px solid var(--rule);border-radius:0;
+  background:transparent;color:inherit;text-align:left;font:inherit;}
+.pel button.lbbtn:hover:not(:disabled){background:color-mix(in srgb, var(--ink) 6%, transparent);color:inherit;border-color:var(--rule);}
+.pel button.lbbtn:active:not(:disabled){transform:scale(.985);}
+.pel .lb .lbgo{color:var(--ink2);font-size:16px;line-height:1;margin-left:-4px;}
 
 /* Karten heben sich beim Erscheinen sanft aus dem Papier — kein Pop-in ohne Grund */
 .pel .card, .pel .tomb, .pel .news{animation:rise .32s cubic-bezier(.22,.9,.34,1) both;}
@@ -1064,7 +1070,11 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const sold = !!c.proc?.sale;
   const locked = !!c.lockUntil;
   const ripe = c.holdQ >= MIN_HOLD && !locked;
-  const canProc = ripe && !inProc && !blocked;      // Prozess: gesperrt nach Abbruch
+  /* Gebote kommen PROC_Q Halbjahre nach dem Start und werden im Halbjahr
+     danach entschieden. Reicht die Restlaufzeit dafür nicht, käme die
+     Beteiligung vorher in die Tail-End-Verwertung — der Prozess wäre vergeblich. */
+  const procTooLate = PERIODS - quarter < PROC_Q + 2;
+  const canProc = ripe && !inProc && !blocked && !procTooLate;      // Prozess: gesperrt nach Abbruch
   const canNow = ripe && !inProc;                   // Bilateral: jedes Halbjahr erneut
   /* Unter den Exit-Schaltflächen steht nur, was gerade gilt — eine Sperre, eine
      Frist, der Druck des Laufzeitendes. Ohne Anlass bleibt die Zeile weg. */
@@ -1072,6 +1082,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
   const exitStatus = c.holdQ < MIN_HOLD ? ""
     : blocked ? `Verkaufsprozess für ${hj(c.block - quarter)} gesperrt. Bilateral bleibt möglich.`
     : procCount >= MAX_PROC ? `Maximal ${MAX_PROC} Verkaufsprozesse gleichzeitig.`
+    : procTooLate && !inProc ? `Für einen Verkaufsprozess ist die Restlaufzeit zu kurz: Die Gebote kämen erst nach dem Laufzeitende. Bilateral bleibt möglich.`
     : endPressure(quarter) > 0.05
       ? `Exitfenster schließt sich: Käufer preisen die Laufzeit deines Fonds ein, aktuell −${x(endPressure(quarter))} auf den erzielbaren Multiple. Jedes weitere Halbjahr kostet mehr.`
     : PERIODS - quarter <= END_PRESSURE_FROM + 2
@@ -3591,6 +3602,40 @@ export function Offers({ item, holding, market, neg, decide }) {
   );
 }
 
+/* Das Exit-Fenster zu einem Eintrag im Track Record. Jede Realisierung
+   schreibt ihre Value Bridge mit (makeBridge); die Beteiligung selbst steht
+   danach nur noch dann im Portfolio, wenn es ein Teilexit war. `holdings` ist
+   deshalb ein Vorrat, in dem sie gesucht wird — für den Verlauf und die
+   nachgeschossenen Mittel. Den Käufer kennt nur die Meldung zum Exit. */
+const EXIT_VIA = {
+  Teilexit: "Teilexit an ein Continuation Vehicle", IPO: "Börsengang",
+  Restbeteiligung: "Restbeteiligung nach dem Lock-up", "Tail-End": "Tail-End-Verwertung",
+  "Covenant Breach": "Covenant Breach · an die Kreditgeber",
+};
+export function exitSheetOf(r, holdings = [], buyer = null) {
+  if (!r || !r.bridge) return null;
+  const via = (r.name.match(/ \(([^)]+)\)$/) || [])[1];
+  const base = via ? r.name.slice(0, -(via.length + 3)) : r.name;
+  const c = holdings.find((h) => h && h.name === base) || { name: base };
+  return {
+    kind: "bridge", c, title: r.name, bridge: r.bridge,
+    price: r.bridge.exit - (r.bridge.dist || 0),
+    head: EXIT_VIA[via] || (buyer ? `Exit an ${buyer}` : "Exit"),
+  };
+}
+
+/* Eine Zeile im Track Record. Mit Value Bridge öffnet sie das Exit-Fenster,
+   ohne (Partien vor dem 01.09.2026) bleibt sie eine Zeile. */
+export function TrackRow({ r, open }) {
+  const mo = <span className="mo" style={{ color: r.moic >= 1 ? "var(--teal)" : "var(--ox)" }}>{r.moic.toFixed(2)}×</span>;
+  if (!r.bridge) return <div className="lb"><span className="nm">{r.name}</span>{mo}</div>;
+  return (
+    <button type="button" className="lb lbbtn" onClick={() => { haptic(6); open(); }} aria-label={`${r.name}: Value Bridge öffnen`}>
+      <span className="nm">{r.name}</span>{mo}<span className="lbgo" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
 export function Sheet({ sheet, close, onConfirm }) {
   if (sheet.kind === "confirm") {
     const TITLE = { bil: "Bilateraler Verkauf (Off-Market)", cv: "Single-Asset Continuation Vehicle", ipo: "Börsengang", proc: "Verkaufsprozess einleiten" };
@@ -3648,15 +3693,18 @@ export function Sheet({ sheet, close, onConfirm }) {
     <div className="modal" onClick={close}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="tomb">
-          <div className="sub">Exit an {sheet.buyer}</div>
-          <div className="amt">{(totalOut / b.entry).toFixed(2)}×</div>
-          <div className="sub">{sheet.c.name} · {eur(sheet.price)}{(b.dist || 0) > 0.05 ? ` + ${eur(b.dist)} Ausschüttungen` : ""}
+          <div className="sub">{sheet.head || `Exit an ${sheet.buyer}`}</div>
+          <div className="amt">{(totalOut / Math.max(0.01, b.entry)).toFixed(2)}×</div>
+          <div className="sub">{sheet.title || sheet.c.name} · {eur(sheet.price)}{(b.dist || 0) > 0.05 ? ` + ${eur(b.dist)} Ausschüttungen` : ""}
             {(sheet.c.equityIn || 0) > 0.05 ? ` · Einstieg inkl. ${eur(sheet.c.equityIn)} nachgeschossen` : ""}</div>
         </div>
-        <div className="card">
-          <h3 className="disp">Verlauf</h3>
-          <Track c={sheet.c} />
-        </div>
+        {/* Aus dem Track Record geöffnet fehlt einer verkauften Beteiligung die Historie */}
+        {sheet.c.hist && (
+          <div className="card">
+            <h3 className="disp">Verlauf</h3>
+            <Track c={sheet.c} />
+          </div>
+        )}
         <div className="card">
           <h3 className="disp">Value Bridge</h3>
           <div className="pad">

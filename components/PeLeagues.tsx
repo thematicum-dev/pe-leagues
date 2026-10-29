@@ -20,7 +20,7 @@ import {
   RESERVE_PROP, ROLE3, SECCOLOR, SECLABEL, SECNAMES, SECTORS, applyProceeds, bookOff, buildInit,
   addonMandate, addonMaxEb, chargeOff, clamp, ddCapOf, ddCostOf, dealMoic, periodFin, resetPeriod, dealMultiple, dpiOf,
   ebitdaOf, eqvOf, eur, fairOf, feeReserveOf, fitOf, gebote, grossMoicOf, healthOf, hj, initRuns,
-  closeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
+  closeUnrealized, takeUnrealized, initsOf, investableOf, irrOf, makeBridge, makeOffers, makeSeats, markMultiple, maturePeople,
   navValueOf, newDeal, newLandmark, landmarkAsk, announceLandmark, botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove, overstretch, payOf, pct, recycleRoom, retainerOf, scoreOf,
   seatLoad, severanceOf, signBonusOf, spendFund, stepCompany, tvccOf, tvpiOf, x,
 } from "@/lib/engine";
@@ -29,7 +29,7 @@ import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, 
   LandmarkTeaser,
   TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
-  Shortlist, Offers, Sheet, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
+  Shortlist, Offers, Sheet, SeasonDrivers, TrackRow, exitSheetOf, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
@@ -99,6 +99,13 @@ export default function PeLeagues() {
   const [burst, setBurst] = useState(0);
   const [streak, setStreak] = useState(0);
   const prevScoreRef = React.useRef(null);
+  /* Value Bridge des Fonds: der Stand nach dem vorletzten und nach dem letzten
+     Periodenschluss. Die Halbjahresspalte ist die Differenz der beiden — wie
+     in der Mehrspielerpartie, wo die Stände aus der Datenbank kommen. Als
+     Abschrift, weil die Beteiligungen im Lauf eines Halbjahres verändert
+     werden. */
+  const lastCloseRef = React.useRef(null);
+  const [prevBridge, setPrevBridge] = useState(null);
   /* Eine Zufallsinstanz je Partie (Komponenteninstanz) — kein geteilter
      Modul-Zustand mehr. Startwert entspricht dem bisherigen Default. */
   const rngRef = React.useRef<Rng | null>(null);
@@ -394,7 +401,8 @@ export default function PeLeagues() {
             t: `Covenant Breach bei <b>${c.name}</b>: Enforcement durch die Kreditgeber, das Eigenkapital von ${eur(c.entryEquity)} wird ausgebucht.`,
           });
           // Auch nach einem Breach zählen bereits ausgeschüttete Rekapitalisierungen
-          f.realized.push({ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0) });
+          f.realized.push({ name: c.name + " (Covenant Breach)", moic: dealMoic(c, 0), bridge: makeBridge(c, 0, 0),
+            uOut: takeUnrealized(c, mk, 0) });
           return false;
         }
         if (f.me && (c.breach || 0) === 1) news.push({
@@ -481,16 +489,18 @@ export default function PeLeagues() {
     const resolved = [];
     F[0].holdings.forEach((c) => {
       if (c.proc && q >= c.proc.resolveQ) {
-        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(rng, c, mk, F, F[0].attrs.negotiation, q) });
+        resolved.push({ uid: c.uid, name: c.name, offers: makeOffers(rng, c, mk, F, F[0].attrs.negotiation, q, F[0]) });
         c.proc = null;
       }
     });
     F[0].holdings = F[0].holdings.filter((c) => {
       if (c.lockUntil && q >= c.lockUntil) {
-        const val = exitNetOf(c, fairOf(c, mk, F[0].attrs.negotiation, q), BIL_FEE);
+        const grossVal = fairOf(c, mk, F[0].attrs.negotiation, q);
+        const val = exitNetOf(c, grossVal, BIL_FEE);
         const cb = c.costLeft ?? c.entryEquity;
         applyProceeds(F[0], val, cb, q);
-        F[0].realized.push({ name: c.name + " (Restbeteiligung)", moic: dealMoic(c, val) });
+        F[0].realized.push({ name: c.name + " (Restbeteiligung)", moic: dealMoic(c, val),
+          bridge: makeBridge(c, grossVal, val), uOut: takeUnrealized(c, mk, val) });
         news.push({
           q, e: val >= cb ? "🔔" : "📉", tone: val >= cb ? "pos" : "neg",
           t: `Lock-up bei <b>${c.name}</b> ausgelaufen — Restbeteiligung für ${eur(val)} platziert.`,
@@ -517,7 +527,8 @@ export default function PeLeagues() {
         if (c.holdQ >= MIN_HOLD && (irr > hurdle || c.holdQ >= patience || PERIODS - q <= 2)) {
           const net = exitNetOf(c, val, PROC_FEE);
           applyProceeds(f, net, c.costLeft ?? c.entryEquity, q);
-          f.realized.push({ name: c.name, moic: dealMoic(c, net) });
+          f.realized.push({ name: c.name, moic: dealMoic(c, net), bridge: makeBridge(c, val, net),
+            uOut: takeUnrealized(c, mk, net) });
           return false;
         }
         return true;
@@ -541,6 +552,8 @@ export default function PeLeagues() {
     setQuarter(q);
     if (q >= PERIODS) { liquidate(F, mk, q); setPhase("end"); }
     else { setBrief({ q, prev: quarter > 0 ? before : null, now: perfOf(F, mk, q) }); setBriefOpen(true); }
+    setPrevBridge(lastCloseRef.current);
+    lastCloseRef.current = { fund: JSON.parse(JSON.stringify(F[0])), market: mk, quarter: q };
 
     // Serie guter Halbjahre sichtbar machen — das eigentliche Momentum-Signal
     const newScore = scoreOf(F[0], mk, q);
@@ -757,7 +770,13 @@ function finalize(c, gross, buyer, feeRate, extra?) {
     setUseProceeds(null);
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
-      const g = { ...f, holdings: f.holdings.filter((h) => h.uid !== c.uid), realized: [...f.realized, { name: c.name, moic: dealMoic(c, net) }] };
+      /* Die stehende Kette abgreifen, wie bei jedem Exit in der Auswertung
+         (finalizeExit in lib/engine/runQuarter.ts) — sonst fehlt der Deal in
+         der Value Bridge des Fonds. An einer Abschrift: React darf diese
+         Funktion zweimal aufrufen, takeUnrealized schreibt an der Beteiligung. */
+      const live = f.holdings.find((h) => h.uid === c.uid) || c;
+      const uOut = takeUnrealized({ ...live }, market, net);
+      const g = { ...f, holdings: f.holdings.filter((h) => h.uid !== c.uid), realized: [...f.realized, { name: c.name, moic: dealMoic(c, net), bridge, uOut }] };
       applyProceeds(g, net, c.costLeft ?? c.entryEquity, decQ, keep);
       return g;
     }));
@@ -787,16 +806,24 @@ function finalize(c, gross, buyer, feeRate, extra?) {
     const gross = fair * CV_STAKE * CV_DISC;
     const net = exitNetOf(c, gross, CV_FEE);
     const costSold = c.entryEquity * CV_STAKE;
+    // Vor der Anteilsänderung, wie in runQuarter: liveHist() liest c.st
+    const bridge = makeBridge(c, gross, net, { stake: (c.st ?? 1) * CV_STAKE, cost: costSold, recap: 0 });
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
+      let uOut = null;
       const g = {
         ...f,
-        holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-          ...h, st: (h.st ?? 1) * (1 - CV_STAKE), entryEquity: h.entryEquity * (1 - CV_STAKE),
-          costLeft: Math.max(0.01, (h.costLeft ?? h.entryEquity) - costSold),
-          cashOut: (h.cashOut || 0) + net, entryEbitda: h.entryEbitda, cv: true, proc: null,
+        holdings: f.holdings.map((h0) => {
+          if (h0.uid !== c.uid) return h0;
+          const h = { ...h0 };
+          uOut = takeUnrealized(h, market, net, CV_STAKE);
+          return {
+            ...h, st: (h.st ?? 1) * (1 - CV_STAKE), entryEquity: h.entryEquity * (1 - CV_STAKE),
+            costLeft: Math.max(0.01, (h.costLeft ?? h.entryEquity) - costSold),
+            cashOut: (h.cashOut || 0) + net, entryEbitda: h.entryEbitda, cv: true, proc: null,
+          };
         }),
-        realized: [...f.realized, { name: c.name + " (Teilexit)", moic: net / costSold }],
+        realized: [...f.realized, { name: c.name + " (Teilexit)", moic: net / costSold, bridge, uOut }],
       };
       applyProceeds(g, net, costSold, decQ);
       return g;
@@ -812,16 +839,24 @@ function finalize(c, gross, buyer, feeRate, extra?) {
     const gross = fair * IPO_PLACE * IPO_DISC;
     const net = exitNetOf(c, gross, IPO_FEE);
     const costSold = c.entryEquity * IPO_PLACE;
+    // Vor der Anteilsänderung, wie in runQuarter: liveHist() liest c.st
+    const bridge = makeBridge(c, gross, net, { stake: (c.st ?? 1) * IPO_PLACE, cost: costSold, recap: 0 });
     setFunds((F) => F.map((f, i) => {
       if (i !== 0) return f;
+      let uOut = null;
       const g = {
         ...f,
-        holdings: f.holdings.map((h) => h.uid !== c.uid ? h : {
-          ...h, st: (h.st ?? 1) * (1 - IPO_PLACE), entryEquity: h.entryEquity * (1 - IPO_PLACE),
-          costLeft: Math.max(0.01, (h.costLeft ?? h.entryEquity) - costSold),
-          cashOut: (h.cashOut || 0) + net, lockUntil: decQ + 2, proc: null,
+        holdings: f.holdings.map((h0) => {
+          if (h0.uid !== c.uid) return h0;
+          const h = { ...h0 };
+          uOut = takeUnrealized(h, market, net, IPO_PLACE);
+          return {
+            ...h, st: (h.st ?? 1) * (1 - IPO_PLACE), entryEquity: h.entryEquity * (1 - IPO_PLACE),
+            costLeft: Math.max(0.01, (h.costLeft ?? h.entryEquity) - costSold),
+            cashOut: (h.cashOut || 0) + net, lockUntil: decQ + 2, proc: null,
+          };
         }),
-        realized: [...f.realized, { name: c.name + " (IPO)", moic: net / costSold }],
+        realized: [...f.realized, { name: c.name + " (IPO)", moic: net / costSold, bridge, uOut }],
       };
       applyProceeds(g, net, costSold, decQ);
       return g;
@@ -1075,6 +1110,11 @@ function finalize(c, gross, buyer, feeRate, extra?) {
             </div>
           </div>
         )}
+        {/* Die Endabrechnung zeigt wie die Mehrspielerpartie, woher die Rendite
+            kam — über jedem Tab, solange die Partie vorbei ist. */}
+        {phase === "end" && (
+          <SeasonDrivers fund={me} market={market} quarter={quarter} prev={prevBridge} title="Woher deine Rendite kam" />
+        )}
 
         {tab === "deals" && (
           <>
@@ -1112,6 +1152,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
               <h3 className="disp">Sektoren nach NAV</h3>
               <SectorSplit holdings={me.holdings} market={market} />
             </div>
+            {phase !== "end" && <SeasonDrivers fund={me} market={market} quarter={quarter} prev={prevBridge} />}
             {me.holdings.length === 0 && (
               <div className="card"><div className="pad" style={{ paddingTop: 14, fontSize: 13, color: "var(--ink2)" }}>
                 Noch keine Beteiligungen. Im Dealflow findest du vier strukturierte Prozesse und deine proprietären Kontakte.
@@ -1139,12 +1180,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
             {me.realized.length > 0 && (
               <div className="card">
                 <h3 className="disp">Track Record</h3>
-                {me.realized.map((r, i) => (
-                  <div className="lb" key={i}>
-                    <span className="nm">{r.name}</span>
-                    <span className="mo" style={{ color: r.moic >= 1 ? "var(--teal)" : "var(--ox)" }}>{r.moic.toFixed(2)}×</span>
-                  </div>
-                ))}
+                {me.realized.map((r, i) => <TrackRow key={i} r={r} open={() => setSheet(exitSheetOf(r, me.holdings))} />)}
               </div>
             )}
           </>

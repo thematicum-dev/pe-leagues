@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../rng";
 import {
-  CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, PERIODS, SECNAMES, SECTORS, dpiOf, tvpiOf,
+  CAPITAL, DEFAULT_HUMAN_ATTRS, ARCHES, INVEST_PERIOD, LEGACY_COMPAT, MIN_HOLD, PERIODS, SECNAMES, SECTORS, dpiOf, tvpiOf,
 } from "../engine";
 import type { EngineCompat } from "../engine";
 import { runQuarter, bootstrapInitialDeals } from "../runQuarter";
@@ -128,6 +128,10 @@ describe("Sperre nach abgebrochenem Verkaufsprozess", () => {
     const s1 = runQuarter({ state, halfYear: 3, rng,
       decisionsBySlot: { 0: { offerDecisions: [{ holdingUid: uid, choice: "abort" }] } } }).state;
     const gesperrt = (s1.funds[0].holdings as Any[]).find((h) => h.uid === uid);
+    /* Die Gebote sind von Hand gestellt, die Beteiligung ist erst zwei
+       Halbjahre alt. Seit dem 29.10.2026 prüft die Auswertung die
+       Mindesthaltedauer selbst — hier geht es nur um die Sperre. */
+    if (gesperrt) gesperrt.holdQ = MIN_HOLD;
     const s2 = runQuarter({ state: s1, halfYear: 4, rng, compat,
       decisionsBySlot: { 0: { exitStarts: [{ holdingUid: uid, action, keepPct: 0 } as ExitStartIntent] } } }).state;
     const h = (s2.funds[0].holdings as Any[]).find((x) => x.uid === uid);
