@@ -282,4 +282,34 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     const hy = (await su("select current_half_year from public.seasons where id = $1", [season])).rows[0].current_half_year;
     expect(hy).toBe(2);
   });
+
+  it("Admin schiebt eine Partie ins nächste Halbjahr, obwohl noch jemand fehlt", async () => {
+    const a = await newUser("Ada Abgabe");
+    const b = await newUser("Ben Bummel");
+    const season = (await asUser(a, "select public.create_and_join_season($1, $2::jsonb) as id", [universe, ATTRS])).rows[0].id;
+    await asUser(b, "select public.join_season($1, $2::jsonb)", [season, ATTRS]);
+    await asUser(a, "select public.force_start_season($1)", [season]);
+    await sweep();
+    const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as Error).message; } };
+    const ins = (uid: string) =>
+      asUser(uid, "insert into public.turn_submissions (season_id, half_year, profile_id, payload) values ($1, 1, $2, '{}')", [season, uid]);
+
+    await ins(a);
+    expect((await sweep()).body.results.some((x: Any) => x.seasonId === season), "ohne Admin nicht fällig").toBe(false);
+    expect(await code(asUser(a, "select public.admin_advance_season($1)", [season])), "Spieler schiebt").toBe("not_admin");
+
+    expect((await asUser(admin, "select public.admin_advance_season($1) as hy", [season])).rows[0].hy).toBe(1);
+    expect(await code(ins(b)), "Abgabe nach dem Vorziehen").not.toBe("ok");
+    const r = await sweep();
+    expect((r.body.results as Any[]).find((x) => x.seasonId === season)?.ok, JSON.stringify(r.body)).toBe(true);
+    const s = (await su("select current_half_year, current_half_year_deadline > now() as open from public.seasons where id = $1", [season])).rows[0];
+    expect(s.current_half_year).toBe(2);
+    expect(s.open, "neue Frist fürs Folgehalbjahr").toBe(true);
+
+    // Während einer Auswertung und nach dem Ende abgewiesen
+    await su("update public.seasons set evaluation_lock_at = now() where id = $1", [season]);
+    expect(await code(asUser(admin, "select public.admin_advance_season($1)", [season]))).toBe("evaluation_running");
+    await su("update public.seasons set evaluation_lock_at = null, status = 'finished' where id = $1", [season]);
+    expect(await code(asUser(admin, "select public.admin_advance_season($1)", [season]))).toBe("season_not_running");
+  });
 });
