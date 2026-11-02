@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft,
-  type DraftRefs, type TurnDraft,
+  EMPTY_DRAFT, decisionsFromDraft, draftFromDecisions, draftKeyFor, draftKeyPrefixFor, isDraftEmpty,
+  restoreDraft, type DraftRefs, type TurnDraft,
 } from "../turnDraft";
 
 /* Der Zustand einer laufenden Partie, gegen den ein gespeicherter Entwurf
@@ -118,5 +118,48 @@ describe("Entwurf eines Halbjahres", () => {
     // Auch ein allein vorgerückter Cursor ist Arbeit und muss erhalten bleiben
     expect(isDraftEmpty({ ...EMPTY_DRAFT, shortlistCursor: 1 })).toBe(false);
     expect(isDraftEmpty({ ...EMPTY_DRAFT, bids: { d1: { mult: 8, lev: 3 } } })).toBe(false);
+  });
+});
+
+describe("Abgabe und Entwurf", () => {
+  it("übersetzt den Entwurf in die Abgabe, die der Server erwartet", () => {
+    expect(decisionsFromDraft(fullDraft)).toEqual({
+      bids: [{ dealId: "d1", multiple: 8.5, leverage: 3 }],
+      dueDiligence: ["d2"],
+      initiatives: fullDraft.initiatives,
+      equityInjections: fullDraft.equityInjections,
+      ltip: ["c1"],
+      studies: ["c2"],
+      searches: fullDraft.searches,
+      hires: fullDraft.hireDecisions,
+      exitStarts: fullDraft.exitStarts,
+      offerDecisions: fullDraft.offerDecisions,
+    });
+  });
+
+  it("schickt für einen leeren Entwurf eine leere Abgabe", () => {
+    expect(decisionsFromDraft(EMPTY_DRAFT)).toEqual({});
+  });
+
+  it("stellt aus der abgegebenen Abgabe denselben Entwurf wieder her, samt Cursor", () => {
+    // Nach einem Neuladen gibt es nur noch die Abgabe auf dem Server.
+    expect(draftFromDecisions(decisionsFromDraft(fullDraft), refs())).toEqual(fullDraft);
+  });
+
+  it("verwirft beim Rückweg Referenzen, die es nicht mehr gibt, und kaputte Einträge", () => {
+    const back = draftFromDecisions({
+      bids: [{ dealId: "d1", multiple: 8, leverage: 3 }, { dealId: "weg", multiple: 9, leverage: 2 },
+        { dealId: "d2", multiple: Number.NaN, leverage: 1 }],
+      dueDiligence: ["d2", "weg"],
+      ltip: ["c1", "verkauft"],
+    }, refs());
+    expect(back.bids).toEqual({ d1: { mult: 8, lev: 3 } });
+    expect(back.ddStaged).toEqual({ d2: true });
+    expect(back.ltipStaged).toEqual(["c1"]);
+    expect(back.shortlistCursor).toBe(0);
+  });
+
+  it("liefert für eine fehlende Abgabe den leeren Entwurf", () => {
+    expect(draftFromDecisions(null, refs())).toEqual(EMPTY_DRAFT);
   });
 });

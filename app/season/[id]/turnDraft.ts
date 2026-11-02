@@ -18,8 +18,8 @@
    Die reinen Funktionen stehen hier und nicht in der Komponente, damit sich
    Wiederherstellung und Referenzprüfung ohne React testen lassen. */
 import type {
-  EquityInjectionIntent, ExitStartIntent, HireIntent, InitiativeIntent, OfferDecisionIntent,
-  SearchIntent,
+  Bid, EquityInjectionIntent, ExitStartIntent, HireIntent, InitiativeIntent, OfferDecisionIntent,
+  SearchIntent, TurnDecisions,
 } from "@/lib/engine/turnTypes";
 
 export interface TurnDraft {
@@ -122,4 +122,57 @@ export function restoreDraft(raw: string | null, refs: DraftRefs): TurnDraft | n
     shortlistCursor: cursor(o.shortlistCursor, refs.shortlistCount),
     exitQueueCursor: cursor(o.exitQueueCursor, refs.exitQueueCount),
   };
+}
+
+/* Entwurf -> Abgabe: genau das, was an turn_submissions.payload geht. Leere
+   Listen bleiben weg, damit eine Abgabe ohne Entscheidungen "{}" ist. Die
+   Cursor gehören nicht dazu — sie sind reine Ansichtssache. */
+export function decisionsFromDraft(d: TurnDraft): TurnDecisions {
+  const bids: Bid[] = Object.entries(d.bids).map(([dealId, b]) => ({ dealId, multiple: b.mult, leverage: b.lev }));
+  const dueDiligence = Object.keys(d.ddStaged);
+  const p: TurnDecisions = {};
+  if (bids.length) p.bids = bids;
+  if (dueDiligence.length) p.dueDiligence = dueDiligence;
+  if (d.initiatives.length) p.initiatives = d.initiatives;
+  if (d.equityInjections.length) p.equityInjections = d.equityInjections;
+  if (d.ltipStaged.length) p.ltip = d.ltipStaged;
+  if (d.studyStaged.length) p.studies = d.studyStaged;
+  if (d.searches.length) p.searches = d.searches;
+  if (d.hireDecisions.length) p.hires = d.hireDecisions;
+  if (d.exitStarts.length) p.exitStarts = d.exitStarts;
+  if (d.offerDecisions.length) p.offerDecisions = d.offerDecisions;
+  return p;
+}
+
+/* Abgabe -> Entwurf: der Rückweg, für die Wartezeit nach der Abgabe. Die
+   Spielansicht zeigt den Entwurf an (Gebote auf den Deal-Karten, Vormerkungen
+   an den Beteiligungen), und wer die Abgabe bis zur Frist bearbeitet, setzt
+   genau dort wieder auf. Nach einem Neuladen gibt es den Entwurf im Browser
+   nicht mehr (er wird mit der Abgabe gelöscht), die Abgabe selbst aber schon.
+
+   Die Cursor ergeben sich aus den Entscheidungen: Jede Shortlist und jedes
+   Gebotspaket wird genau einmal entschieden, in der Reihenfolge der
+   Warteschlange. Die Referenzprüfung übernimmt restoreDraft, damit beide Wege
+   in den Entwurf dieselben Regeln haben. */
+export function draftFromDecisions(p: TurnDecisions | null | undefined, refs: DraftRefs): TurnDraft {
+  if (!p || typeof p !== "object") return EMPTY_DRAFT;
+  const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+  const bids: TurnDraft["bids"] = {};
+  arr<Bid>(p.bids).forEach((b) => {
+    if (b && typeof b.dealId === "string" && Number.isFinite(b.multiple) && Number.isFinite(b.leverage)) {
+      bids[b.dealId] = { mult: b.multiple, lev: b.leverage };
+    }
+  });
+  const ddStaged: TurnDraft["ddStaged"] = {};
+  arr<string>(p.dueDiligence).forEach((id) => { if (typeof id === "string") ddStaged[id] = true; });
+  const hires = arr<HireIntent>(p.hires);
+  const offers = arr<OfferDecisionIntent>(p.offerDecisions);
+  const raw = {
+    bids, ddStaged,
+    searches: arr(p.searches), initiatives: arr(p.initiatives), equityInjections: arr(p.equityInjections),
+    ltipStaged: arr(p.ltip), studyStaged: arr(p.studies), exitStarts: arr(p.exitStarts),
+    hireDecisions: hires, offerDecisions: offers,
+    shortlistCursor: hires.length, exitQueueCursor: offers.length,
+  };
+  return restoreDraft(JSON.stringify(raw), refs) ?? EMPTY_DRAFT;
 }

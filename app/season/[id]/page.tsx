@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/access/context";
-import type { RuntimeState } from "@/lib/engine/turnTypes";
+import type { RuntimeState, TurnDecisions } from "@/lib/engine/turnTypes";
 import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
 import LobbyRoom from "./LobbyRoom";
@@ -56,6 +56,12 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   let history: { halfYear: number; market: RuntimeState["market"]; funds: RuntimeState["funds"] }[] = [];
   let submissionStatus = { humanCount: 0, submittedCount: 0, missingCount: 0 };
   let alreadySubmitted = false;
+  /* Die eigene Abgabe des laufenden Halbjahres, falls es sie schon gibt. Die
+     Spielansicht zeigt sie in der Wartezeit an (Gebote auf den Deal-Karten,
+     Vormerkungen an den Beteiligungen) und braucht sie als Ausgangspunkt,
+     wenn die Abgabe bis zur Frist noch einmal bearbeitet wird. Lesbar ist
+     ausschließlich die eigene Zeile (Policy turn_submissions_select_own). */
+  let submittedPayload: TurnDecisions | null = null;
 
   if (season.status === "running" && humanSlot != null) {
     const { data: stateRows } = await supabase
@@ -84,6 +90,16 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
         missingCount: statusRow.missing_count,
       };
       alreadySubmitted = statusRow.i_have_submitted;
+    }
+    if (alreadySubmitted) {
+      const { data: own } = await supabase
+        .from("turn_submissions")
+        .select("payload")
+        .eq("season_id", id)
+        .eq("half_year", season.current_half_year)
+        .eq("profile_id", user.id)
+        .maybeSingle();
+      submittedPayload = (own?.payload as TurnDecisions | null) ?? null;
     }
   }
 
@@ -187,6 +203,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
             history={history}
             submissionStatus={submissionStatus}
             alreadySubmitted={alreadySubmitted}
+            submittedPayload={submittedPayload}
           />
         )}
 

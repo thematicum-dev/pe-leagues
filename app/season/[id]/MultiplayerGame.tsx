@@ -29,12 +29,13 @@ import {
 import { HalfYearBriefing } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
 import type {
-  RuntimeState, RuntimeFund, TurnDecisions, Bid, InitiativeIntent, SearchIntent,
+  RuntimeState, RuntimeFund, TurnDecisions, InitiativeIntent, SearchIntent,
   ExitStartIntent, OfferDecisionIntent, Seat, HireChoice,
 } from "@/lib/engine/turnTypes";
 import type { AddonOpts } from "@/lib/engine";
 import {
-  EMPTY_DRAFT, draftKeyFor, draftKeyPrefixFor, isDraftEmpty, restoreDraft, type TurnDraft,
+  EMPTY_DRAFT, decisionsFromDraft, draftFromDecisions, draftKeyFor, draftKeyPrefixFor, isDraftEmpty,
+  restoreDraft, type DraftRefs, type TurnDraft,
 } from "./turnDraft";
 import {
   BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
@@ -87,6 +88,27 @@ export interface MultiplayerGameProps {
   history: HistoryRow[];
   submissionStatus: { humanCount: number; submittedCount: number; missingCount: number };
   alreadySubmitted: boolean;
+  /* Die eigene Abgabe dieses Halbjahres, wenn es sie schon gibt (sonst null).
+     Aus ihr entsteht nach einem Neuladen der Entwurf, den die Wartezeit
+     anzeigt und den "Abgabe bearbeiten" fortsetzt. */
+  submittedPayload?: TurnDecisions | null;
+}
+
+/* Was es im Spielstand gerade gibt, gegen das ein Entwurf geprüft wird. Als
+   Funktion der Props, damit sie auch im Lazy-Initializer des Entwurfs läuft
+   (Server und Browser rechnen dort dasselbe). */
+function draftRefsOf(state: RuntimeState, humanSlot: number): DraftRefs {
+  const me = state.funds.find((f) => f.slot === humanSlot);
+  const shortlist = state.shortlist[String(humanSlot)] ?? [];
+  const exitQueue = state.exitQueue[String(humanSlot)] ?? [];
+  return {
+    dealIds: new Set((state.deals as Any[]).map((x2) => x2.id)),
+    holdingUids: new Set(((me?.holdings ?? []) as Any[]).map((h) => h.uid)),
+    shortlistKeys: new Set(shortlist.map((sl) => `${sl.holdingUid}:${sl.seat}`)),
+    offerUids: new Set(exitQueue.map((o) => o.holdingUid)),
+    shortlistCount: shortlist.length,
+    exitQueueCount: exitQueue.length,
+  };
 }
 
 
@@ -316,7 +338,7 @@ function TimeBar({
 }
 
 export default function MultiplayerGame({
-  seasonId, humanSlot, currentHalfYear, deadline, serverNow, state, history, submissionStatus, alreadySubmitted,
+  seasonId, humanSlot, currentHalfYear, deadline, serverNow, state, history, submissionStatus, alreadySubmitted, submittedPayload = null,
 }: MultiplayerGameProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -327,6 +349,12 @@ export default function MultiplayerGame({
   const [openFund, setOpenFund] = useState<number | null>(null);
 
   const [submitted, setSubmitted] = useState(alreadySubmitted);
+  /* Nach der Abgabe bleibt die Spielansicht stehen, aber nur lesbar. Mit
+     "Abgabe bearbeiten" wird sie bis zur Frist wieder bedienbar; die
+     abgegebene Fassung gilt, bis neu abgeschlossen wird. */
+  const [editing, setEditing] = useState(false);
+  const [updatedOnce, setUpdatedOnce] = useState(false);
+  const locked = submitted && !editing;
   const [status, setStatus] = useState(submissionStatus);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,7 +367,14 @@ export default function MultiplayerGame({
      unten), und die Wiederherstellung ist damit ein einziges setState statt
      einer Kaskade. Die Einzelsetter darunter halten alle Aufrufstellen
      unverändert — sie akzeptieren wie zuvor Wert oder Updater-Funktion. */
-  const [draft, setDraft] = useState<TurnDraft>(EMPTY_DRAFT);
+  /* Wer schon abgegeben hat, sieht seine Abgabe: Der Entwurf entsteht dann aus
+     der gespeicherten Abgabe statt leer. Das geht im Lazy-Initializer, weil
+     die Abgabe als Prop vom Server kommt und beide Seiten dasselbe rechnen —
+     anders als der Entwurf aus localStorage weiter unten. */
+  const [draft, setDraft] = useState<TurnDraft>(() => (alreadySubmitted
+    ? draftFromDecisions(submittedPayload, draftRefsOf(state, humanSlot)) : EMPTY_DRAFT));
+  /* Die zuletzt abgegebene Fassung, für "Änderungen verwerfen". */
+  const [submittedDraft, setSubmittedDraft] = useState<TurnDraft>(draft);
   const {
     bids, ddStaged, searches, initiatives, equityInjections, ltipStaged, studyStaged,
     exitStarts, hireDecisions, offerDecisions, shortlistCursor, exitQueueCursor,
@@ -613,14 +648,10 @@ export default function MultiplayerGame({
   useEffect(() => {
     let restored: TurnDraft | null = null;
     try {
-      restored = restoreDraft(window.localStorage.getItem(draftKey), {
-        dealIds: new Set((state.deals as Any[]).map((x2) => x2.id)),
-        holdingUids: new Set(((me?.holdings ?? []) as Any[]).map((h) => h.uid)),
-        shortlistKeys: new Set(shortlistAll.map((s) => `${s.holdingUid}:${s.seat}`)),
-        offerUids: new Set(exitQueueAll.map((o) => o.holdingUid)),
-        shortlistCount: shortlistAll.length,
-        exitQueueCount: exitQueueAll.length,
-      });
+      // Nach der Abgabe gilt die Abgabe selbst (siehe useState oben), nicht
+      // ein Entwurf, der noch im Browser liegen könnte.
+      restored = alreadySubmitted ? null
+        : restoreDraft(window.localStorage.getItem(draftKey), draftRefsOf(state, humanSlot));
     } catch {
       // localStorage nicht lesbar (privater Modus, blockierte Site-Daten):
       // dann eben ohne Entwurf. Kein Grund, die Partie zu blockieren.
@@ -1133,20 +1164,48 @@ export default function MultiplayerGame({
     setError(null);
     setPending(true);
 
-    const bidList: Bid[] = Object.entries(bids).map(([dealId, b]) => ({ dealId, multiple: b.mult, leverage: b.lev }));
-    const dueDiligence = Object.keys(ddStaged);
+    const payload: TurnDecisions = decisionsFromDraft(draft);
 
-    const payload: TurnDecisions = {};
-    if (bidList.length) payload.bids = bidList;
-    if (dueDiligence.length) payload.dueDiligence = dueDiligence;
-    if (initiatives.length) payload.initiatives = initiatives;
-    if (equityInjections.length) payload.equityInjections = equityInjections;
-    if (ltipStaged.length) payload.ltip = ltipStaged;
-    if (studyStaged.length) payload.studies = studyStaged;
-    if (searches.length) payload.searches = searches;
-    if (hireDecisions.length) payload.hires = hireDecisions;
-    if (exitStarts.length) payload.exitStarts = exitStarts;
-    if (offerDecisions.length) payload.offerDecisions = offerDecisions;
+    /* Bearbeiten: dieselbe Zeile überschreiben. Die Policy lässt das nur bis
+       zur Frist und nur, solange keine Auswertung läuft (Migration
+       20261102090000). Lehnt sie ab, gilt die bisherige Abgabe — dann zeigt
+       die Ansicht genau die wieder an, statt einen Stand vorzutäuschen, der
+       nicht ausgewertet wird. */
+    if (submitted) {
+      const { data: rows, error: updateError } = await supabase
+        .from("turn_submissions")
+        .update({ payload })
+        .eq("season_id", seasonId)
+        .eq("half_year", currentHalfYear)
+        .eq("profile_id", (await supabase.auth.getUser()).data.user?.id)
+        .select("half_year");
+      setPending(false);
+      if (updateError && updateError.code !== "42501") {
+        // Netz oder Server: Die Änderungen bleiben stehen, ein zweiter Versuch kann klappen.
+        haptic("error");
+        setError("Das hat nicht geklappt — bitte versuch es erneut. Bis dahin gilt deine bisherige Abgabe.");
+        return;
+      }
+      if (updateError || !rows?.length) {
+        // Abgelehnt (Frist vorbei oder Auswertung läuft): zurück zur gültigen Fassung.
+        haptic("error");
+        setDraft(submittedDraft);
+        setEditing(false);
+        setError("Die Auswertung läuft bereits oder die Frist ist abgelaufen. Es gilt deine bisherige Abgabe.");
+        window.scrollTo(0, 0);
+        refreshStatus();
+        router.refresh();
+        return;
+      }
+      haptic("success");
+      setSubmittedDraft(draft);
+      setEditing(false);
+      setUpdatedOnce(true);
+      window.scrollTo(0, 0);
+      refreshStatus();
+      requestEvaluation();
+      return;
+    }
 
     const { error: insertError } = await supabase.from("turn_submissions").insert({
       season_id: seasonId,
@@ -1157,7 +1216,7 @@ export default function MultiplayerGame({
 
     setPending(false);
     if (insertError) {
-      if (insertError.code === "23505") { haptic("success"); setSubmitted(true); refreshStatus(); return; }
+      if (insertError.code === "23505") { haptic("success"); setSubmittedDraft(draft); setSubmitted(true); refreshStatus(); return; }
       haptic("error");
       /* 42501 heißt hier: Die WITH CHECK-Bedingung der Policy hat abgelehnt.
          Sie prüft nur Dinge, die sich nicht durch einen zweiten Versuch
@@ -1173,7 +1232,9 @@ export default function MultiplayerGame({
       return;
     }
     haptic("success");
+    setSubmittedDraft(draft);
     setSubmitted(true);
+    window.scrollTo(0, 0);
     refreshStatus();
     // Sofort anstoßen statt bis zum nächsten Cron-Tick zu warten. Im
     // Einzelspielerfall (vier KI-Fonds) ist die Partie damit unmittelbar
@@ -1181,50 +1242,26 @@ export default function MultiplayerGame({
     requestEvaluation();
   }
 
-  if (submitted) {
-    return (
-      <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
-        <style>{CSS}</style>
-        <div className="wrap" style={{ maxWidth: 520, margin: "0 auto" }}>
-          <div className="tomb" style={{ margin: "24px 16px" }}>
-            <div className="sub">Halbjahr {currentHalfYear} abgegeben</div>
-            <div className="amt" style={{ fontSize: 30 }}>{status.submittedCount}/{status.humanCount}</div>
-            <div className="sub">Mitspieler:innen haben abgegeben</div>
-          </div>
-          <div className="card">
-            <div className="pad" style={{ paddingTop: 16 }}>
-              {deadline && (
-                <p className="hint">
-                  Frist in <Countdown deadline={deadline} serverNow={serverNow} /> — ausgewertet wird, sobald alle abgegeben haben
-                  oder spätestens zur Frist.
-                </p>
-              )}
-              {status.missingCount > 0 && (
-                <p className="hint" style={{ marginTop: 8 }}>Noch {status.missingCount} offen.</p>
-              )}
-            </div>
-          </div>
-          <div style={{ margin: "14px 0" }}>
-            <button className="btn-secondary" style={{ width: "100%" }} onClick={handleManualAdvance} disabled={checking}>
-              {checking ? "Prüfe …" : "Weiter zum nächsten Halbjahr"}
-            </button>
-            {notReadyYet && (
-              <p className="hint" style={{ marginTop: 8 }}>
-                Die Auswertung steht noch aus. Sie startet, sobald alle abgegeben haben oder die Frist
-                abgelaufen ist.
-              </p>
-            )}
-          </div>
-          <div style={{ margin: "0 0 24px" }}>
-            <Link href="/dashboard" className="btn-secondary" style={{ display: "block", width: "100%", textAlign: "center", boxSizing: "border-box" }}>
-              Zum Dashboard
-            </Link>
-          </div>
-          <AbortControl seasonId={seasonId} />
-        </div>
-      </div>
-    );
+  function startEditing() {
+    haptic("tap");
+    setError(null);
+    setEditing(true);
   }
+  function discardEdits() {
+    haptic("tap");
+    setDraft(submittedDraft);
+    setEditing(false);
+    setError(null);
+  }
+
+  /* Nach der Abgabe. Bearbeiten wird nur angeboten, solange noch jemand
+     fehlt: Haben alle abgegeben, läuft die Auswertung sofort an, und die
+     Datenbank nähme die Änderung ohnehin nicht mehr an (Migration
+     20261102090000). Die Frist prüft ebenfalls die Datenbank. */
+  const evaluating = submitted && !editing && status.missingCount === 0;
+  const canEdit = submitted && !editing && status.missingCount > 0;
+  const lockNote = `Abgegeben. Maßnahmen, MEP und Exits sind ab Halbjahr ${currentHalfYear + 1} wieder möglich`
+    + (canEdit ? " oder über „Abgabe bearbeiten“." : ".");
 
   return (
     <div className={"pel" + (dark ? " dark" : "")} ref={rootRef}>
@@ -1312,7 +1349,7 @@ export default function MultiplayerGame({
             {(me.accrued || 0) > 0.5 && <span className="ox">{eur(me.accrued)} aufgelaufene Gebühren</span>}
           </div>
         </div>
-        <div className="cockgrp"><div className="barrow" style={{ fontSize: 10.5, paddingBottom: 2 }}>
+        {!submitted && <div className="cockgrp"><div className="barrow" style={{ fontSize: 10.5, paddingBottom: 2 }}>
           <button
             className="mono"
             /* textAlign: Schaltflächen zentrieren ihren Text von sich aus. Bei
@@ -1330,7 +1367,54 @@ export default function MultiplayerGame({
             <span>Noch kein neues Halbjahr — läuft weiter, bis alle abgegeben haben oder die Frist erreicht ist.</span>
           </div>
         )}
-        </div>
+        </div>}
+        {/* Nach der Abgabe: der Stand der Abgaben statt eines eigenen
+            Wartebildschirms. Die Ansicht darunter bleibt lesbar (Dealflow mit
+            dem eigenen Gebot, Portfolio, Peer Group), ändern lässt sich erst
+            wieder über "Abgabe bearbeiten" oder im nächsten Halbjahr. */}
+        {submitted && (
+          <div className={"waitbar" + (editing ? " editing" : evaluating ? " eval" : "")} role="status">
+            <div className="wl1">
+              {editing ? (
+                <><span className="wmark">✎</span>Abgabe wird bearbeitet</>
+              ) : evaluating ? (
+                <><span className="wmark">●</span>Alle haben abgegeben</>
+              ) : (
+                <><span className="wmark">✓</span>Halbjahr {currentHalfYear} {updatedOnce ? "aktualisiert" : "abgegeben"}
+                  <span className="mono wcount">· {status.submittedCount}/{status.humanCount}</span></>
+              )}
+              <span className="wdots" aria-label={`${status.submittedCount} von ${status.humanCount} haben abgegeben`}>
+                {Array.from({ length: Math.min(status.humanCount, 12) }, (_, i) => (
+                  <i key={i} className={i < status.submittedCount ? "on" : ""} />
+                ))}
+              </span>
+            </div>
+            <div className="wl2">
+              {editing ? (
+                <span>Bis du neu abschließt, gilt deine bisherige Abgabe.</span>
+              ) : evaluating ? (
+                <span>Halbjahr {currentHalfYear} wird ausgewertet …</span>
+              ) : (
+                <span>Zahlen vor der Auswertung · nur lesbar</span>
+              )}
+              <span className="wsp" />
+              {canEdit && (
+                <button className="wbtn wedit" onClick={startEditing}>Abgabe bearbeiten</button>
+              )}
+              {!editing && (
+                <button className="wbtn" onClick={handleManualAdvance} disabled={checking}>
+                  {checking ? "Prüfe …" : "Stand prüfen"}
+                </button>
+              )}
+            </div>
+            {notReadyYet && !editing && (
+              <div className="wl2" style={{ opacity: .6 }}>
+                <span>Noch kein neues Halbjahr. Ausgewertet wird, sobald alle abgegeben haben oder spätestens zur Frist.</span>
+              </div>
+            )}
+            {error && locked && <div className="wl2 werr">{error}</div>}
+          </div>
+        )}
       </div>
 
       <Toasts items={[]} />
@@ -1383,7 +1467,7 @@ export default function MultiplayerGame({
             {(state.deals as Any[]).map((d) => (
               <DealCard key={d.id} d={d} me={me} bid={bids[d.id]} dd={!!ddStaged[d.id]}
                 onDD={() => stageDD(d.id)} ddUsed={Object.keys(ddStaged).length} ddCap={ddCapOf(me.attrs.analysis)}
-                quarter={quarter} setBid={(b: Any) => setBids((p) => ({ ...p, [d.id]: b }))}
+                quarter={quarter} readOnly={locked} setBid={(b: Any) => setBids((p) => ({ ...p, [d.id]: b }))}
                 clear={() => setBids((p) => { const n = { ...p }; delete n[d.id]; return n; })} market={state.market} />
             ))}
             <div className="card">
@@ -1430,6 +1514,7 @@ export default function MultiplayerGame({
                 <div key={c.uid}>
                   <Holding c={patched} market={state.market} quarter={quarter}
                     procCount={me.holdings.filter((h: Any) => h.proc).length} freeSlots={freeSlots}
+                    lockNote={locked ? lockNote : null}
                     act={{
                       proc: () => previewExit(c, "proc"), bil: () => previewExit(c, "bil"),
                       cv: () => previewExit(c, "cv"), ipo: () => previewExit(c, "ipo"),
@@ -1541,13 +1626,28 @@ export default function MultiplayerGame({
           </>
         )}
 
-        <div style={{ margin: "18px 16px 8px" }}>
-          {error && <p className="autherror" style={{ marginBottom: 10 }}>{error}</p>}
-          <button className={"solid cta-big" + (Object.keys(bids).length > 0 ? " ready" : "")}
-            style={{ width: "100%", padding: 14 }} disabled={pending} onClick={handleSubmit}>
-            {pending ? "Wird abgeschickt …" : <>Halbjahr abschließen {Object.keys(bids).length > 0 && `· ${gebote(Object.keys(bids).length)}`}</>}
-          </button>
-        </div>
+        {locked ? (
+          <div style={{ margin: "18px 16px 8px" }}>
+            <Link href="/dashboard" className="btn-secondary" style={{ display: "block", width: "100%", textAlign: "center", boxSizing: "border-box" }}>
+              Zum Dashboard
+            </Link>
+          </div>
+        ) : (
+          <div style={{ margin: "18px 16px 8px" }}>
+            {error && <p className="autherror" style={{ marginBottom: 10 }}>{error}</p>}
+            <button className={"solid cta-big" + (Object.keys(bids).length > 0 ? " ready" : "")}
+              style={{ width: "100%", padding: 14 }} disabled={pending} onClick={handleSubmit}>
+              {pending ? "Wird abgeschickt …"
+                : editing ? <>Geänderte Abgabe abschließen {Object.keys(bids).length > 0 && `· ${gebote(Object.keys(bids).length)}`}</>
+                : <>Halbjahr abschließen {Object.keys(bids).length > 0 && `· ${gebote(Object.keys(bids).length)}`}</>}
+            </button>
+            {editing && (
+              <button className="btn-secondary" style={{ width: "100%", marginTop: 10 }} disabled={pending} onClick={discardEdits}>
+                Änderungen verwerfen
+              </button>
+            )}
+          </div>
+        )}
         {/* Abbrechen steht ganz unten, abgesetzt vom Abschließen des
             Halbjahres; die Nachfrage an Mitspieler erscheint als Dialog. */}
         <AbortControl seasonId={seasonId} />
@@ -1611,12 +1711,12 @@ export default function MultiplayerGame({
           über ihm (gleicher z-index). Solange dort entschieden wird, bleiben
           sie weg — der Gebotsdialog rückt ohnehin erst nach der Entscheidung
           zum nächsten Angebot weiter. */}
-      {!briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && shortlistItem && (
+      {!locked && !briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && shortlistItem && (
         <Shortlist item={{ ...shortlistItem, cands: shortlistItem.candidates }}
           holding={me.holdings.find((h: Any) => h.uid === shortlistItem.holdingUid)}
           analysis={me.attrs.analysis} hire={hireStage} reject={rejectStage} />
       )}
-      {!briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && !shortlistItem && exitQueueItem && (
+      {!locked && !briefOpen && !sheet && !initPick && !useProceedsItem && !exitSheets.length && !shortlistItem && exitQueueItem && (
         <Offers item={exitQueueItem} holding={me.holdings.find((h: Any) => h.uid === exitQueueItem.holdingUid)}
           market={state.market} neg={NEG} decide={decideOfferStage} />
       )}
