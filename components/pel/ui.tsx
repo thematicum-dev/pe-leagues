@@ -173,6 +173,34 @@ export const CSS = `
 .pel .statv{font-size:17px;font-weight:500;white-space:nowrap;margin-top:3px;}
 .pel .prog{height:3px;background:rgba(255,255,255,.14);margin-top:12px;}
 
+/* ---------- Warteleiste nach der Abgabe ----------
+   Teil der Kopfleiste, also immer auf --panel: deshalb die Signalfarben
+   --pgold/--pteal/--pox wie im Cockpit. Gold heißt abgegeben und wartend,
+   Türkis heißt die Auswertung läuft, Rot heißt die Abgabe ist geöffnet. */
+.pel .waitbar{margin:10px -16px 0;padding:9px 32px 10px;background:rgba(220,178,100,.12);
+  border-top:1px solid rgba(220,178,100,.35);}
+.pel .waitbar.eval{background:rgba(95,196,177,.13);border-top-color:rgba(95,196,177,.4);}
+.pel .waitbar.editing{background:rgba(227,137,127,.12);border-top-color:rgba(227,137,127,.4);}
+.pel .waitbar .wl1{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;}
+.pel .waitbar .wmark{color:var(--pgold);}
+.pel .waitbar.eval .wmark{color:var(--pteal);}
+.pel .waitbar.editing .wmark{color:var(--pox);}
+.pel .waitbar .wcount{font-weight:500;opacity:.8;}
+.pel .waitbar .wdots{display:flex;gap:4px;margin-left:auto;}
+.pel .waitbar .wdots i{width:8px;height:8px;border-radius:50%;border:1px solid var(--pgold);}
+.pel .waitbar .wdots i.on{background:var(--pgold);}
+.pel .waitbar.eval .wdots i{border-color:var(--pteal);}
+.pel .waitbar.eval .wdots i.on{background:var(--pteal);}
+.pel .waitbar .wl2{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:6px;
+  font-size:10.5px;line-height:1.45;opacity:.78;}
+.pel .waitbar .wl2.werr{opacity:1;color:var(--pox);}
+.pel .waitbar .wsp{flex:1;}
+.pel .waitbar .wbtn,.pel .waitbar .wbtn:hover:not(:disabled){background:none;border:0;padding:0;
+  color:var(--onpanel);font-size:10.5px;text-decoration:underline;white-space:nowrap;}
+.pel .waitbar .wbtn.wedit,.pel .waitbar .wbtn.wedit:hover:not(:disabled){color:var(--pgold);font-weight:600;}
+/* Deal ohne eigenes Gebot in der Wartezeit: zurückgenommen, aber lesbar. */
+.pel .bcard.ronb{filter:saturate(.55) opacity(.78);}
+
 /* ---------- Coach: goldene Rahmen und Zielmarkierung ----------
    Der geführte Durchlauf braucht zwei Dinge sichtbar: was der Spieler jetzt tun
    soll, und wo er dafür tippen muss. Der Rahmen erklärt, die Markierung zeigt. */
@@ -763,11 +791,20 @@ export function Coach({ eyebrow, title, children, step, total }) {
 // Kennzahlenerklärung im Rahmen: Begriff, dann was er aussagt
 export const Kpi = ({ t, children }) => <><dt>{t}</dt><dd>{children}</dd></>;
 
-export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, ddCap, quarter }) {
+/* readOnly: Nach der Abgabe bleibt der Dealflow lesbar, lässt sich aber nicht
+   mehr ändern. Die Karte zeigt dann statt der Regler das abgegebene Gebot
+   (bid) oder, dass keins abgegeben wurde. Wer bearbeiten will, geht über
+   "Abgabe bearbeiten" -- dann ist readOnly wieder aus. */
+export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, ddCap, quarter, readOnly = false }) {
   const ask = q4(d.askMult);
   const reserve = d.askMult * (d.type === "prop" ? RESERVE_PROP : RESERVE_PROC);
-  const [mult, setMult] = useState(ask);
-  const [lev, setLev] = useState(q4(Math.min(d.levCap, LEV_CARD)));
+  const [multSel, setMult] = useState(ask);
+  const [levSel, setLev] = useState(q4(Math.min(d.levCap, LEV_CARD)));
+  /* Nur lesbar: Alle Zahlen der Karte (Equity Ticket, Zins, Implied MoM)
+     rechnen mit dem abgegebenen Gebot statt mit dem Reglerstand. */
+  const showBid = readOnly && !!bid;
+  const mult = showBid ? bid.mult : multSel;
+  const lev = showBid ? bid.lev : levSel;
   const eb = ebitdaOf(d);
   // Das Equity Ticket enthält die Transaktionskosten — sonst wird ein Gebot an der
   // Liquiditätsgrenze angeboten und fällt beim Auktionsschluss stillschweigend raus.
@@ -839,14 +876,16 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
   const { lead, rest } = useMemo(() => splitDesc(d.desc), [d.desc]);
 
   return (
-    <div className={"bcard tier-" + tier}
+    <div className={"bcard tier-" + tier + (readOnly && !bid ? " ronb" : "")}
       style={{ "--sec": SECCOLOR[d.sector], "--own": id.own }}>
       <i className="bedge" />
 
       <CardHero id={id} sector={d.sector} name={d.name} claim={lead} tier={tier}
-        state={<StatePill tone={lm || d.type === "prop" ? "gold" : "dim"}>
-          {lm ? "⬢ Trophy Asset" : d.type === "prop" ? "🤝 Off-Market" : "📄 Prozess"}
-        </StatePill>}
+        state={showBid
+          ? <StatePill tone="gold"><Icon k="check" />Geboten</StatePill>
+          : <StatePill tone={lm || d.type === "prop" ? "gold" : "dim"}>
+              {lm ? "⬢ Trophy Asset" : d.type === "prop" ? "🤝 Off-Market" : "📄 Prozess"}
+            </StatePill>}
         abilities={(d.flag || lm) && (
           <div className="babils">
             {lm && <Ability kind="angle">Alle fünf Fonds bieten mit</Ability>}
@@ -888,6 +927,8 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
       <Section title="Due Diligence" right={`${ddUsed}/${ddCap} Prozesse`}>
         {dd ? (
           <p className="hint teal">✅ Due Diligence durchgeführt — Sektor-Benchmarks und Wachstumsschätzung aus der Analyse stehen auf der Karte.</p>
+        ) : readOnly ? (
+          <p className="hint">Keine Due Diligence beauftragt.</p>
         ) : (
           <>
             <button onClick={onDD} className={sp("dd").trim()}
@@ -947,8 +988,15 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
         </div>
       </More>
 
-      <Section title="Underwriting" right={`max. ${x(cap)} Leverage`} />
+      {(!readOnly || showBid) && <>
+      <Section title={showBid ? "Dein Gebot" : "Underwriting"} right={`max. ${x(cap)} Leverage`} />
       <div className="bfoot">
+        {showBid ? (
+          <div className="bfnums">
+            <Row k="Gebot" v={`${x(mult)} EBITDA`} />
+            <Row k="Leverage" v={`${x(lev)} · ${pct(rateA)} · Cov ${x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}`} />
+          </div>
+        ) : <>
         <div className="bdial">
           <div className="slrow"><span>Gebot</span>
             <span className="slval" style={{ color: mult < reserve ? "var(--ox)" : "var(--ink)" }}>{x(mult)} EBITDA</span></div>
@@ -972,6 +1020,7 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
             <span className="slval">{x(lev)} · {pct(rateA)} · Cov {x(Math.max(COV_FLOOR, lev + COV_HEADROOM + 0.10 * me.attrs.financing))}</span></div>
           <input type="range" min={0} max={q4(cap)} step={0.25} value={lev} onChange={(e) => { const v = +e.target.value; if (v !== lev) haptic("select"); setLev(v); }} />
         </div>
+        </>}
         <div className="bfnums">
           <Row k="Enterprise Value" v={hidden ? "≈ " + eur(eb * mult) : eur(eb * mult)} />
           <Row k="Equity Ticket" v={eur(eq)} tone={afford ? "" : "ox"} />
@@ -986,9 +1035,14 @@ export function DealCard({ d, me, bid, dd, onDD, setBid, clear, market, ddUsed, 
           </span>
         </div>
       </div>
+      </>}
 
       <div className="bacts">
-        {bid ? (
+        {readOnly ? (
+          showBid
+            ? <p className="hint">Abgegeben. Über den Zuschlag entscheidet die Auswertung des Halbjahres.</p>
+            : <p className="hint">Kein Angebot abgegeben.</p>
+        ) : bid ? (
           <button className="ox" style={{ width: "100%" }} onClick={() => { haptic("tap"); clear(); }}>Angebot zurückziehen</button>
         ) : (
           <button className={"solid cta-big" + sp("bid")} style={{ width: "100%" }} disabled={!afford} onClick={() => { haptic("confirm"); setBid({ mult, lev }); }}>
@@ -1036,7 +1090,10 @@ export function LandmarkTeaser({ landmark, quarter, fresh = false, note = null }
   );
 }
 
-export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false }) {
+/* lockNote: Nach der Abgabe ist die Beteiligung nur lesbar. Statt der Hebel
+   und Exit-Schaltflächen steht dann dieser Hinweis auf der Karte; alles, was
+   nur anzeigt (Kennzahlen, Berichte, Führung, laufende Programme), bleibt. */
+export function Holding({ c, market, quarter, procCount, freeSlots, act, practice = false, lockNote = null }) {
   // Geöffnete Karte einer besetzten Position (SeatSheet)
   const [openSeat, setOpenSeat] = useState<string | null>(null);
   const spot = useContext(CoachCtx);
@@ -1178,7 +1235,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
           "Markt" fehlt. Als Hinweisfeld mit eigener Schaltfläche statt als
           Knopf über die volle Breite — die Lücke und ihre Behebung stehen
           damit an einer Stelle. */}
-      {!c.dd && act.study && (
+      {!lockNote && !c.dd && act.study && (
         <div className="bcallout">
           <span className="bcicon"><Icon k="chart" /></span>
           <div className="bcbody">
@@ -1259,7 +1316,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
                 onClick={() => {
                   haptic(8);
                   // Besetzt: erst die Karte, der Ersatz ist eine Entscheidung darauf. Vakant: gleich suchen.
-                  if (c[k].skill > 0) setOpenSeat(k); else act.search(k);
+                  if (c[k].skill > 0) setOpenSeat(k); else if (!lockNote) act.search(k);
                 }} />
             );
           })}
@@ -1267,7 +1324,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         {c.mx && <ChemLine c={c} />}
         {openSeat && c[openSeat].skill > 0 && (
           <SeatSheet c={c} seat={openSeat}
-            close={() => setOpenSeat(null)} search={(k) => act.search(k)} />
+            close={() => setOpenSeat(null)} search={lockNote ? null : (k) => act.search(k)} />
         )}
       </Section>
 
@@ -1276,7 +1333,9 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
             Fonds-Kapazität<span>{Array.from({ length: Math.min(freeSlots, MAX_SLOTS) }, (_, i) => <i key={i} />)}</span>
           </span>
         : "Fonds ausgelastet"}>
-        <Levers c={c} lev={lev} quarter={quarter} freeSlots={freeSlots} act={act} sp={sp} />
+        {lockNote
+          ? <div className="bnote" style={{ margin: 0 }}><Icon k="lock" />{lockNote}</div>
+          : <Levers c={c} lev={lev} quarter={quarter} freeSlots={freeSlots} act={act} sp={sp} />}
         {/* Was läuft, wann es liefert — und beim Zukauf: was wann gebucht wird.
 
             Ein Add-on wird im Halbjahr des Signings vollzogen. Die
@@ -1312,7 +1371,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
               + (i < (c.addons || []).length - 1 ? "; " : ".")).join("")}
           </div>
         )}
-        {act.inject && !!c.breach && (
+        {!lockNote && act.inject && !!c.breach && (
           <p className="hint" style={{ marginTop: 8 }}>
             Der Covenant ist gerissen. Frisches Eigenkapital heilt den Bruch, bevor die Kreditgeber vollstrecken — der Preis ist eine höhere Kostenbasis.
           </p>
@@ -1336,7 +1395,7 @@ export function Holding({ c, market, quarter, procCount, freeSlots, act, practic
         </div>
       )}
 
-      {!practice && !inProc && !locked && (
+      {!practice && !lockNote && !inProc && !locked && (
         <Section title="Exit" right={c.holdQ < MIN_HOLD ? `möglich in ${hj(MIN_HOLD - c.holdQ)}` : "möglich"}>
           {/* Ein Knoten je Halbjahr bis zur Mindesthaltedauer, am Ende die Flagge. */}
           <div className="bexitpath" role="img" aria-label={`Haltedauer ${Math.min(c.holdQ, MIN_HOLD)} von ${MIN_HOLD} Halbjahren`}>

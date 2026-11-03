@@ -257,6 +257,16 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     // Kaputte Abgabe: wird angenommen (die Datenbank prüft die Form nicht), darf die Partie aber nicht anhalten
     expect(await code(ins(a, 1, { bids: "x", exitStarts: [null], initiatives: { a: 1 } }))).toBe("ok");
     expect(await code(ins(a, 1, {})), "zweite Abgabe").toBe("23505");
+    // Abgabe bearbeiten: die eigene Zeile, bis zur Frist und nur, solange keine Auswertung läuft
+    const upd = (uid: string, payload: unknown, who = a) =>
+      asUser(uid, "update public.turn_submissions set payload = $3 where season_id = $1 and half_year = 1 and profile_id = $2 returning 1", [season, who, JSON.stringify(payload)]);
+    expect((await upd(a, { ltip: [] })).rows.length, "eigene Abgabe bearbeiten").toBe(1);
+    expect((await upd(b, { ltip: [] })).rows.length, "fremde Abgabe bearbeiten").toBe(0);
+    await su("update public.seasons set evaluation_lock_at = now() where id = $1", [season]);
+    expect(await code(upd(a, {})), "bearbeiten während der Auswertung").toBe("42501");
+    await su("update public.seasons set evaluation_lock_at = now() - interval '6 minutes' where id = $1", [season]);
+    expect(await code(upd(a, {})), "verwaister Claim sperrt nicht").toBe("ok");
+    await su("update public.seasons set evaluation_lock_at = null where id = $1", [season]);
     expect((await asUser(b, "select * from public.turn_submissions where season_id = $1", [season])).rows.length, "fremde Abgabe lesen").toBe(0);
     expect((await asUser(outsider, "select * from public.season_state where season_id = $1", [season])).rows.length, "fremden Spielstand lesen").toBe(0);
     expect(await code(asUser(a, "select public.claim_season_for_evaluation($1)", [season])), "Spieler beansprucht Auswertung").not.toBe("ok");
@@ -277,6 +287,7 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     // Frist abgelaufen: keine Abgabe mehr, die Auswertung läuft ohne sie
     await su("update public.seasons set current_half_year_deadline = now() - interval '1 second' where id = $1", [season]);
     expect(await code(ins(b, 1, {})), "Abgabe nach der Frist").not.toBe("ok");
+    expect(await code(upd(a, {})), "bearbeiten nach der Frist").toBe("42501");
     const r = await sweep();
     expect((r.body.results as Any[]).find((x) => x.seasonId === season)?.ok, JSON.stringify(r.body)).toBe(true);
     const hy = (await su("select current_half_year from public.seasons where id = $1", [season])).rows[0].current_half_year;

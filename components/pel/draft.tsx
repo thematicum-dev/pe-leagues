@@ -526,7 +526,8 @@ export function SeatSheet({ c, seat, close, search }: Any) {
         {!ask ? (
           <div className="dbar">
             <button onClick={close}>Schließen</button>
-            <button className="ox" onClick={() => { haptic("tap"); setAsk(true); }}>Ersatz suchen</button>
+            {/* Ohne search (nach der Abgabe, nur lesbar) bleibt die Karte zum Ansehen. */}
+            {search && <button className="ox" onClick={() => { haptic("tap"); setAsk(true); }}>Ersatz suchen</button>}
           </div>
         ) : (
           <div className="dask">
