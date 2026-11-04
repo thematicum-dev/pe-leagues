@@ -4,6 +4,7 @@ import { requireAccess } from "@/lib/access/context";
 import type { RuntimeState, TurnDecisions } from "@/lib/engine/turnTypes";
 import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
+import { rosterFromRows, type SubmissionRosterEntry } from "./submissionRoster";
 import LobbyRoom from "./LobbyRoom";
 import { SeasonDrivers } from "@/components/pel/ui";
 
@@ -62,6 +63,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
      wenn die Abgabe bis zur Frist noch einmal bearbeitet wird. Lesbar ist
      ausschließlich die eigene Zeile (Policy turn_submissions_select_own). */
   let submittedPayload: TurnDecisions | null = null;
+  /* Wer von den Mitspielern schon abgegeben hat (Namen für die Warteleiste). */
+  let submissionRoster: SubmissionRosterEntry[] = [];
 
   if (season.status === "running" && humanSlot != null) {
     const { data: stateRows } = await supabase
@@ -91,6 +94,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
       };
       alreadySubmitted = statusRow.i_have_submitted;
     }
+    const { data: rosterData } = await supabase.rpc("season_submission_roster", { p_season_id: id });
+    submissionRoster = rosterFromRows(rosterData);
     if (alreadySubmitted) {
       const { data: own } = await supabase
         .from("turn_submissions")
@@ -204,6 +209,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
             submissionStatus={submissionStatus}
             alreadySubmitted={alreadySubmitted}
             submittedPayload={submittedPayload}
+            submissionRoster={submissionRoster}
           />
         )}
 

@@ -191,6 +191,15 @@ export const CSS = `
 .pel .waitbar .wdots i.on{background:var(--pgold);}
 .pel .waitbar.eval .wdots i{border-color:var(--pteal);}
 .pel .waitbar.eval .wdots i.on{background:var(--pteal);}
+.pel .waitbar .wroster{list-style:none;margin:7px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:5px;}
+.pel .waitbar .wroster li{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:2px 8px;
+  border-radius:999px;border:1px dashed rgba(255,255,255,.28);font-size:11px;font-weight:500;
+  color:rgba(237,241,238,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pel .waitbar .wroster li.on{border-style:solid;border-color:rgba(220,178,100,.55);color:var(--onpanel);}
+.pel .waitbar .wroster li.on > span:first-child{color:var(--pgold);}
+.pel .waitbar.eval .wroster li.on{border-color:rgba(95,196,177,.55);}
+.pel .waitbar.eval .wroster li.on > span:first-child{color:var(--pteal);}
+.pel .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
 .pel .waitbar .wl2{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:6px;
   font-size:10.5px;line-height:1.45;opacity:.78;}
 .pel .waitbar .wl2.werr{opacity:1;color:var(--pox);}
