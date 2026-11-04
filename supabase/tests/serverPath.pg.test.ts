@@ -276,6 +276,14 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     const st = (await asUser(b, "select * from public.season_submission_status($1)", [season])).rows[0];
     expect(st.submitted_count).toBe(1);
     expect(st.missing_count).toBe(1);
+    // Wer abgegeben hat, sieht jeder Mitspieler mit Namen, aber nicht was und nicht wann
+    const roster = (await asUser(b, "select * from public.season_submission_roster($1)", [season])).rows as Any[];
+    expect(roster.length).toBe(2);
+    expect(roster.map((x) => [x.display_name.replace(` ${TAG}`, ""), x.is_me, x.submitted]))
+      .toEqual([["Rita Recht", false, true], ["Bert Beobachter", true, false]]);
+    expect(roster[0]).not.toHaveProperty("payload");
+    expect(roster[0]).not.toHaveProperty("submitted_at");
+    expect((await asUser(outsider, "select * from public.season_submission_roster($1)", [season])).rows.length, "Außenstehender liest Abgabestand").toBe(0);
     // Der Admin sieht, wer abgegeben hat und wer fehlt, aber nicht was
     const subs = (await asUser(admin, "select * from public.admin_season_submissions() where season_id = $1", [season])).rows as Any[];
     expect(subs.length).toBe(2);

@@ -37,6 +37,7 @@ import {
   EMPTY_DRAFT, decisionsFromDraft, draftFromDecisions, draftKeyFor, draftKeyPrefixFor, isDraftEmpty,
   restoreDraft, type DraftRefs, type TurnDraft,
 } from "./turnDraft";
+import { rosterFromRows, type SubmissionRosterEntry } from "./submissionRoster";
 import {
   BIL_FEE, CAPITAL, CV_DISC, CV_FEE, CV_STAKE, INIT_SLOTS, IPO_DISC, 
   IPO_FEE, IPO_PLACE, LM_ANNOUNCE, LM_DEAL, LTIP_SHARE, MAX_SLOTS,
@@ -92,6 +93,8 @@ export interface MultiplayerGameProps {
      Aus ihr entsteht nach einem Neuladen der Entwurf, den die Wartezeit
      anzeigt und den "Abgabe bearbeiten" fortsetzt. */
   submittedPayload?: TurnDecisions | null;
+  /* Wer von den Mitspielern schon abgegeben hat (Namen für die Warteleiste). */
+  submissionRoster?: SubmissionRosterEntry[];
 }
 
 /* Was es im Spielstand gerade gibt, gegen das ein Entwurf geprüft wird. Als
@@ -339,6 +342,7 @@ function TimeBar({
 
 export default function MultiplayerGame({
   seasonId, humanSlot, currentHalfYear, deadline, serverNow, state, history, submissionStatus, alreadySubmitted, submittedPayload = null,
+  submissionRoster = [],
 }: MultiplayerGameProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -356,6 +360,7 @@ export default function MultiplayerGame({
   const [updatedOnce, setUpdatedOnce] = useState(false);
   const locked = submitted && !editing;
   const [status, setStatus] = useState(submissionStatus);
+  const [roster, setRoster] = useState<SubmissionRosterEntry[]>(submissionRoster);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -429,7 +434,12 @@ export default function MultiplayerGame({
     } | null;
     if (!row) return;
     setStatus({ humanCount: row.human_count, submittedCount: row.submitted_count, missingCount: row.missing_count });
-    if (row.current_half_year !== currentHalfYear) router.refresh();
+    if (row.current_half_year !== currentHalfYear) { router.refresh(); return; }
+    /* Die Namen dazu. Schlägt das fehl (etwa weil die Funktion auf dem Server
+       noch fehlt), bleibt die bisherige Liste stehen. */
+    const { data: rosterRows, error: rosterError } = await supabase
+      .rpc("season_submission_roster", { p_season_id: seasonId });
+    if (!rosterError) setRoster(rosterFromRows(rosterRows));
   }, [supabase, seasonId, currentHalfYear, router]);
 
   /* Nach der eigenen Abgabe nachfassen: die Auswertung anstoßen (falls die
@@ -580,6 +590,8 @@ export default function MultiplayerGame({
   async function handleManualAdvance() {
     setChecking(true);
     setNotReadyYet(false);
+    // Nach der Abgabe zeigt die Warteleiste, wer schon abgegeben hat: gleich mit auffrischen.
+    if (submitted) refreshStatus();
 
     const triggered = await requestEvaluation();
     if (triggered) {
@@ -1259,6 +1271,9 @@ export default function MultiplayerGame({
      Datenbank nähme die Änderung ohnehin nicht mehr an (Migration
      20261102090000). Die Frist prüft ebenfalls die Datenbank. */
   const evaluating = submitted && !editing && status.missingCount === 0;
+  /* Die eigene Zeile folgt sofort der eigenen Abgabe, ohne auf die nächste
+     Antwort des Servers zu warten. */
+  const rosterShown = roster.map((r) => (r.isMe ? { ...r, submitted: r.submitted || submitted } : r));
   const canEdit = submitted && !editing && status.missingCount > 0;
   const lockNote = `Abgegeben. Maßnahmen, MEP und Exits sind ab Halbjahr ${currentHalfYear + 1} wieder möglich`
     + (canEdit ? " oder über „Abgabe bearbeiten“." : ".");
@@ -1383,12 +1398,28 @@ export default function MultiplayerGame({
                 <><span className="wmark">✓</span>Halbjahr {currentHalfYear} {updatedOnce ? "aktualisiert" : "abgegeben"}
                   <span className="mono wcount">· {status.submittedCount}/{status.humanCount}</span></>
               )}
-              <span className="wdots" aria-label={`${status.submittedCount} von ${status.humanCount} haben abgegeben`}>
-                {Array.from({ length: Math.min(status.humanCount, 12) }, (_, i) => (
-                  <i key={i} className={i < status.submittedCount ? "on" : ""} />
-                ))}
-              </span>
+              {!rosterShown.length && (
+                <span className="wdots" aria-label={`${status.submittedCount} von ${status.humanCount} haben abgegeben`}>
+                  {Array.from({ length: Math.min(status.humanCount, 12) }, (_, i) => (
+                    <i key={i} className={i < status.submittedCount ? "on" : ""} />
+                  ))}
+                </span>
+              )}
             </div>
+            {/* Wer abgegeben hat und auf wen noch gewartet wird. Die Namen
+                kommen aus season_submission_roster(); ohne sie bleibt es bei
+                den Punkten oben. */}
+            {rosterShown.length > 0 && (
+              <ul className="wroster" aria-label="Abgabestand der Mitspieler">
+                {rosterShown.map((r) => (
+                  <li key={r.slot} className={r.submitted ? "on" : ""}>
+                    <span aria-hidden="true">{r.submitted ? "✓" : "○"}</span>
+                    {r.isMe ? "Du" : r.name}
+                    <span className="sr-only">{r.submitted ? " hat abgegeben" : " fehlt noch"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="wl2">
               {editing ? (
                 <span>Bis du neu abschließt, gilt deine bisherige Abgabe.</span>
