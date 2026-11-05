@@ -2953,6 +2953,8 @@ export function fundBridge(f, market, quarter) {
     rEbitda, rMult, rDelev, rRest, rExit, recaps, uEbitda, uMult, uDelev, uRest, fees, carry,
     xEbitda, xMult, xDelev, xRest,
     gain, drawn, value, tvpi: value / drawnOf(f),
+    // Wertungskennzahl seit dem 18.10.2026: derselbe Wert je zugesagtem Euro (tvccOf)
+    commitment: CAPITAL, tvcc: value / CAPITAL,
     txCost: gain - named,
     realizedCount: (f.realized || []).length, openCount: holdings.length,
   };
@@ -2962,11 +2964,11 @@ export function fundBridge(f, market, quarter) {
    Stände. Jeder Posten von fundBridge() ist auf den Stichtag kumuliert, die
    Differenz also der Beitrag genau dieses Halbjahres — und weil die Posten an
    beiden Stichtagen exakt auf `gain` aufgehen, tun es ihre Differenzen auch.
-   Der TVPI ist ein Verhältnis und wird deshalb als Veränderung geführt, nicht
-   als Differenz von Summanden.                                              */
+   TVPI und TVCC sind Verhältnisse und werden deshalb als Veränderung geführt,
+   nicht als Differenz von Summanden.                                              */
 export function fundBridgeStep(now, was) {
   if (!now || !was) return null;
-  const out: Record<string, number> = { tvpi: now.tvpi - was.tvpi };
+  const out: Record<string, number> = { tvpi: now.tvpi - was.tvpi, tvcc: now.tvcc - was.tvcc };
   [...FUND_BRIDGE_PARTS, "gain", "drawn", "value"].forEach((k) => { out[k] = now[k] - was[k]; });
   /* Ein Abgang wandert von einem Block in den anderen. Beide tragen seit dem
      16.09.2026 dieselbe Zerlegung (der realisierte Block übernimmt die Kette,

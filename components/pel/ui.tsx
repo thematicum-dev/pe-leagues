@@ -2032,7 +2032,8 @@ export function TailEndPeek({ fund, market, quarter }) {
 
    Oben die Treiber, aufgeteilt nach Ursache und mit dem Gewinn als Summe.
    Darunter die Überleitung: abgerufenes Kapital plus Gewinn ist der Gesamtwert,
-   Gesamtwert je abgerufenem Euro ist der TVPI. Damit steht die Aufstellung
+   Gesamtwert je zugesagtem Euro ist der TVCC (seit dem 18.10.2026 die
+   Wertungskennzahl, vorher der TVPI). Damit steht die Aufstellung
    nicht mehr neben der Wertung, sondern führt zu ihr hin.
 
    Die Halbjahresspalte ist die Differenz zweier Stände (fundBridgeStep) und
@@ -2060,7 +2061,7 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
   const num = (v) => Math.abs(v).toLocaleString("de-DE", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 1 });
   const money = (v) => v == null || Math.abs(v) < 0.05 ? "—" : (v >= 0 ? "+" : "−") + num(v);
   const flat = (v) => v == null ? "—" : num(v);
-  // TVPI wie im Kopf der Ansicht mit zwei Nachkommastellen, nicht wie ein Multiple
+  // TVCC wie im Kopf der Ansicht mit zwei Nachkommastellen, nicht wie ein Multiple
   const mult = (v, sign) => v == null || (sign && Math.abs(v) < 0.005) ? "—"
     : (sign ? (v >= 0 ? "+" : "−") : "") + Math.abs(v).toFixed(2).replace(".", ",") + "×";
   const up = (v) => v >= 0;
@@ -2121,9 +2122,10 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
           die Managementbeteiligung — dort steht auch, was die Zerlegung sonst nicht erklärt, damit die
           Summe stimmt, statt still zu verschwinden.
           <br /><br />
-          Die Posten addieren sich auf den <b>Gewinn</b>, und die Überleitung darunter führt ihn zum TVPI:
-          abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je abgerufenem Euro ist der TVPI.
-          Ein negativer Gewinn heißt deshalb zwingend TVPI unter 1,00×.
+          Die Posten addieren sich auf den <b>Gewinn</b>, und die Überleitung darunter führt ihn zum TVCC,
+          nach dem gewertet wird: abgerufenes Kapital plus Gewinn ist der Gesamtwert, Gesamtwert je
+          zugesagtem Euro ist der TVCC. Nie abgerufenes Kapital zählt dabei als ungenutzte Zusage — ein
+          TVCC über 1,00× verlangt deshalb einen Gewinn, der größer ist als der nicht abgerufene Teil.
         </Info>
       </h3>
       <table className="cmp"><tbody>
@@ -2158,7 +2160,7 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
           {cols.map((c, i) => <td key={i} style={tone(c && c.gain, up)}>{money(c && c.gain)}</td>)}
         </tr>
 
-        <tr className="seg"><td colSpan={3}>Überleitung auf den TVPI</td></tr>
+        <tr className="seg"><td colSpan={3}>Überleitung auf den TVCC</td></tr>
         <tr>
           <td>Abgerufenes Kapital</td>
           <td>{step ? money(step.drawn) : "—"}</td>
@@ -2169,10 +2171,16 @@ export function SeasonDrivers({ fund, market, quarter, prev, title = "Woher die 
           <td style={tone(step && step.value, up)}>{step ? money(step.value) : "—"}</td>
           <td>{flat(now.value)}</td>
         </tr>
+        {/* Die Zusage ändert sich nicht — die Halbjahresspalte bleibt leer. */}
+        <tr>
+          <td>Zugesagtes Kapital</td>
+          <td>—</td>
+          <td>{flat(now.commitment)}</td>
+        </tr>
         <tr className="sum">
-          <td>TVPI</td>
-          <td style={tone(step && step.tvpi, up, 0.005)}>{mult(step && step.tvpi, true)}</td>
-          <td style={tone(now.tvpi - 1, up, 0)}>{mult(now.tvpi, false)}</td>
+          <td>TVCC</td>
+          <td style={tone(step && step.tvcc, up, 0.005)}>{mult(step && step.tvcc, true)}</td>
+          <td style={tone(now.tvcc - 1, up, 0)}>{mult(now.tvcc, false)}</td>
         </tr>
       </tbody></table>
       <p className="finnote" style={{ paddingBottom: 14 }}>
