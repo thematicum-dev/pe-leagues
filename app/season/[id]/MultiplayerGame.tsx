@@ -23,7 +23,7 @@ import AbortControl from "./AbortControl";
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Toasts, News, DealCard, Holding, Shelf,
   LandmarkTeaser,
-  TvpiChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
+  ScoreChart, SectorSplit, MarketChart, UseProceeds, InitPicker, EquityInjection, Shortlist,
   Offers, Sheet, Info, SeasonDrivers, TrackRow, exitSheetOf, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
@@ -1100,7 +1100,7 @@ export default function MultiplayerGame({
     ? { fund: prevFund, market: prevRow.market, quarter: prevRow.halfYear }
     : null;
   const marketHist = history.map((h) => h.market);
-  const tvpiHist = history.map((h) =>
+  const scoreHist = history.map((h) =>
     [...h.funds].sort((a, b) => a.slot - b.slot).map((f) => scoreOf(f, h.market, h.halfYear)),
   );
   const meIdx = [...state.funds].sort((a, b) => a.slot - b.slot).findIndex((f) => f.slot === humanSlot);
@@ -1600,7 +1600,7 @@ export default function MultiplayerGame({
                 Wertung gegen die Kohorte
                 <Info k="score" />
               </h3>
-              <TvpiChart hist={tvpiHist} meIdx={meIdx} />
+              <ScoreChart hist={scoreHist} meIdx={meIdx} />
             </div>
             <div className="card">
               <h3 className="disp">Deployment Rate</h3>

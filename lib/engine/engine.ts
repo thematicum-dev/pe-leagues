@@ -2126,8 +2126,8 @@ export function recycleRoom(f, net, quarter, compat: EngineCompat = {}) {
 }
 
 /* Verwendung eines Erlöses. `keep` ist die Entscheidung des GP in Prozent des
-   Erlöses — Einbehalten bringt TVPI (mehr Kapital arbeitet je abgerufenem Euro)
-   und kostet IRR (der Rückfluss an die Investoren verschiebt sich). Fehlt die
+   Erlöses — Einbehalten hebt den Multiple (TVCC wie TVPI) nur über den Wert,
+   den das wieder eingesetzte Geld schafft, und kostet IRR (der Rückfluss an die Investoren verschiebt sich). Fehlt die
    Angabe, wird voll ausgeschüttet: das ist die Vorgabe, nicht der Automatismus
    von vorher.                                                                 */
 export function applyProceeds(f, net, costBasis, quarter, keep = 0, compat: EngineCompat = {}) {
@@ -3074,6 +3074,7 @@ export function tailEndOf(f, market, quarter) {
   return {
     fund: g, deals,
     tvpi: tvpiOf(g, market, quarter),
+    tvcc: tvccOf(g, market, quarter),
     irr: irrOf(g, market, quarter),
     score: scoreOf(g, market, quarter),
     value: totalValueOf(g, market) - carryOf(g, market, quarter),

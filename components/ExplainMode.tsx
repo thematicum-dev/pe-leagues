@@ -233,7 +233,7 @@ function Briefing({ dark, setDark, onStart }) {
             Weil ein Fonds, der nur auf den Multiple schaut, jedes Asset bis zum Laufzeitende hält — es wird
             ja immer noch ein bisschen mehr. Der IRR bepreist die Zeit und macht aus dem Verkauf wieder eine
             Entscheidung: Ein Unternehmen bei 2,2× nach vier Jahren zu verkaufen ist besser, als bei 2,8×
-            nach neun. Umgekehrt schützt der TVPI davor, alles nach drei Jahren wegzuwerfen.
+            nach neun. Umgekehrt schützt der TVCC davor, alles nach drei Jahren wegzuwerfen.
           </Def>
           <Def t="Kapital wird abgerufen, nicht geschenkt">
             Die {eur(CAPITAL)} liegen nicht auf dem Konto, sie sind zugesagt. Abgerufen wird, wenn du kaufst —
@@ -245,9 +245,9 @@ function Briefing({ dark, setDark, onStart }) {
             über die ganze Laufzeit, aber kumuliert höchstens bis zur Höhe des Commitments. Danach wird
             zwingend voll ausgeschüttet.
           </Def>
-          <Def t="Einbehalten kauft TVPI mit IRR">
-            Bleibt der Erlös im Fonds, arbeitet mehr Kapital je abgerufenem Euro — das hebt den Multiple,
-            aber nur, wenn der nächste Deal mehr verdient als der Fonds bisher. Die Verzinsung kostet es
+          <Def t="Einbehalten kauft TVCC mit IRR">
+            Bleibt der Erlös im Fonds, arbeitet er weiter — das hebt den TVCC, aber nur um den Wert, den
+            der nächste Deal damit schafft. Die Verzinsung kostet es
             dagegen immer: Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
             Abruf morgen, Einbehalten ergibt beides nicht. Der frühere Rückfluss gewinnt im IRR immer.
             Wer einbehält, ohne einen Deal zu haben, der das Geld verdient, verliert deshalb beides —

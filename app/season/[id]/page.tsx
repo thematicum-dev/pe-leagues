@@ -111,7 +111,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   /* Endstand: der eigene Fonds im Schlusszustand. Der Abschlussbildschirm
      rechnet daraus die Value Bridge — sie braucht nicht nur die realisierten
      Deals, sondern auch abgerufenes Kapital, Ausschüttungen und Markt, weil
-     sie auf dieselbe Größe schließt wie TVPI und Wertung. */
+     sie auf dieselbe Größe schließt wie TVCC und Wertung. */
   let myFund: RuntimeState["funds"][number] | null = null;
   let finalMarket: RuntimeState["market"] | null = null;
   let finalHalfYear = 0;

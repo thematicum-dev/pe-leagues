@@ -3,7 +3,7 @@ import { createRng } from "../rng";
 import {
   SECTORS, SECNAMES, ARCHES, CAPITAL, PERIODS, DEFAULT_HUMAN_ATTRS,
   FUND_BRIDGE_PARTS, FUND_BRIDGE_GROUPS, fundBridge, fundBridgeStep,
-  tvpiOf, irrOf, scoreOf, navOf, liquidateHoldings, tailEndOf,
+  tvpiOf, tvccOf, irrOf, scoreOf, navOf, liquidateHoldings, tailEndOf,
   buildInit, initDurationOf, initById, initDur, effSkill, repeatMalus, initRuns, INITS, maturePeople,
 } from "../engine";
 import { runQuarter, bootstrapInitialDeals, computeFinalRanking } from "../runQuarter";
@@ -95,6 +95,7 @@ describe("Tail-End-Verwertung und Endabrechnung", () => {
         };
         liquidateHoldings(copy, state.market, q);
         expect(preview.tvpi, `${seed}: TVPI der Vorschau`).toBeCloseTo(tvpiOf(copy, state.market, q), 12);
+        expect(preview.tvcc, `${seed}: TVCC der Vorschau`).toBeCloseTo(tvccOf(copy, state.market, q), 12);
         expect(preview.irr, `${seed}: IRR der Vorschau`).toBeCloseTo(irrOf(copy, state.market, q), 12);
         expect(preview.score, `${seed}: Wertung der Vorschau`).toBeCloseTo(scoreOf(copy, state.market, q), 12);
 

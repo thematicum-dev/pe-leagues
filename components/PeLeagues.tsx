@@ -28,7 +28,7 @@ import {
 import {
   TAB_ICON, TAB_IDX, CSS, haptic, AnimatedNumber, Confetti, Toasts, News, DealCard, Holding, 
   LandmarkTeaser,
-  TvpiChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
+  ScoreChart, SectorSplit, Shelf, MarketChart, UseProceeds, InitPicker, EquityInjection,
   Shortlist, Offers, Sheet, SeasonDrivers, TrackRow, exitSheetOf, FundProfileEditor, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
@@ -81,7 +81,7 @@ export default function PeLeagues() {
   const [openFund, setOpenFund] = useState(null);
   const [exitQueue, setExitQueue] = useState([]);
   const [marketHist, setMarketHist] = useState([]);
-  const [tvpiHist, setTvpiHist] = useState([]);   // je Halbjahr eine Wertungszahl pro Fonds
+  const [scoreHist, setScoreHist] = useState([]);   // je Halbjahr eine Wertungszahl pro Fonds
   const [shortlist, setShortlist] = useState([]);
   const [initPick, setInitPick] = useState(null);
   const [injectPick, setInjectPick] = useState(null);   // offene Kapitalzuführung
@@ -136,7 +136,7 @@ export default function PeLeagues() {
     setDeals(makeDeals(attrs.sourcing, market));
     setLandmark(newLandmark(rng, market));
     setMarketHist([{ ...market }]);
-    setTvpiHist([[player, ...ais].map(() => 0)]);
+    setScoreHist([[player, ...ais].map(() => 0)]);
     setFeed([{ q: 0, e: "🏁", tone: "neu", t: `Vintage 2026 aufgelegt. Fünf Fonds, je ${eur(CAPITAL)}, zehn Jahre.` }]);
     setPhase("play");
   }
@@ -537,7 +537,7 @@ export default function PeLeagues() {
 
     setFunds(F); setMarket(mk); setBids({}); setDd({});
     setMarketHist((p) => [...p, { ...mk }]);
-    setTvpiHist((p) => [...p, F.map((fd) => scoreOf(fd, mk, q))]);
+    setScoreHist((p) => [...p, F.map((fd) => scoreOf(fd, mk, q))]);
     const nd = makeDeals(F[0].attrs.sourcing, mk);
     let lm = landmark;
     if (q === LM_ANNOUNCE && lm) {
@@ -1142,7 +1142,7 @@ function finalize(c, gross, buyer, feeRate, extra?) {
           <>
             <div className="card">
               <h3 className="disp">Wertung gegen die Kohorte</h3>
-              <TvpiChart hist={tvpiHist} meIdx={0} />
+              <ScoreChart hist={scoreHist} meIdx={0} />
             </div>
             <div className="card">
               <h3 className="disp">Deployment Rate</h3>

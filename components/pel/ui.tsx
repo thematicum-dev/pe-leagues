@@ -24,7 +24,7 @@ import {
   DEAL_YEARS,
   markMultiple, navValueOf, 
   overstretch, payOf, pct, pctS, peopleLvl, recycleRoom, repeatMalus,
-  signBonusOf, tvpiOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf, tierOf,
+  signBonusOf, tvccOf, x, chemOf, CHEM, CHEM_LABEL, teamScoreOf, tierOf,
 } from "@/lib/engine";
 import {
   AX, Ability, BATTLE_CSS, CardHero, GradeChip, Headline, Icon, Meter, More, Row, Section,
@@ -1984,7 +1984,7 @@ export function Stages({ c }) {
 
 
 /* ---------- Was der Bestand am Laufzeitende wirklich wert ist ----------
-   TVPI, IRR und Wertung in der Kopfleiste bewerten das Portfolio zu
+   TVCC, IRR und Wertung in der Kopfleiste bewerten das Portfolio zu
    markMultiple(). Dieses Multiple kennt weder den Endfälligkeitsdruck
    (endPressure steckt nur in dealMultiple) noch den Zwangsabschlag der
    Tail-End-Verwertung. Wer am Ende nicht verkauft hat, bekommt aber genau
@@ -2004,15 +2004,16 @@ export function TailEndPeek({ fund, market, quarter }) {
   if (!fund || !market || !(fund.holdings || []).length) return null;
   if (PERIODS - quarter > END_PRESSURE_FROM + PROC_Q) return null;
   const t = tailEndOf(fund, market, quarter);
-  const live = tvpiOf(fund, market, quarter);
-  const gap = t.tvpi - live;
-  const txt = `Ohne Exit: TVPI ${t.tvpi.toFixed(2).replace(".", ",")}×`
+  // TVCC, weil nach ihm gewertet wird — wie in der Kopfleiste darüber
+  const live = tvccOf(fund, market, quarter);
+  const gap = t.tvcc - live;
+  const txt = `Ohne Exit: TVCC ${t.tvcc.toFixed(2).replace(".", ",")}×`
     + ` (${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2).replace(".", ",")}×)`
     + ` · IRR ${(t.irr * 100).toFixed(1).replace(".", ",")} %`
     + ` · Wertung ${t.score.toFixed(2).replace(".", ",")}`;
   const info = (
     <Info t="Tail-End-Verwertung">
-      TVPI, IRR und Wertung oben bewerten deinen Bestand zum Marktmultiple. Am Laufzeitende kauft dort
+      TVCC, IRR und Wertung oben bewerten deinen Bestand zum Marktmultiple. Am Laufzeitende kauft dort
       niemand mehr: Was im Halbjahr {PERIODS} noch im Portfolio steht, wird zwangsweise verwertet —
       <b> {x(LIQ_DISC)} unter dem Marktmultiple</b>, dazu Transaktionskosten und Managementbeteiligung.
       <br /><br />
@@ -2021,7 +2022,7 @@ export function TailEndPeek({ fund, market, quarter }) {
       rückt. Ein Verkaufsprozess braucht selbst {hj(PROC_Q + 1)}.
     </Info>
   );
-  /* Als eine Zeile, nicht als Warnkasten: Sie steht direkt unter TVPI und IRR
+  /* Als eine Zeile, nicht als Warnkasten: Sie steht direkt unter TVCC und IRR
      und soll die beiden einordnen, nicht sie übertönen. */
   return <span className="ox">⏳ {txt} {info}</span>;
 }
@@ -2255,8 +2256,8 @@ export function Track({ c }) {
   );
 }
 
-/* TVPI-Verlauf der Kohorte. Der eigene Fonds kräftig, die Wettbewerber im Hintergrund,
-   dazu das Interquartilsband — die Währung, in der im Fundraising gesprochen wird.   */
+/* Verlauf der Wertung (scoreOf: TVCC und IRR) in der Kohorte. Der eigene Fonds kräftig,
+   die Wettbewerber im Hintergrund, dazu das Interquartilsband.                       */
 /* Quartil über den Perzentilrang (rank − 0,5) / n. Die frühere Rechnung
    (rank <= Math.ceil(n / 4)) wies bei fünf Fonds auch Platz 2 dem ersten
    Quartil zu -- bei 40 % der Kohorte ist das zweites Quartil. */
@@ -2264,7 +2265,7 @@ function quartileOf(rank, n) {
   return Math.min(4, Math.max(1, Math.ceil(((rank - 0.5) / n) * 4)));
 }
 
-export function TvpiChart({ hist, meIdx }) {
+export function ScoreChart({ hist, meIdx }) {
   if (!hist || hist.length < 2) return <div className="quiet">Der Verlauf entsteht ab dem zweiten Halbjahr.</div>;
   const T = 8, B = 96, L = 26, R = 276;
   const all = hist.flat();
@@ -2913,11 +2914,11 @@ export function MarketChart({ hist }) {
 /* ---------- Verwendung der Exiterlöse ----------
    Die Entscheidung, die es vorher nicht gab: Was zurück an die Investoren geht
    und was im Fonds bleibt. Einbehalten heißt, dass mehr Kapital je abgerufenem
-   Euro arbeitet — das hebt den TVPI, sofern der nächste Deal mehr verdient als
-   der Fonds bisher. Es kostet aber IRR, und zwar systematisch:
+   Euro arbeitet — das hebt den TVCC, nach dem gewertet wird, aber nur über den
+   Wert, den der nächste Deal schafft. Es kostet IRR, und zwar systematisch:
    Ausschütten und später neu abrufen ergibt einen Rückfluss heute und einen
    Abruf morgen; Einbehalten ergibt beides gar nicht. Der frühere Rückfluss
-   gewinnt in der Verzinsung immer. Recycling kauft also TVPI mit IRR.
+   gewinnt in der Verzinsung immer. Recycling kauft also Multiple mit IRR.
 
    `quarter` ist wie überall in den Ansichten die Zahl der ausgewerteten
    Halbjahre. Verbucht wird der Erlös im Halbjahr danach (decQ), und mit
@@ -2965,7 +2966,7 @@ export function UseProceeds({ item, me, quarter, settle }) {
             </p>
           )}
           <p className="hint" style={{ margin: 0 }}>
-            Einbehalten kostet IRR — den TVPI hebt es nur mit einem guten Folgedeal.
+            Einbehalten kostet IRR — den TVCC hebt es nur mit einem guten Folgedeal.
             <Info t="Einbehalten oder ausschütten">
               Einbehaltenes Kapital arbeitet weiter, statt an die Limited Partner zurückzufließen. Das hebt den
               Multiple, wenn der nächste Deal mehr verdient als der Fonds bisher — verschiebt aber den
