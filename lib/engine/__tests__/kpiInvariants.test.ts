@@ -121,6 +121,9 @@ function checkFund(f: Any, market: Any, hy: number, where: string) {
   expect(b.tvpi, `${where}: TVPI`).toBeCloseTo(tvpi, 9);
   // gain = drawn · (TVPI − 1) gilt, sobald überhaupt Kapital abgerufen wurde
   if (b.drawn > 0) expect(b.gain / b.drawn, `${where}: Gewinn je Euro`).toBeCloseTo(tvpi - 1, 9);
+  // … und weiter auf den TVCC, nach dem gewertet wird: Gesamtwert je zugesagtem Euro
+  expect(b.value / b.commitment, `${where}: Überleitung TVCC`).toBeCloseTo(b.tvcc, 9);
+  expect(b.tvcc, `${where}: TVCC`).toBeCloseTo(tvccOf(f, market, hy), 9);
 
   // 3 — Der Barwert der Zahlungsreihe bei Zins null ist derselbe Gewinn
   const cf = cashflowsOf(f, market, hy);

@@ -23,7 +23,7 @@ export default async function Home() {
         <p>
           Investment, Value Creation, Exit: Einstiegsmultiple und Kapitalstruktur, das
           Wertsteigerungsprogramm über die Halteperiode, der Realisierungszeitpunkt. Maximiere die
-          Rendite, gemessen an TVPI und IRR. Jede Partie geht in deinen persönlichen Track Record
+          Rendite, gemessen an TVCC und IRR. Jede Partie geht in deinen persönlichen Track Record
           ein — und in die globale Rangliste. Reicht es für Top Quartile der PE Leagues Community?
         </p>
         <div className="landingactions">
