@@ -377,6 +377,20 @@ export interface EngineCompat {
      Finanzinvestors konnte den Namen des Verkäufers selbst oder eines
      menschlichen Mitspielers tragen (siehe makeOffers).                     */
   legacyLaxTurnChecks?: boolean;
+  /* Bis 11.11.2026 zählte zugekaufter Umsatz als Wachstum: Die
+     Wachstumsprämie auf das Bewertungsmultiple (growthPrem) und der
+     Qualitätskanal rechneten mit der Umsatz-CAGR samt Add-ons. Ein Zukauf von
+     einem Viertel des Plattform-EBITDA hob das Multiple damit um bis zu 55 %
+     — zusätzlich zur Multiple-Arbitrage, die er ohnehin bringt. Seither
+     zählt nur organisches Wachstum (siehe organicCagrOf, `orgF`).
+
+     Dieselbe Marke hält drei kleinere Regeln desselben Tages: Eine frisch
+     verpflichtete Führungskraft wird in ihren ersten beiden Halbjahren nicht
+     abgeworben (maturePeople); ein Gebot, dessen Leverage die Obergrenze nur
+     um Rundung überschreitet, wird gekappt statt verworfen; und eine
+     Maßnahme oder Studie, die nicht gestartet werden kann, bekommt eine
+     Meldung statt wortlos zu verschwinden (runQuarter).                    */
+  legacyAddonGrowth?: boolean;
 }
 /* Ereigniswahrscheinlichkeit im jeweiligen Regelstand. */
 export const eventPOf = (compat: EngineCompat = {}) => (compat.legacyEventP ? 0.15 : EVENT_P);
@@ -385,7 +399,7 @@ export const LEGACY_COMPAT: EngineCompat = {
   legacyNoIntBarrier: true, legacyAddonBenchMargin: true, addonDebtAtStart: true,
   legacyAddonMandate: true, legacyBlockAllExits: true, legacyRecycleInvestPeriod: true,
   legacyDealSize: true, legacyCandidates: true, legacyMgmt: true, legacyReplaceSearch: true,
-  legacyMinHold: true, legacyLaxTurnChecks: true,
+  legacyMinHold: true, legacyLaxTurnChecks: true, legacyAddonGrowth: true,
 };
 
 /* `inj` ist die Gegenrichtung von `dist`: Kapital, das der Fonds in die
@@ -544,7 +558,11 @@ export const EVENTS = [
     f: (c) => { c.margin -= 2.5; c.marginDrift = (c.marginDrift || 0) - 1.5; } },
   { t: "Add-on-Gelegenheit genutzt", m: null, bad: 0,
     ok: (c) => c.netDebt / Math.max(0.5, ebitdaOf(c)) < (c.covLimit ?? COV_DEFAULT) - 1.5,
-    f: (c) => { c.revenue *= 1.25; const p = ebitdaOf(c) * 1.6; c.netDebt += p; bookOff(c, "addon", p); } },
+    f: (c, compat: EngineCompat = {}) => {
+      c.revenue *= 1.25; const p = ebitdaOf(c) * 1.6; c.netDebt += p; bookOff(c, "addon", p);
+      // Zugekaufter Umsatz ist kein organisches Wachstum (siehe organicCagrOf)
+      if (!compat.legacyAddonGrowth) c.orgF = (c.orgF ?? 1) * (1 + ADDON_GROWTH_CREDIT * 0.25) / 1.25;
+    } },
   { t: "Investitionsstau aufgedeckt", m: "analysis", bad: 1,
     f: (c) => { const p = ebitdaOf(c) * 0.8; c.netDebt += p; bookOff(c, "capexOff", p); c.capexPct = (c.capexPct ?? 4) + 1.5; } },
   { t: "Regulatorische Auflage", m: "operations", bad: 1,
@@ -734,6 +752,7 @@ export const seatPay = (s, seat, eb) => s.skill > 0 ? payOf(seat, s.skill, eb) *
   : payOf(seat, s.was ?? INTERIM, eb) * INTERIM_PREMIUM;
 
 export const POACH = 0.0008;                        // Abwerbung: seltenes Randrisiko
+export const POACH_GRACE = 2;                       // Halbjahre nach der Verpflichtung ohne Abwerbung
 /* Personalkosten in Prozentpunkten der Marge, damit sie sich in targetMargin
    einreihen: Summe der Jahresgehälter geteilt durch den Umsatz.             */
 export const seatLoad = (c) => {
@@ -1908,8 +1927,35 @@ export function cagrOf(c) {
   const yrs = Math.max(0.5, c.holdQ / 2);
   return (Math.pow(Math.max(0.05, c.revenue / base), 1 / yrs) - 1) * 100;
 }
+/* Organische Umsatz-CAGR: dieselbe Rechnung ohne zugekauften Umsatz.
+
+   `orgF` ist der Anteil des heutigen Umsatzes, der aus dem Unternehmen des
+   Einstiegs gewachsen ist. Jeder Zukauf multipliziert ihn mit
+   Umsatz vorher / Umsatz nachher (maturePeople, Ereignis "Add-on-Gelegenheit");
+   was danach wächst, wächst anteilig — der Faktor muss deshalb nie wieder
+   angefasst werden. Fehlt er, gab es keinen Zukauf (oder die Beteiligung
+   stammt aus dem alten Regelstand), und organisch ist gleich gesamt.
+
+   Der Unterschied ist die Frage, wofür ein Käufer ein höheres Multiple
+   zahlt: für ein Geschäft, das aus sich heraus schneller wächst als sein
+   Markt. Zugekaufter Umsatz ist bezahlt, nicht gewachsen. Er bringt weiter
+   das, was Buy-and-Build wirklich bringt — EBITDA, das unter dem
+   Plattform-Multiple eingekauft und zum Plattform-Multiple bewertet wird —
+   aber keine Wachstumsprämie obendrauf.                                   */
+/* Ganz ohne Wirkung auf das Multiple ist Größe nicht: Eine Plattform, die
+   durch Zukäufe gewachsen ist, erreicht Käufer, die das Ausgangsunternehmen
+   nie angesehen hätten. Ein Teil des zugekauften Umsatzes zählt deshalb mit
+   — als Skalenprämie, nicht als Wachstum. Der Wert ist eine Stellschraube
+   der Balance (siehe docs/playtest-2026-11.md für die Messung). */
+export const ADDON_GROWTH_CREDIT = 0.3;
+export function organicCagrOf(c) {
+  const base = c.hist && c.hist[0] ? c.hist[0].rev : 0;
+  if (!base || !c.holdQ) return null;
+  const yrs = Math.max(0.5, c.holdQ / 2);
+  return (Math.pow(Math.max(0.05, (c.revenue * (c.orgF ?? 1)) / base), 1 / yrs) - 1) * 100;
+}
 export function cagrPrem(c) {
-  const g = cagrOf(c);
+  const g = organicCagrOf(c);
   return g == null ? 0 : g - SECTORS[c.sector].g;
 }
 /* Wachstum treibt das Exit-Multiple. Empirisch der stärkste Zusammenhang der
@@ -2461,6 +2507,7 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
          einer Plattform unter Branchenniveau lief es umgekehrt.            */
       const mgBase = compat.legacyAddonBenchMargin ? (c.benchMargin ?? 12) : c.margin;
       const addRev = IN.addEb / Math.max(4, mgBase) * 100;
+      const revBefore = c.revenue;
       if (IN.ok) { c.revenue += addRev; c.acc = Math.min(5, c.acc + 1.0); }
       else {
         // Gescheiterte Integration: die Akquisitionsschuld steht voll, das EBITDA
@@ -2473,6 +2520,10 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
          der Integration nirgends mehr ablesen, wann zugekauft wurde und wie
          oft — `done` zählt nur die Kennung mit, nicht den Zeitpunkt.       */
       c.addons = [...(c.addons || []), { q, eb: IN.addEb, mult: IN.mult, ok: !!IN.ok }];
+      // Zugekaufter Umsatz zählt nicht als organisches Wachstum (organicCagrOf)
+      if (!compat.legacyAddonGrowth && c.revenue > 0) {
+        c.orgF = (c.orgF ?? 1) * (revBefore + ADDON_GROWTH_CREDIT * (c.revenue - revBefore)) / c.revenue;
+      }
     } else {
       // Verlässliche Maßnahmen scheitern nicht binär, sie unterliefern.
       // Adoptionsabhängige Programme liefern gar nichts und kosten den Sunk Cost.
@@ -2531,7 +2582,13 @@ export function maturePeople(rng: Rng, c, mk, q, me, news, shortlists, compat: E
         : { ...c[k], skill: Math.min(4.5, c[k].skill + step) };
       if (c[k].prof) c[k].skill = c[k].prof.reduce((x, y) => x + y, 0) / 3;
     }
-    if (rng.rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * retentionFactor(c, mk)) {
+    /* Schonfrist: Wer gerade unterschrieben hat, wechselt nicht im selben Jahr
+       wieder. Vorher konnte eine Verpflichtung im Halbjahr ihres Antritts
+       abgeworben werden — Signing Bonus bezahlt, Position wieder vakant, und
+       beide Meldungen standen untereinander. Die Zufallszahl wird trotzdem
+       gezogen, damit der Strom nicht davon abhängt, wer neu ist. */
+    const fresh = !compat.legacyAddonGrowth && c[k].hiredQ != null && q - c[k].hiredQ < POACH_GRACE;
+    if (rng.rnd() < POACH * c[k].skill * c[k].skill * (c[k].poach || 1) * retentionFactor(c, mk) && !fresh) {
       const nm = k === "ceo" ? "CEO" : k === "cfo" ? "CFO" : ROLE3[c.sector].n;
       c[k] = vacate(c[k]);
       if (me) news.push({ q, e: "🚪", tone: "neg", t: `<b>${c.name}</b>: Der ${nm} wurde abgeworben. Die Position ist vakant.` });

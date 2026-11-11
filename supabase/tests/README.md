@@ -41,3 +41,12 @@ PEL_PG="postgresql://postgres@localhost:54329/pel" npx vitest run -c supabase/te
 
 Nicht abgedeckt: Supabase Auth (Registrierung, E-Mail), Realtime und der
 zeitgesteuerte Aufruf über pg_cron/pg_net — die Stubs zeichnen nur auf.
+
+## Plattformfunktionen
+
+`platform.pg.test.ts` prüft in derselben Datenbank Zugangscodes (Kontingent,
+Ablauf, Fehlversuche, Sperre), Nutzungsereignisse (Grenzen, Abschalten, keine
+direkten Zugriffe), Admin-Rollen und Protokoll, die Kennzahlen der
+Admin-Übersicht, den Track Record und das Löschen eines Kontos mit eröffneten
+Partien. Beide Dateien laufen nacheinander (`fileParallelism: false`), weil
+die Kennzahlen über alle Partien zählen. Kurz: `PEL_PG=… npm run test:db`.

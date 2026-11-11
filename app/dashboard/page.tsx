@@ -2,7 +2,10 @@ import { signOut } from "@/app/auth/actions";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/access/context";
-import LobbyOverview, { type LobbySummary, type MySeasonSummary, type SeasonLimits } from "./LobbyOverview";
+import LobbyOverview, { type LobbySummary, type MySeasonSummary, type OpenTurn, type SeasonLimits } from "./LobbyOverview";
+import { TierBadge } from "@/components/career/CareerView";
+import SiteFooter from "@/components/SiteFooter";
+import { summarize, type CareerRow } from "@/lib/career/career";
 import UniverseSwitcher from "./UniverseSwitcher";
 import InviteFriends from "./InviteFriends";
 
@@ -91,6 +94,17 @@ export default async function DashboardPage() {
       occupancy: occupancy.get(l.id) ?? 0,
     }));
 
+  // Eigener Zug je laufender Partie und der Track Record für die Karrierekarte
+  const [{ data: turnRows }, { data: careerRows }] = await Promise.all([
+    supabase.rpc("my_open_turns"),
+    supabase.rpc("my_career"),
+  ]);
+  const openTurns: Record<string, OpenTurn> = {};
+  for (const t of (turnRows ?? []) as { season_id: string; half_year: number; deadline: string | null; submitted: boolean }[]) {
+    openTurns[t.season_id] = { halfYear: t.half_year, deadline: t.deadline, submitted: t.submitted };
+  }
+  const career = summarize((careerRows ?? []) as CareerRow[]);
+
   return (
     <main className="dashwrap">
       <div className="dashinner">
@@ -106,6 +120,9 @@ export default async function DashboardPage() {
             )}
           </div>
           <div className="dashtools">
+            <Link href="/profile" className="btn-quiet">
+              Profil
+            </Link>
             <Link href="/leaderboard" className="btn-quiet">
               Rangliste
             </Link>
@@ -146,7 +163,20 @@ export default async function DashboardPage() {
           universeName={activeUniverse.name}
           universeActive={activeUniverse.isActive}
           showUniverse={showUniverse}
+          openTurns={openTurns}
         />
+
+        {/* Was über die einzelne Partie hinaus wächst: Karrierestufe und Punkte.
+            Ohne beendete Partie steht hier das Ziel statt einer leeren Karte. */}
+        <div className="dashsection">
+          <h2>Karriere</h2>
+          <span className="dashsub">
+            {career.played === 0 ? "Beginnt mit der ersten beendeten Partie" : `${career.played} ${career.played === 1 ? "Partie" : "Partien"} · ${career.wins} ${career.wins === 1 ? "Sieg" : "Siege"}`}
+          </span>
+        </div>
+        <Link href="/profile" className="modecard" style={{ marginBottom: 16 }}>
+          <TierBadge points={career.points} compact />
+        </Link>
 
         <div className="dashsection">
           <h2>Üben</h2>
@@ -177,6 +207,7 @@ export default async function DashboardPage() {
           <span className="dashsub">Per Link, jederzeit</span>
         </div>
         <InviteFriends signupUrl={signupUrl} />
+        <SiteFooter />
       </div>
     </main>
   );

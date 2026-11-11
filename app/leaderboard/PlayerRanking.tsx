@@ -34,8 +34,8 @@ function fmtIrr(v: number | null): string {
 }
 
 export default function PlayerRanking({
-  rows, error, emptyText,
-}: { rows: LeaderboardRow[]; error: string | null; emptyText: string }) {
+  rows, error, emptyText, selfId,
+}: { rows: LeaderboardRow[]; error: string | null; emptyText: string; selfId?: string }) {
   return (
     <div className="dashcard">
       <h2>Alle Spieler ({rows.length})</h2>
@@ -49,13 +49,15 @@ export default function PlayerRanking({
       {rows.map((r, i) => (
         /* Wertung rechts wie bei den Einzeldeals; links darunter die beiden
            Kennzahlen, aus denen sie besteht, und leiser der TVPI. */
-        <div className="seasonrow" key={r.profile_id} style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+        <div className={"seasonrow" + (r.profile_id === selfId ? " seasonrow-self" : "")} key={r.profile_id}
+          style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
           <div style={{ minWidth: 0 }}>
             <div>
               <span className="mono" style={{ marginRight: 8, opacity: 0.6 }}>
                 {["🥇", "🥈", "🥉"][i] ?? i + 1}
               </span>
               {r.display_name}
+              {r.profile_id === selfId && <> <span className="pill pill-teal">Du</span></>}
             </div>
             <div className="dashsub">
               {r.seasons_played} Partien · {r.seasons_won} gewonnen

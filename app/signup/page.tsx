@@ -1,9 +1,24 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signup } from "./actions";
 import Logo from "@/components/Logo";
+
+/* Der Zugangscode aus dem Einladungslink (/signup?code=PEL-…) reist als
+   verstecktes Feld mit. Eigene Komponente, weil useSearchParams eine
+   Suspense-Grenze braucht. */
+function CodeField() {
+  const code = useSearchParams().get("code") ?? "";
+  if (!code) return null;
+  return (
+    <>
+      <input type="hidden" name="code" value={code} />
+      <p className="authhint">Zugangscode <strong>{code.toUpperCase()}</strong> wird nach der Registrierung eingelöst.</p>
+    </>
+  );
+}
 
 export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signup, null);
@@ -60,12 +75,14 @@ export default function SignupPage() {
             required
           />
         </label>
+        <Suspense fallback={null}><CodeField /></Suspense>
         {state?.error && <p className="autherror">{state.error}</p>}
         <button type="submit" disabled={pending}>
           {pending ? "Erstelle Konto …" : "Registrieren"}
         </button>
         <div className="authlinks">
           <Link href="/login">Schon registriert? Anmelden</Link>
+          <Link href="/datenschutz">Datenschutz</Link>
         </div>
       </form>
     </main>

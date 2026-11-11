@@ -1,8 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/forms";
+import { ACCESS_CODE_COOKIE } from "@/lib/access/code";
 
 export async function signup(_prevState: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -43,6 +44,17 @@ export async function signup(_prevState: FormState, formData: FormData): Promise
       return {
         error: `Registrierung fehlgeschlagen: ${error.message} (Status ${error.status ?? "?"}, Code ${error.code ?? "?"})`,
       };
+    }
+
+    /* Zugangscode aus dem Einladungslink merken, bis das Onboarding ihn
+       einlöst — die Bestätigungsmail liegt dazwischen, und safeNext() lässt
+       bewusst keine Parameter am Rücksprungziel zu. Nur das Format wird
+       geprüft; ob der Code gilt, entscheidet redeem_access_code(). */
+    const code = String(formData.get("code") ?? "").trim();
+    if (/^[A-Za-z0-9][A-Za-z0-9-]{5,31}$/.test(code)) {
+      (await cookies()).set(ACCESS_CODE_COOKIE, code.toUpperCase(), {
+        httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 60 * 60 * 24 * 14, path: "/",
+      });
     }
 
     return { success: true };

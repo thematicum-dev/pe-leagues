@@ -26,6 +26,19 @@ export interface MySeasonSummary {
 /* Grenzen je Universum, durchgesetzt in join_season() und
    create_and_join_season() (Migration 20261022090000). Die Zahl der aktiven
    Partien kommt nicht von hier, sondern aus der live gehaltenen Liste. */
+/* Stand des eigenen Zugs je laufender Partie (my_open_turns()). Ein
+   Schnappschuss vom Laden des Dashboards — reicht für den Hinweis, wo man
+   dran ist; die Partie selbst hält ihren Stand live. */
+export interface OpenTurn {
+  halfYear: number;
+  deadline: string | null;
+  submitted: boolean;
+}
+
+const berlinTime = new Intl.DateTimeFormat("de-DE", {
+  timeZone: "Europe/Berlin", weekday: "short", hour: "2-digit", minute: "2-digit",
+});
+
 export interface SeasonLimits {
   activeMax: number;
   openedToday: number;
@@ -92,6 +105,7 @@ export default function LobbyOverview({
   universeName,
   universeActive,
   showUniverse,
+  openTurns = {},
 }: {
   initialMySeasons: MySeasonSummary[];
   initialOpenLobbies: LobbySummary[];
@@ -100,6 +114,7 @@ export default function LobbyOverview({
   universeName: string;
   universeActive: boolean;
   showUniverse: boolean;
+  openTurns?: Record<string, OpenTurn>;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -280,7 +295,16 @@ export default function LobbyOverview({
                   </>
                 )}
               </span>
-              <span className="seasonstatus">{season.status === "running" ? "Läuft" : "Lobby offen"}</span>
+              {season.status === "running" && openTurns[season.id] ? (
+                <span className={"turnflag" + (openTurns[season.id].submitted ? " turnflag-done" : "")}
+                  title={openTurns[season.id].deadline ? `Frist: ${berlinTime.format(new Date(openTurns[season.id].deadline!))}` : undefined}>
+                  {openTurns[season.id].submitted
+                    ? `HJ ${openTurns[season.id].halfYear} abgegeben`
+                    : `Du bist dran · HJ ${openTurns[season.id].halfYear}`}
+                </span>
+              ) : (
+                <span className="seasonstatus">{season.status === "running" ? "Läuft" : "Lobby offen"}</span>
+              )}
               {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der
                   App und blendet über (app/template.tsx), statt die Seite neu
                   zu laden. */}
