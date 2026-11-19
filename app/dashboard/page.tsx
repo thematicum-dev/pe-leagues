@@ -106,6 +106,9 @@ export default async function DashboardPage() {
             )}
           </div>
           <div className="dashtools">
+            <Link href="/profile" className="btn-quiet">
+              Profil
+            </Link>
             <Link href="/leaderboard" className="btn-quiet">
               Rangliste
             </Link>

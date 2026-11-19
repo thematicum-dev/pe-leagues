@@ -375,6 +375,64 @@ body {
   padding: 4px 10px;
 }
 
+/* ---------- Profil: Track Record und gespielte Partien ---------- */
+
+.profstats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profstat {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profstatv {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.profstatl {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+}
+
+.profrow {
+  color: inherit;
+  text-decoration: none;
+  flex-wrap: nowrap;
+}
+
+.profrow:hover .seasonstatus {
+  background: color-mix(in srgb, var(--gold) 24%, transparent);
+}
+
+.profmain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profright {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 .dashcard .btn-primary,
 .dashcard .btn-secondary,
 .dashcard .btn-danger {
