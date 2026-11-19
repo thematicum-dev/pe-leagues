@@ -18,6 +18,8 @@ html body .pel {
   --rcard: 24px;
   --rbtn: 14px;
   --num: "Inter", system-ui, sans-serif;
+  --cta: #DCB264;          /* Handlungsfarbe, in beiden Themes gleich */
+  --oncta: #12201F;
   letter-spacing: -0.006em;
 }
 
@@ -89,15 +91,16 @@ html body .pel .card table th { text-transform: none; letter-spacing: 0; font-si
 /* ---------- Knöpfe und Regler ----------
    Nur Aktionsknöpfe. Karten, Porträts, Tabs und Info-Punkte sind technisch
    auch <button>, behalten aber ihre eigene Gestalt. */
-html body .pel :is(button:not([class]):not(table button):not(.barrow button), button.solid, button.cta-big, button.ox, .bacts button, .dbar button, .sheet .row button) {
+html body .pel :is(:is(button:not([class]), button[class=""]):not(table button):not(.barrow button):not(.ddots button):not(.tabs button), button.solid, button.cta-big, button.ox, .bacts button, .dbar button, .sheet .row button) {
   border-radius: var(--rbtn); min-height: 46px; font-weight: 600; font-size: 14px; letter-spacing: -0.005em;
 }
-html body .pel :is(button:not([class]):not(table button):not(.barrow button), .bacts button:not(.solid):not(.cta-big):not(.ox)) {
+html body .pel :is(:is(button:not([class]), button[class=""]):not(table button):not(.barrow button):not(.ddots button):not(.tabs button), .bacts button:not(.solid):not(.cta-big):not(.ox)) {
   border-color: transparent; background: var(--shade); color: var(--ink);
 }
-html body .pel :is(button.solid, button.cta-big) {
-  background: var(--gold); border-color: var(--gold); color: var(--pdeep); min-height: 52px;
-  font-size: 15px; font-weight: 650; box-shadow: 0 10px 24px -14px var(--gold);
+html body .pel :is(button.solid, button.cta-big),
+html body .pel .dbar button.solid {
+  background: var(--cta); border-color: var(--cta); color: var(--oncta); min-height: 52px;
+  font-size: 15px; font-weight: 650; box-shadow: 0 10px 24px -14px var(--cta);
 }
 html body .pel button.infb { background: transparent; }
 html body .pel input[type=range] { accent-color: var(--gold); }
@@ -186,10 +189,45 @@ html body .pel .bshelf { border: 0; border-radius: var(--r); background: var(--c
 /* Regler: Griff in Gold, Spur als ruhige Linie */
 html body .pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-runnable-track { height: 4px; background: color-mix(in srgb, var(--ink) 14%, transparent); }
 html body .pel :is(.bcard, .bfoot) input[type=range]::-webkit-slider-thumb {
-  width: 22px; height: 22px; margin-top: -9px; background: var(--gold); border: 3px solid var(--card);
+  width: 22px; height: 22px; margin-top: -9px; background: var(--cta); border: 3px solid var(--card);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 60%, transparent), 0 4px 10px rgba(0,0,0,.35);
 }
 
 /* Beteiligungskarte: dieselben Kacheln wie im Dealflow */
 html body .pel .bcard.hold .bicons > div { border: 0; background: var(--shade); }
 html body .pel .bcard.hold .bicons .ic { border: 0; }
+
+
+/* ==========================================================================
+   Heller Modus
+   Kopfleiste, Tableiste und die Sheets von Draft und Battle Card waren in
+   beiden Themes dunkel (--panel). Im hellen Modus wirkten sie wie ein
+   Fremdkörper. Statt jedes Element einzeln zu überschreiben, werden die
+   Panel-Tokens in genau diesen Bereichen auf die hellen Theme-Farben gelenkt:
+   alles darin folgt automatisch.
+   ========================================================================== */
+html body .pel:not(.dark) > .bar,
+html body .pel:not(.dark) .tabs,
+html body .pel:not(.dark) .ddraft {
+  --panel: var(--card);
+  --onpanel: var(--ink);
+  --ptext: var(--ink);
+  --pmute: var(--ink2);
+  --psoft: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --pline: var(--rule);
+  --pshade: var(--shade);
+  --pteal: var(--teal);
+  --pgold: var(--gold);
+  --pox: var(--ox);
+}
+html body .pel:not(.dark) .ddraft { --panel: var(--paper); background: var(--paper); color: var(--ink); }
+html body .pel:not(.dark) > .bar { background: var(--card); color: var(--ink); }
+html body .pel:not(.dark) .theme { border-color: var(--rule); color: var(--ink); }
+html body .pel:not(.dark) .theme:hover { background: var(--shade); color: var(--ink); }
+html body .pel:not(.dark) .tabs { background: var(--card); border-top-color: var(--rule); }
+html body .pel:not(.dark) .tabs button { color: var(--ink2); }
+html body .pel:not(.dark) .tabs button.on { color: var(--ink); }
+html body .pel:not(.dark) .tabs button:hover { background: var(--shade); color: var(--ink); }
+html body .pel:not(.dark) .waitbar .wroster li { border-color: var(--rule); color: var(--ink2); }
+/* Abwählen im Draft: auf hellem Sheet als ruhige Fläche */
+html body .pel:not(.dark) .dbar button:not(.solid):not(.ox) { background: var(--shade); border-color: transparent; color: var(--ink); }
