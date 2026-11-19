@@ -49,6 +49,7 @@ Dateinamen-Reihenfolge angewendet:
 44. `20261029090100_admin_advance_season.sql` – `admin_advance_season()`: Admin schiebt eine laufende Partie sofort ins nächste Halbjahr (Frist auf jetzt, Auswertung anstoßen; fehlende Abgaben zählen wie nach Fristablauf)
 45. `20261102090000_turn_submission_update_lock.sql` – eigene Abgabe bearbeiten (UPDATE) nur, solange keine Auswertung läuft: Ein Update während eines frischen Claims würde nicht mehr ausgewertet und wird deshalb abgelehnt
 46. `20261104090000_season_submission_roster.sql` – `season_submission_roster()`: je menschlichem Spieler einer laufenden Partie, ob er im aktuellen Halbjahr abgegeben hat (Namen für die Warteleiste; ohne Inhalt und Zeitpunkt der Abgabe, nur für Mitglieder)
+47. `20261119090000_feedback.sql` – `feedback`: Gesamtbewertung (1–5 Sterne) und Freitext der Spieler; schreiben dürfen Spielberechtigte, lesen nur der Admin über `admin_list_feedback()`
 
 ## Zugangskontrolle und Universen
 
