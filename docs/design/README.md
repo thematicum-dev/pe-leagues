@@ -27,8 +27,6 @@ keine Oberflächenfarben.
 
 ## Redesign v1
 
-`redesign-v1.css` ist der Entwurf, der in der Figma-Datei auf der Seite „Redesign v1“
-zu sehen ist. Er liegt als zusätzliche Stilschicht über dem bestehenden Spiel-Stylesheet
-(Selektoren mit `html body .pel …`) und ändert keine Inhalte, Bilder oder Farbwerte.
-Wird er übernommen, gehören die Regeln in die CSS-Konstanten von `ui.tsx`, `battle.tsx`
-und `draft.tsx`; die vorangestellten `html body` entfallen dann.
+Umgesetzt in `components/pel/redesign.ts` (`REDESIGN_CSS`), angehängt an die Spiel-Styles
+in `ui.tsx`. Der Entwurf dazu steht in der Figma-Datei auf der Seite „Redesign v1“,
+jede Ansicht dort in dunkel und hell.

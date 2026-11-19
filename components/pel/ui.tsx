@@ -33,6 +33,7 @@ import {
 import { haptic } from "./haptics";
 import { BRIEFING_CSS } from "./briefing";
 import { DRAFT_CSS, Draft, SeatCard, SeatSheet, seatName } from "./draft";
+import { REDESIGN_CSS } from "./redesign";
 
 export const TAB_ICON = { deals: Search, port: Briefcase, rank: Trophy };
 export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
@@ -648,7 +649,7 @@ export const CSS = `
 .pel .kpil{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);}
 .pel .kpiv{font-size:16px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pel .kpiv.teal{color:var(--teal);} .pel .kpiv.ox{color:var(--ox);}
-` + BATTLE_CSS + BRIEFING_CSS + DRAFT_CSS;
+` + BATTLE_CSS + BRIEFING_CSS + DRAFT_CSS + REDESIGN_CSS;
 
 /* ---------------- Touch & Feel: kleine Helfer für spürbares Feedback ---------------- */
 
