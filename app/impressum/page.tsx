@@ -7,24 +7,23 @@ export default function ImpressumPage() {
     <LegalPage title="Impressum">
       <h2>Angaben gemäß § 5 DDG</h2>
       <p>
-        <mark>Firma / Name des Betreibers</mark><br />
-        <mark>Straße und Hausnummer</mark><br />
-        <mark>PLZ Ort, Land</mark>
+        Dr. Marcel Maier<br />
+        Hubertusstraße 5<br />
+        80639 München<br />
+        Deutschland
       </p>
-      <h2>Vertreten durch</h2>
-      <p><mark>Vertretungsberechtigte Person(en)</mark></p>
       <h2>Kontakt</h2>
       <p>
-        E-Mail: <mark>kontakt@…</mark><br />
-        Telefon: <mark>+49 …</mark>
+        E-Mail: <a href="mailto:marcelmaierhsg@gmail.com">marcelmaierhsg@gmail.com</a>
       </p>
-      <h2>Registereintrag und Umsatzsteuer</h2>
+      <h2>Registereintrag</h2>
+      <p>Es besteht kein Eintrag im Handelsregister.</p>
+      <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
       <p>
-        Registergericht und -nummer: <mark>falls vorhanden</mark><br />
-        Umsatzsteuer-Identifikationsnummer nach § 27a UStG: <mark>falls vorhanden</mark>
+        Marcel Maier<br />
+        Hubertusstraße 5<br />
+        80639 München
       </p>
-      <h2>Verantwortlich für den Inhalt</h2>
-      <p><mark>Name und Anschrift (§ 18 Abs. 2 MStV)</mark></p>
       <h2>Hinweis zum Spiel</h2>
       <p>
         PE Leagues ist eine Simulation zu Lern- und Unterhaltungszwecken. Alle Unternehmen, Personen,

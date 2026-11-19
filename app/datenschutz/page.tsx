@@ -10,9 +10,12 @@ export default function DatenschutzPage() {
     <LegalPage title="Datenschutzerklärung">
       <h2>1. Verantwortlicher</h2>
       <p>
-        <mark>Firma / Name, Anschrift, E-Mail des Verantwortlichen</mark> (siehe <a href="/impressum">Impressum</a>).
-        <mark> Falls bestellt: Kontaktdaten des Datenschutzbeauftragten.</mark>
+        Dr. Marcel Maier<br />
+        Hubertusstraße 5<br />
+        80639 München<br />
+        E-Mail: <a href="mailto:marcelmaierhsg@gmail.com">marcelmaierhsg@gmail.com</a>
       </p>
+      <p>Siehe auch das <a href="/impressum">Impressum</a>.</p>
 
       <h2>2. Welche Daten wir verarbeiten</h2>
       <ul>
@@ -68,18 +71,16 @@ export default function DatenschutzPage() {
 
       <h2>6. Empfänger und Auftragsverarbeiter</h2>
       <ul>
-        <li><strong>Supabase</strong> (Datenbank, Anmeldung, E-Mail-Versand der Bestätigungs- und Passwort-Mails): <mark>Anbieter, Region des Projekts, Hinweis auf AVV</mark></li>
-        <li><strong>Vercel</strong> (Hosting der Anwendung): <mark>Anbieter, Region, Hinweis auf AVV</mark></li>
-        <li><strong>Google Fonts</strong>: Die Schriften werden derzeit von Servern von Google geladen; dabei wird deine IP-Adresse an Google übertragen. <mark>Vor dem Start entscheiden: Schriften selbst hosten (empfohlen) oder hier Rechtsgrundlage und Drittlandübermittlung beschreiben.</mark></li>
+        <li><strong>Supabase</strong> (Datenbank, Anmeldung, E-Mail-Versand der Bestätigungs- und Passwort-Mails)</li>
+        <li><strong>Vercel</strong> (Hosting der Anwendung)</li>
+        <li><strong>Google Fonts</strong>: Die Schriften werden derzeit von Servern von Google geladen; dabei wird deine IP-Adresse an Google übertragen.</li>
       </ul>
-      <p><mark>Angaben zu Übermittlungen in Drittländer und den Garantien dafür (z. B. Standardvertragsklauseln, EU-US Data Privacy Framework).</mark></p>
 
       <h2>7. Speicherdauer</h2>
       <ul>
         <li>Konto, Profil und Spieldaten: bis du dein Konto löschst.</li>
         <li>Nutzungsereignisse: höchstens 13 Monate, danach automatische Löschung.</li>
         <li>Fehlversuche bei Zugangscodes: zwei Tage.</li>
-        <li>Protokoll der Administrator-Eingriffe: <mark>Frist festlegen</mark>.</li>
       </ul>
 
       <h2>8. Deine Rechte</h2>
@@ -91,7 +92,7 @@ export default function DatenschutzPage() {
         genügt eine Nachricht an die oben genannte Adresse.
       </p>
 
-      <p className="dashsub">Stand: <mark>Datum</mark></p>
+      <p className="dashsub">Stand: 01.11.2026</p>
     </LegalPage>
   );
 }
