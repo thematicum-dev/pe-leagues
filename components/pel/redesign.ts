@@ -77,6 +77,9 @@ export const REDESIGN_CSS = `
   display: flex; gap: 16px; margin-top: 4px;
 }
 .pel.pel .cockkpi span { white-space: nowrap; }
+/* Die Tail-End-Vorschau ist ein ganzer Satz in einem Element und muss umbrechen dürfen. */
+.pel.pel .cockkpi { flex-wrap: wrap; }
+.pel.pel .cockkpi > span.ox { white-space: normal; }
 .pel.pel .bar .barrow button.mono {
   font-family: var(--num) !important; font-size: 13px; font-weight: 600; color: var(--pgold) !important;
   text-decoration: none !important; min-height: 0;
@@ -277,4 +280,62 @@ export const REDESIGN_CSS = `
   }
   .pel.pel .tabs button:hover { color: var(--onpanel); }
 }
+
+/* ---------- Nachträge aus dem Spieltest ----------
+   Stellen, die erst beim Durchspielen sichtbar wurden. */
+
+/* Kopfleiste im Übungsmodus: drei Werte in einer Zeile neben den Knöpfen.
+   Kleiner als in der Mehrspielerpartie, sonst laufen "18,4 Mio. €" und
+   "20/20" ineinander. Die Kennzahlzeilen darunter kamen als Inline-Style mit
+   10,5 px und 55 % Deckkraft. */
+.pel.pel > .bar .barrow:has(> .theme) { align-items: flex-end; gap: 12px; }
+.pel.pel > .bar .barrow:has(> .theme) .statv { font-size: 20px; }
+.pel.pel > .bar .barrow + .barrow,
+.pel.pel > .bar .barrow.mono {
+  font-family: var(--num) !important; font-variant-numeric: tabular-nums;
+  font-size: 12px !important; opacity: 1 !important; color: var(--psoft); margin-top: 6px !important;
+}
+.pel.pel > .bar .barrow + .barrow .mono { font-family: var(--num); }
+
+/* Tombstone (Endabrechnung, Financial Statements, Verwendung der Erlöse):
+   bleibt das Signaturelement mit feiner Goldlinie, aber in der neuen
+   Formensprache und ohne gesperrte Großbuchstaben. */
+.pel.pel .tomb {
+  border: 0; border-radius: var(--rcard); padding: 24px 20px 22px; margin: 16px;
+  box-shadow: 0 18px 40px -28px var(--glow);
+}
+.pel.pel .tomb:before { inset: 6px; border-radius: 18px; border-color: color-mix(in srgb, var(--pgold) 45%, transparent); }
+.pel.pel .tomb .sub {
+  font-size: 12.5px; letter-spacing: 0; text-transform: none; line-height: 1.5; color: var(--psoft);
+}
+.pel.pel .tomb .sub:first-child { font-size: 13px; font-weight: 650; color: var(--pgold); }
+.pel.pel .tomb .amt { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.04em; }
+
+/* Halbjahresbericht: Kacheln auf Flächen statt eines Rasters mit Linien */
+.pel.pel .brhead .sub { font-size: 12.5px; letter-spacing: 0; text-transform: none; font-weight: 650; }
+.pel.pel .brgrid { gap: 8px; background: transparent; border: 0; }
+.pel.pel .brtile { background: var(--shade); border-radius: 14px; padding: 12px; }
+.pel.pel .brtv { font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+.pel.pel .brtd { font-family: var(--num); font-size: 11.5px; }
+.pel.pel .brlist { border: 0; border-radius: var(--r); background: var(--card); overflow: hidden; }
+.pel.pel .brtodo { border: 0; border-radius: 14px; background: color-mix(in srgb, var(--gold) 10%, var(--shade)); }
+
+/* Im hellen Modus folgen auch Tombstone und Berichtskopf dem Theme */
+.pel.pel:not(.dark) .tomb,
+.pel.pel:not(.dark) .brhead {
+  --panel: var(--card);
+  --onpanel: var(--ink);
+  --psoft: color-mix(in srgb, var(--ink) 72%, var(--card));
+  --pgold: var(--gold);
+  --pteal: var(--teal);
+  --pox: var(--ox);
+}
+.pel.pel:not(.dark) .brchip { border-color: var(--rule); background: var(--shade); }
+
+/* Kontenblätter mit Sätzen statt Zahlen (Maßnahmenkatalog, Zukaufsprüfung,
+   Kapitalzuführung): Inter statt Mono. Mono brach dort Sätze wie
+   "+1.18 (streut 0.7–1.1×)" mitten in der Zahl um. Zahlen bleiben über
+   Tabellenziffern bündig. Reine Zahlentabellen (.ledger ohne .fix) bleiben Mono. */
+.pel.pel .ledger.fix td:last-child { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 550; }
+.pel.pel .ledger.fix td.lab { color: var(--ink2); }
 `;
