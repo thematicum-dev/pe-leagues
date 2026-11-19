@@ -40,7 +40,7 @@ export async function changeDisplayName(_prev: FormState, formData: FormData): P
 /* Konto endgültig löschen (Art. 17 DSGVO). Zwei Schritte:
 
    1. prepare_my_account_deletion() gibt die Verweise frei, die das Löschen
-      sonst blockieren (eröffnete Partien, siehe Migration 20261110090500).
+      sonst blockieren (eröffnete Partien, siehe Migration 20261119150000).
    2. Das Auth-Konto wird über die Admin-API gelöscht; Profil, Plätze, Abgaben
       und Ereignisse folgen über die Fremdschlüssel-Kaskaden.
 

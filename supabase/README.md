@@ -49,13 +49,13 @@ Dateinamen-Reihenfolge angewendet:
 44. `20261029090100_admin_advance_season.sql` – `admin_advance_season()`: Admin schiebt eine laufende Partie sofort ins nächste Halbjahr (Frist auf jetzt, Auswertung anstoßen; fehlende Abgaben zählen wie nach Fristablauf)
 45. `20261102090000_turn_submission_update_lock.sql` – eigene Abgabe bearbeiten (UPDATE) nur, solange keine Auswertung läuft: Ein Update während eines frischen Claims würde nicht mehr ausgewertet und wird deshalb abgelehnt
 46. `20261104090000_season_submission_roster.sql` – `season_submission_roster()`: je menschlichem Spieler einer laufenden Partie, ob er im aktuellen Halbjahr abgegeben hat (Namen für die Warteleiste; ohne Inhalt und Zeitpunkt der Abgabe, nur für Mitglieder)
-
-47. `20261110090000_activity_tracking.sql` – `profiles.last_seen_at`, `analytics_events`, `track_event()`: eigene Nutzungsauswertung ohne Drittanbieter, abschaltbar im Profil (`set_my_preferences()`), 13 Monate Aufbewahrung
-48. `20261110090100_admin_roles_audit.sql` – mehrere Administratoren (`app_admins`, `is_root_admin()`, `admin_set_admin()`) und ein Protokoll ihrer Eingriffe (`admin_audit_log`, `admin_log()`, `admin_list_audit()`)
-49. `20261110090200_access_codes.sql` – Zugangscodes: vorab erteilte Freigabe für ein Universum mit Kontingent und Ablauf (`redeem_access_code()`, `admin_create_access_code()`, `admin_list_access_codes()`)
-50. `20261110090300_admin_dashboard.sql` – `admin_dashboard_stats()`: Kennzahlen der Admin-Übersicht (aktive Konten, Trichter, Abgabedisziplin, Kohorten); `admin_list_users()` um Aktivität, Abgaben, Zugangscode und Rolle erweitert
-51. `20261110090400_career.sql` – `my_career()`: beendete Partien des Spielers mit Platz und Kennzahlen (Profil, Karrierestufe, Auszeichnungen); `my_open_turns()`: „Du bist dran“ fürs Dashboard
-52. `20261110090500_account_deletion.sql` – Konto löschen, auch wenn es Partien eröffnet hat (`prepare_my_account_deletion()`, `admin_prepare_user_deletion()`); vorher scheiterte das am Fremdschlüssel `seasons.created_by`
+47. `20261119090000_feedback.sql` – `feedback`: Gesamtbewertung (1–5 Sterne) und Freitext der Spieler; schreiben dürfen Spielberechtigte, lesen nur der Admin über `admin_list_feedback()`
+48. `20261119100000_activity_tracking.sql` – `profiles.last_seen_at`, `analytics_events`, `track_event()`: eigene Nutzungsauswertung ohne Drittanbieter, abschaltbar im Profil (`set_my_preferences()`), 13 Monate Aufbewahrung
+49. `20261119110000_admin_roles_audit.sql` – mehrere Administratoren (`app_admins`, `is_root_admin()`, `admin_set_admin()`) und ein Protokoll ihrer Eingriffe (`admin_audit_log`, `admin_log()`, `admin_list_audit()`)
+50. `20261119120000_access_codes.sql` – Zugangscodes: vorab erteilte Freigabe für ein Universum mit Kontingent und Ablauf (`redeem_access_code()`, `admin_create_access_code()`, `admin_list_access_codes()`)
+51. `20261119130000_admin_dashboard.sql` – `admin_dashboard_stats()`: Kennzahlen der Admin-Übersicht (aktive Konten, Trichter, Abgabedisziplin, Kohorten); `admin_list_users()` um Aktivität, Abgaben, Zugangscode und Rolle erweitert
+52. `20261119140000_career.sql` – `my_career()`: beendete Partien des Spielers mit Platz und Kennzahlen (Profil, Karrierestufe, Auszeichnungen); `my_open_turns()`: „Du bist dran“ fürs Dashboard
+53. `20261119150000_account_deletion.sql` – Konto löschen, auch wenn es Partien eröffnet hat (`prepare_my_account_deletion()`, `admin_prepare_user_deletion()`); vorher scheiterte das am Fremdschlüssel `seasons.created_by`
 
 ## Zugangscodes, Aktivität und Admin-Rollen
 
@@ -198,7 +198,7 @@ werden nur über diese Funktionen geschrieben.
 
 `/admin` (siehe `app/admin/`) ist für den Account mit der E-Mail-Adresse
 `thematicum.dev@gmail.com` und für von ihm ernannte Administratoren sichtbar
-(`public.is_admin()`, Migrationen 26 und 48). Die Startseite des Bereichs ist
+(`public.is_admin()`, Migrationen 26 und 49). Die Startseite des Bereichs ist
 die Übersicht mit den Kennzahlen aus `admin_dashboard_stats()`. Dort lassen sich alle Partien inkl. Fortschritt und alle
 Nutzer inkl. E-Mail und Statistik einsehen, Zugänge freigeben oder sperren
 und Universen zuteilen (`admin_set_user_access()`), Universen anlegen und

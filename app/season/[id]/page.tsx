@@ -6,7 +6,8 @@ import type { Attrs } from "@/lib/engine/constants";
 import MultiplayerGame from "./MultiplayerGame";
 import { rosterFromRows, type SubmissionRosterEntry } from "./submissionRoster";
 import LobbyRoom from "./LobbyRoom";
-import { SeasonDrivers } from "@/components/pel/ui";
+import SeasonReportView from "./SeasonReportView";
+import { loadSeasonReport } from "./seasonReport";
 
 const STATUS_LABEL: Record<string, string> = {
   lobby: "Lobby offen",
@@ -108,33 +109,13 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  /* Endstand: der eigene Fonds im Schlusszustand. Der Abschlussbildschirm
-     rechnet daraus die Value Bridge — sie braucht nicht nur die realisierten
-     Deals, sondern auch abgerufenes Kapital, Ausschüttungen und Markt, weil
-     sie auf dieselbe Größe schließt wie TVCC und Wertung. */
-  let myFund: RuntimeState["funds"][number] | null = null;
-  let finalMarket: RuntimeState["market"] | null = null;
-  let finalHalfYear = 0;
-  let prevBridgeState: { fund: RuntimeState["funds"][number]; market: RuntimeState["market"]; quarter: number } | null = null;
-  if (season.status === "finished" && humanSlot != null) {
-    // Zwei Stände: der Schlussstand und der davor, damit die Value Bridge auch
-    // die Spalte für das letzte Halbjahr bilden kann.
-    const { data: finalRows } = await supabase
-      .from("season_state")
-      .select("state, half_year")
-      .eq("season_id", id)
-      .order("half_year", { ascending: false })
-      .limit(2);
-    const fin = finalRows?.[0]?.state as RuntimeState | undefined;
-    myFund = fin?.funds?.find((f) => f.slot === humanSlot) ?? null;
-    finalMarket = fin?.market ?? null;
-    finalHalfYear = (finalRows?.[0]?.half_year as number) ?? 0;
-    const before = finalRows?.[1]?.state as RuntimeState | undefined;
-    const beforeFund = before?.funds?.find((f) => f.slot === humanSlot);
-    if (beforeFund && before) {
-      prevBridgeState = { fund: beforeFund, market: before.market, quarter: (finalRows?.[1]?.half_year as number) ?? 0 };
-    }
-  }
+  /* Abschlussauswertung: bei beendeten Partien der Endstand, bei
+     abgebrochenen der Stand nach dem letzten ausgewerteten Halbjahr. Beide
+     sind über das Profil (/profile) jederzeit wieder aufrufbar. */
+  const aborted = season.status === "cancelled" && season.cancelled_reason === "aborted";
+  const report = season.status === "finished" || aborted
+    ? await loadSeasonReport(supabase, id, aborted ? "aborted" : "final", season.final_ranking, humanSlot)
+    : null;
 
   return (
     <main className="dashwrap">
@@ -147,13 +128,13 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
                 {season.cancelled_reason === "aborted" ? "Abgebrochen" : STATUS_LABEL[season.status] ?? season.status}
               </div>
             </div>
-            <Link href="/dashboard" className="btn-secondary">
-              Zum Dashboard
+            <Link href={report ? "/profile" : "/dashboard"} className="btn-secondary">
+              {report ? "Deine Partien" : "Zum Dashboard"}
             </Link>
           </div>
         )}
 
-        {(season.status === "lobby" || season.status === "cancelled") && (
+        {(season.status === "lobby" || (season.status === "cancelled" && !report)) && (
           <LobbyRoom
             seasonId={season.id}
             currentUserId={user.id}
@@ -213,49 +194,12 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
           />
         )}
 
-        {season.status === "finished" && Array.isArray(season.final_ranking) && (
-          <div className="pel dark">
-            <style dangerouslySetInnerHTML={{ __html: FINISHED_CSS }} />
-            <div className="wrap" style={{ maxWidth: 520, margin: "0 auto" }}>
-              <div className="tomb" style={{ margin: "24px 16px" }}>
-                <div className="sub">Fondslaufzeit beendet</div>
-                <div className="amt">
-                  {(season.final_ranking as { score: number }[])[0]?.score.toFixed(2) ?? "—"}
-                </div>
-                <div className="sub">Höchste Wertung der Kohorte</div>
-              </div>
-              <div className="card">
-                <h3 className="disp">Endstand</h3>
-                {(season.final_ranking as { slot: number; name: string; score: number; tvpi: number; irr: number }[]).map(
-                  (r, i) => (
-                    <div className="lb" key={r.slot}>
-                      <span className="rk">{["🥇", "🥈", "🥉"][i] || i + 1}</span>
-                      <span className="nm">{r.name}</span>
-                      <span className="mo" style={{ color: r.score >= 1 ? "var(--teal)" : "var(--ox)" }}>
-                        {r.score.toFixed(2)}
-                      </span>
-                    </div>
-                  ),
-                )}
-              </div>
-              <div className="card">
-                <div className="pad" style={{ paddingTop: 16 }}>
-                  {/* tvcc fehlt in Endranglisten vor dem 18.10.2026 — damals zählte der TVPI */}
-                  {(season.final_ranking as { slot: number; name: string; score: number; tvcc?: number; tvpi: number; irr: number }[]).map((r) => (
-                    <p key={r.slot} className="hint" style={{ marginBottom: 6 }}>
-                      <b>{r.name}</b> — {r.tvcc != null ? `TVCC ${r.tvcc.toFixed(2)}× · ` : ""}IRR {(r.irr * 100).toFixed(1).replace(".", ",")} % · TVPI {r.tvpi.toFixed(2)}×
-                    </p>
-                  ))}
-                </div>
-              </div>
-              <SeasonDrivers fund={myFund} market={finalMarket} quarter={finalHalfYear}
-                prev={prevBridgeState} title="Woher deine Rendite kam" />
-              <div style={{ margin: "18px 16px 40px" }}>
-                <Link href="/dashboard" className="btn-primary" style={{ display: "block", textAlign: "center" }}>
-                  Zum Dashboard
-                </Link>
-              </div>
-            </div>
+        {report && <SeasonReportView report={report} />}
+
+        {season.status === "finished" && !report && (
+          <div className="dashcard">
+            <h2>Auswertung nicht verfügbar</h2>
+            <p className="dashsub">Für diese Partie liegt kein Endstand vor.</p>
           </div>
         )}
 
@@ -276,79 +220,3 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     </main>
   );
 }
-
-// Minimaler Ausschnitt aus dem .pel-Stylesheet, nur für die statischen Klassen
-// (tomb/card/lb), die der Endstand-Bildschirm braucht — der volle Satz lebt
-// in components/pel/ui.tsx und wird dort geladen, sobald die Partie läuft.
-const FINISHED_CSS = `
-.pel{--paper:#0C1214;--card:#161F22;--ink:#EDF1EE;--ink2:#8E9C9B;--rule:#243033;--ox:#E3897F;--teal:#5FC4B1;--gold:#DCB264;--panel:#080D0F;--onpanel:#EDF1EE;--glow:rgba(0,0,0,.4);font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--paper);min-height:100%;}
-.pel *{box-sizing:border-box;}
-.pel .disp{font-weight:600;letter-spacing:-.025em;}
-.pel .card{background:var(--card);border:1px solid var(--rule);margin:14px 16px;border-radius:10px;}
-.pel .card h3{margin:0;padding:18px 16px 10px;font-size:17px;}
-.pel .pad{padding:0 16px 16px;}
-.pel .hint{font-size:13px;line-height:1.55;color:var(--ink2);}
-.pel .tomb{background:var(--panel);color:var(--onpanel);padding:20px 16px;text-align:center;border:1px solid var(--panel);position:relative;}
-.pel .tomb .amt{font-size:40px;font-weight:600;letter-spacing:-.035em;margin:8px 0 5px;}
-.pel .tomb .sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);}
-.pel .lb{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rule);}
-.pel .lb .rk{font-size:16px;width:20px;}
-.pel .lb .nm{flex:1;font-size:13px;}
-.pel .lb .mo{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;}
-.pel .btn-primary{display:inline-block;text-decoration:none;}
-.pel .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
-.pel .eyebrow{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600;}
-/* Vergleichstabelle und Erklär-Punkte für die Value Bridge auf dem Endstand —
-   Ausschnitt aus dem vollen Stylesheet in components/pel/ui.tsx. Ändert sich
-   dort table.cmp, muss dieser Ausschnitt mitgezogen werden. */
-.pel table.cmp{width:100%;border-collapse:collapse;}
-.pel table.cmp th,.pel table.cmp td{font-size:12.5px;padding:8px 10px;text-align:right;
-  border-bottom:1px solid var(--rule);white-space:nowrap;
-  font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
-/* Aussen bündig zur Karte, innen enger — sonst passen drei Spalten auf einem
-   schmalen Gerät nicht nebeneinander. */
-.pel table.cmp th:first-child,.pel table.cmp td:first-child{padding-left:16px;}
-.pel table.cmp th:last-child,.pel table.cmp td:last-child{padding-right:16px;}
-.pel table.cmp th{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--ink2);font-weight:600;padding-top:0;padding-bottom:6px;}
-.pel table.cmp th:first-child,.pel table.cmp td:first-child{text-align:left;color:var(--ink2);
-  font-family:'Inter',system-ui,sans-serif;white-space:normal;}
-.pel table.cmp tr:last-child td{border-bottom:0;}
-.pel table.cmp th small{display:block;font-weight:500;font-size:8.5px;letter-spacing:.08em;
-  text-transform:none;color:var(--ink2);opacity:.7;margin-top:2px;}
-.pel table.cmp tr.seg td{font-family:'Inter',system-ui,sans-serif;font-size:9.5px;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);font-weight:600;
-  padding-top:17px;padding-bottom:5px;border-bottom:0;}
-.pel table.cmp tr.sum td,.pel table.cmp tr.sum td:first-child{font-weight:600;color:var(--ink);
-  border-top:1px solid var(--rule);}
-/* Aufklappbare Gruppe: Die Kopfzeile trägt die Summe, damit die Aufstellung
-   auch zugeklappt vollständig ist; die Einzelposten begründen sie. */
-.pel table.cmp tr.grp td{padding-top:13px;padding-bottom:11px;}
-.pel table.cmp tr.grp td:first-child{padding:0;}
-.pel table.cmp tr.grp button{display:flex;align-items:center;gap:6px;width:100%;
-  padding:13px 10px 11px 16px;background:none;border:0;cursor:pointer;text-align:left;
-  font-family:'Inter',system-ui,sans-serif;font-size:9.5px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--ink2);font-weight:600;}
-.pel table.cmp tr.grp .grpcar{display:inline-block;font-size:13px;line-height:1;
-  transition:transform .15s;transform:rotate(0deg);opacity:.7;}
-.pel table.cmp tr.grp.on .grpcar{transform:rotate(90deg);}
-.pel table.cmp tr.det td{font-size:12px;}
-.pel table.cmp tr.det td:first-child{padding-left:28px;}
-.pel .finnote{font-size:11px;line-height:1.6;color:var(--ink2);margin:0;padding:12px 16px 0;}
-.pel .infb{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
-  border-radius:50%;border:1px solid var(--rule);background:transparent;color:var(--ink2);
-  font-size:9.5px;font-weight:700;font-family:inherit;line-height:1;padding:0;margin-left:5px;
-  vertical-align:middle;cursor:pointer;flex:none;}
-.pel .infb.on{background:var(--gold);border-color:var(--gold);color:var(--panel);}
-.pel .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;
-  align-items:flex-end;justify-content:center;}
-.pel .sheet{background:var(--paper);width:100%;max-width:520px;max-height:92vh;overflow:auto;
-  border-radius:16px 16px 0 0;}
-.pel .infgrip{width:34px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;}
-.pel .infsheet{padding:20px 18px 26px;}
-.pel .infsheet .it{font-size:15px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;}
-.pel .infsheet .ib{font-size:13.5px;line-height:1.65;color:var(--ink2);}
-.pel .infsheet .ib b{color:var(--ink);font-weight:600;}
-.pel .infsheet .ic{width:100%;margin-top:18px;font-family:inherit;font-size:13px;cursor:pointer;
-  padding:11px 18px;border:1px solid var(--rule);background:var(--card);color:var(--ink);border-radius:8px;}
-`;

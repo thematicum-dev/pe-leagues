@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 
 /* Nutzungsereignis aufzeichnen (track_event() in
-   supabase/migrations/20261110090000_activity_tracking.sql).
+   supabase/migrations/20261119100000_activity_tracking.sql).
 
    Drei Regeln, die hier und nicht bei jedem Aufrufer stehen:
 

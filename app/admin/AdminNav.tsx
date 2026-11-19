@@ -9,6 +9,7 @@ const ITEMS: [string, string][] = [
   ["/admin/users", "Nutzer & Zugänge"],
   ["/admin/codes", "Zugangscodes"],
   ["/admin/universes", "Universen"],
+  ["/admin/feedback", "Feedback"],
   ["/admin/audit", "Protokoll"],
 ];
 

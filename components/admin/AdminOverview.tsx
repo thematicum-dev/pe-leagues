@@ -2,7 +2,7 @@ import { fmtInt, fmtPct } from "@/lib/format";
 
 /* Die Admin-Übersicht: wie es dem Produkt geht, auf einer Seite. Reine
    Darstellung über das JSON aus admin_dashboard_stats()
-   (supabase/migrations/20261110090300_admin_dashboard.sql) — lässt sich wie
+   (supabase/migrations/20261119130000_admin_dashboard.sql) — lässt sich wie
    die Ranglisten-Komponenten ohne Datenbank ansehen. */
 
 export interface AdminStats {

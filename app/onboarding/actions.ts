@@ -44,7 +44,7 @@ export async function requestAccess(_prevState: FormState, formData: FormData): 
   /* Mit Zugangscode: sofort freigegeben (redeem_access_code legt das Profil
      selbst an). Ohne: Anfrage an den Admin wie bisher — request_access() ist
      dafür der einzige Weg und erzeugt immer access_status = 'pending'.
-     Siehe supabase/migrations/20261110090200_access_codes.sql. */
+     Siehe supabase/migrations/20261119120000_access_codes.sql. */
   if (code) {
     const { data: status, error } = await supabase.rpc("redeem_access_code", { p_code: code, p_display_name: displayName });
     if (error) {

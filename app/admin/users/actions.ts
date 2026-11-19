@@ -12,7 +12,7 @@ export async function deleteUserAction(userId: string): Promise<{ error: string 
   }
 
   /* Erst die Verweise freigeben, an denen das Löschen sonst scheitert
-     (seasons.created_by, siehe Migration 20261110090500) — die Funktion
+     (seasons.created_by, siehe Migration 20261119150000) — die Funktion
      schützt außerdem den Root-Account und andere Admins und schreibt den
      Eingriff ins Protokoll. */
   const { error: prepError } = await supabase.rpc("admin_prepare_user_deletion", { p_user_id: userId });

@@ -126,6 +126,9 @@ export default async function DashboardPage() {
             <Link href="/leaderboard" className="btn-quiet">
               Rangliste
             </Link>
+            <Link href="/feedback" className="btn-quiet">
+              Feedback
+            </Link>
             {isAdmin && (
               <a href="/admin" className="btn-quiet">
                 Admin
@@ -207,6 +210,20 @@ export default async function DashboardPage() {
           <span className="dashsub">Per Link, jederzeit</span>
         </div>
         <InviteFriends signupUrl={signupUrl} />
+
+        <div className="dashsection">
+          <h2>Feedback</h2>
+          <span className="dashsub">Hilf uns, PE Leagues besser zu machen</span>
+        </div>
+        <div className="modegrid">
+          <Link href="/feedback" className="modecard">
+            <h3>Feedback geben</h3>
+            <p>
+              Bewerte das Spiel mit 1 bis 5 Sternen und sag uns, was wir an Spielerlebnis,
+              Simulation oder Bedienung verbessern können.
+            </p>
+          </Link>
+        </div>
         <SiteFooter />
       </div>
     </main>

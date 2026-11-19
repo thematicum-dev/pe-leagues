@@ -1,6 +1,6 @@
 /* Track Record eines Spielers: Kennzahlen, Karrierestufe und Auszeichnungen,
    gerechnet aus seinen beendeten Partien (my_career() in
-   supabase/migrations/20261110090400_career.sql).
+   supabase/migrations/20261119140000_career.sql).
 
    Reine Funktionen ohne Datenbank und ohne React — die Profilseite, das
    Dashboard und die Tests benutzen dieselbe Rechnung.

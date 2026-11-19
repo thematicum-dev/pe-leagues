@@ -9,10 +9,10 @@ const PROTECTED_PREFIXES = [
   "/access",
   "/admin",
   "/leaderboard",
+  "/profile",
   "/season",
   "/practice",
   "/explain",
-  "/profile",
 ];
 
 export async function updateSession(request: NextRequest) {

@@ -27,7 +27,10 @@ export function TierBadge({ points, compact = false }: { points: number; compact
   );
 }
 
-export default function CareerView({ rows, error }: { rows: CareerRow[]; error?: string | null }) {
+/* `showGames`: die Liste der beendeten Partien. Das Profil zeigt stattdessen
+   seine eigene Liste aller gespielten Partien (auch laufende und
+   abgebrochene, mit Weg zur Auswertung) und blendet diese hier aus. */
+export default function CareerView({ rows, error, showGames = true }: { rows: CareerRow[]; error?: string | null; showGames?: boolean }) {
   const s = summarize(rows);
   const badges = achievementsOf(rows);
   const earned = badges.filter((b) => b.done).length;
@@ -82,7 +85,7 @@ export default function CareerView({ rows, error }: { rows: CareerRow[]; error?:
         </div>
       </div>
 
-      <div className="dashcard">
+      {showGames && <div className="dashcard">
         <h2>Beendete Partien ({rows.length})</h2>
         {error && <p className="autherror">{error}</p>}
         {rows.length === 0 && !error && (
@@ -115,7 +118,8 @@ export default function CareerView({ rows, error }: { rows: CareerRow[]; error?:
             </div>
           </div>
         ))}
-      </div>
+      </div>}
+      {!showGames && error && <p className="autherror">{error}</p>}
     </>
   );
 }
