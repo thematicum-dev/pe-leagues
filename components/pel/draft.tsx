@@ -602,22 +602,22 @@ export const DRAFT_CSS = `
 .pel .dsolo{display:flex;justify-content:center;padding:12px 16px 0;perspective:1400px;}
 .pel .dsolo .dcard{width:min(340px, 100%);}
 .pel .ddots{display:flex;justify-content:center;gap:6px;padding-top:6px;}
-.pel .ddots button{width:6px;height:6px;padding:0;border:0;border-radius:9px;background:#2E3C3F;transition:width .2s,background .2s;}
+.pel .ddots button{width:6px;height:6px;padding:0;border:0;border-radius:9px;background:var(--pline);transition:width .2s,background .2s;}
 .pel .ddots button.on{width:18px;background:var(--gold);}
 .pel .ddots button:hover:not(:disabled){background:var(--gold);}
 .pel .dbar{display:flex;gap:10px;padding:14px 16px 0;}
-.pel .dbar button{background:transparent;color:var(--onpanel);border-color:#2E3C3F;min-height:46px;}
-.pel .dbar button.solid{flex:1;background:var(--gold);color:#12201F;border-color:var(--gold);font-weight:650;}
+.pel .dbar button{background:transparent;color:var(--onpanel);border-color:var(--pline);min-height:46px;}
+.pel .dbar button.solid{flex:1;background:var(--gold);color:var(--pdeep);border-color:var(--gold);font-weight:650;}
 .pel .dbar button.solid:hover:not(:disabled){background:var(--gold);border-color:var(--gold);filter:brightness(1.08);}
-.pel .dbar button.ox{flex:1;color:#E3897F;border-color:#E3897F;font-weight:650;}
-.pel .dbar button.ox:hover:not(:disabled){background:#E3897F;color:#12201F;}
-.pel .dbar button.solid.oxs{background:#E3897F;border-color:#E3897F;}
-.pel .dhint{font-size:11.5px;line-height:1.5;color:#8E9C9B;margin:10px 16px 0;}
-.pel .dask{margin:14px 0 0;padding:16px 0 0;border-top:1px solid #2E3C3F;}
+.pel .dbar button.ox{flex:1;color:var(--pox);border-color:var(--pox);font-weight:650;}
+.pel .dbar button.ox:hover:not(:disabled){background:var(--pox);color:var(--pdeep);}
+.pel .dbar button.solid.oxs{background:var(--pox);border-color:var(--pox);}
+.pel .dhint{font-size:11.5px;line-height:1.5;color:var(--pmute);margin:10px 16px 0;}
+.pel .dask{margin:14px 0 0;padding:16px 0 0;border-top:1px solid var(--pline);}
 .pel .dasktitle{font-size:17px;font-weight:700;letter-spacing:-.02em;padding:0 16px;}
-.pel .dask p{font-size:13px;line-height:1.5;color:#C9D2D0;margin:8px 16px 0;}
+.pel .dask p{font-size:13px;line-height:1.5;color:var(--psoft);margin:8px 16px 0;}
 .pel .daskrows{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin:12px 16px 0;font-size:13px;}
-.pel .daskrows span:nth-child(odd){color:#8E9C9B;}
+.pel .daskrows span:nth-child(odd){color:var(--pmute);}
 
 /* Battle Card: Vorder- und Rückseite, Metallrahmen, Oberfläche nach Haltung */
 .pel .dcard{position:relative;height:min(552px, 68vh);min-height:480px;perspective:1400px;}
@@ -702,21 +702,21 @@ export const DRAFT_CSS = `
 
 /* Haltung und Teamstufe: nur Farbe */
 .pel .dside{display:inline-block;width:9px;height:9px;border-radius:9px;vertical-align:middle;flex:none;}
-.pel .dside.hell{background:#FFFFFF;box-shadow:0 0 0 1px #8E9C9B;}
+.pel .dside.hell{background:#FFFFFF;box-shadow:0 0 0 1px var(--pmute);}
 .pel .dside.dunkel{background:#000000;box-shadow:0 0 0 1px #9AA8A6;}
-.pel .dside.vac{background:transparent;box-shadow:0 0 0 1px #E3897F;}
+.pel .dside.vac{background:transparent;box-shadow:0 0 0 1px var(--pox);}
 .pel .dside.big{width:22px;height:22px;box-shadow:0 0 0 2px var(--cs-ring),0 2px 6px rgba(0,0,0,.35);}
-.pel .dteam{background:#1C282B;border-radius:10px;padding:8px 10px;margin:4px 0 2px;color:#EDF1EE;}
+.pel .dteam{background:var(--pshade);border-radius:10px;padding:8px 10px;margin:4px 0 2px;color:var(--ptext);}
 .pel .din .dteam{background:var(--cs-trait);color:var(--cs-ink);}
 .pel .dteamrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
 .pel .dteamseat{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;min-width:0;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;}
 .pel .dteamseat.on{color:var(--gold);}
 .pel .din .dteamseat.on{color:var(--tink);}
-.pel .dteamseat small{font-weight:400;color:#8E9C9B;overflow:hidden;text-overflow:ellipsis;}
-.pel .dteamlvl{margin-top:6px;font-size:11.5px;color:#C9D2D0;}
+.pel .dteamseat small{font-weight:400;color:var(--pmute);overflow:hidden;text-overflow:ellipsis;}
+.pel .dteamlvl{margin-top:6px;font-size:11.5px;color:var(--psoft);}
 .pel .din .dteamlvl{color:var(--cs-ink2);}
-.pel .dteamlvl.hi,.pel .din .dteamlvl.hi{color:#5FC4B1;font-weight:600;}
+.pel .dteamlvl.hi,.pel .din .dteamlvl.hi{color:var(--pteal);font-weight:600;}
 .pel .din .dteamlvl.hi{color:var(--cs-good);}
 
 /* Mini-Karten im Führungsbereich */

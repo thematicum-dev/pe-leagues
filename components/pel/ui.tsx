@@ -51,6 +51,14 @@ export const CSS = `
      themeabhängig: Sie entsprechen den dunkelthemigen Tönen, die für genau
      diesen Untergrund gewählt wurden.                                       */
   --pteal:#5FC4B1; --pgold:#DCB264; --pox:#E3897F;
+  /* Weitere Töne für dunkle Flächen (Kopfleiste, Draft-Leiste, Teamkasten),
+     ebenfalls themeunabhängig: Text, gedämpfter Text, weicher Text, Linie,
+     angehobene Fläche, dunkle Schrift auf hellen Signalflächen. --violet ist
+     die dritte Hebelfamilie neben --teal und --gold. Alle Werte standen
+     vorher als Literale in draft.tsx und battle.tsx; die Namen entsprechen
+     den Figma-Variablen.                                                    */
+  --ptext:#EDF1EE; --pmute:#8E9C9B; --psoft:#C9D2D0; --pline:#2E3C3F;
+  --pshade:#1C282B; --pdeep:#12201F; --violet:#8478BE;
   --r:10px;
   font-family:'Inter',system-ui,sans-serif; color:var(--ink); background:var(--paper);
   min-height:100%; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;
@@ -81,9 +89,9 @@ export const CSS = `
    der Dringlichkeitsfarbe, die schrumpft. Beide gehören zur Zeit, deshalb
    stehen sie hier und nicht verstreut. */
 .pel .cockzeit{position:relative;overflow:hidden;margin:-11px -16px 0;padding:5px 12px 7px;
-  display:flex;align-items:center;gap:8px;background:rgba(95,196,177,.11);}
-.pel .cockzeit.warn{background:rgba(220,178,100,.13);}
-.pel .cockzeit.crit{background:rgba(227,137,127,.16);}
+  display:flex;align-items:center;gap:8px;background:color-mix(in srgb, var(--pteal) 11%, transparent);}
+.pel .cockzeit.warn{background:color-mix(in srgb, var(--pgold) 13%, transparent);}
+.pel .cockzeit.crit{background:color-mix(in srgb, var(--pox) 16%, transparent);}
 .pel .cockzeit .theme{position:relative;flex:none;}
 .pel .cockhj{position:relative;font-size:11px;font-weight:600;letter-spacing:.04em;
   color:var(--onpanel);white-space:nowrap;}
@@ -177,10 +185,10 @@ export const CSS = `
    Teil der Kopfleiste, also immer auf --panel: deshalb die Signalfarben
    --pgold/--pteal/--pox wie im Cockpit. Gold heißt abgegeben und wartend,
    Türkis heißt die Auswertung läuft, Rot heißt die Abgabe ist geöffnet. */
-.pel .waitbar{margin:10px -16px 0;padding:9px 32px 10px;background:rgba(220,178,100,.12);
-  border-top:1px solid rgba(220,178,100,.35);}
-.pel .waitbar.eval{background:rgba(95,196,177,.13);border-top-color:rgba(95,196,177,.4);}
-.pel .waitbar.editing{background:rgba(227,137,127,.12);border-top-color:rgba(227,137,127,.4);}
+.pel .waitbar{margin:10px -16px 0;padding:9px 32px 10px;background:color-mix(in srgb, var(--pgold) 12%, transparent);
+  border-top:1px solid color-mix(in srgb, var(--pgold) 35%, transparent);}
+.pel .waitbar.eval{background:color-mix(in srgb, var(--pteal) 13%, transparent);border-top-color:color-mix(in srgb, var(--pteal) 40%, transparent);}
+.pel .waitbar.editing{background:color-mix(in srgb, var(--pox) 12%, transparent);border-top-color:color-mix(in srgb, var(--pox) 40%, transparent);}
 .pel .waitbar .wl1{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;}
 .pel .waitbar .wmark{color:var(--pgold);}
 .pel .waitbar.eval .wmark{color:var(--pteal);}
@@ -195,9 +203,9 @@ export const CSS = `
 .pel .waitbar .wroster li{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:2px 8px;
   border-radius:999px;border:1px dashed rgba(255,255,255,.28);font-size:11px;font-weight:500;
   color:rgba(237,241,238,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.pel .waitbar .wroster li.on{border-style:solid;border-color:rgba(220,178,100,.55);color:var(--onpanel);}
+.pel .waitbar .wroster li.on{border-style:solid;border-color:color-mix(in srgb, var(--pgold) 55%, transparent);color:var(--onpanel);}
 .pel .waitbar .wroster li.on > span:first-child{color:var(--pgold);}
-.pel .waitbar.eval .wroster li.on{border-color:rgba(95,196,177,.55);}
+.pel .waitbar.eval .wroster li.on{border-color:color-mix(in srgb, var(--pteal) 55%, transparent);}
 .pel .waitbar.eval .wroster li.on > span:first-child{color:var(--pteal);}
 .pel .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
 .pel .waitbar .wl2{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:6px;
