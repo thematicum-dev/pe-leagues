@@ -40,15 +40,15 @@ export default function CareerView({ rows, error, showGames = true }: { rows: Ca
       <div className="dashcard dashcard-accent">
         <h2>Karriere</h2>
         <TierBadge points={s.points} />
-        <div className="statgrid">
-          <div className="stat"><b className="mono">{s.played}</b><span>Partien</span></div>
-          <div className="stat"><b className="mono">{s.wins}</b><span>Siege</span></div>
-          <div className="stat"><b className="mono">{fmtScore(s.bestScore)}</b><span>beste Wertung</span></div>
-          <div className="stat"><b className="mono">{fmtScore(s.avgScore)}</b><span>⌀ Wertung</span></div>
-          <div className="stat"><b className="mono">{fmtMultiple(s.bestTvcc)}</b><span>bester TVCC</span></div>
-          <div className="stat"><b className="mono">{fmtIrr(s.bestIrr)}</b><span>beste IRR</span></div>
-          <div className="stat"><b className="mono">{fmtPct(s.benchmarkRate)}</b><span>über Benchmark</span></div>
-          <div className="stat"><b className="mono">{s.podiums}</b><span>Podien</span></div>
+        <div className="kpigrid">
+          <div className="kpi"><b className="mono">{s.played}</b><span>Partien</span></div>
+          <div className="kpi"><b className="mono">{s.wins}</b><span>Siege</span></div>
+          <div className="kpi"><b className="mono">{fmtScore(s.bestScore)}</b><span>beste Wertung</span></div>
+          <div className="kpi"><b className="mono">{fmtScore(s.avgScore)}</b><span>⌀ Wertung</span></div>
+          <div className="kpi"><b className="mono">{fmtMultiple(s.bestTvcc)}</b><span>bester TVCC</span></div>
+          <div className="kpi"><b className="mono">{fmtIrr(s.bestIrr)}</b><span>beste IRR</span></div>
+          <div className="kpi"><b className="mono">{fmtPct(s.benchmarkRate)}</b><span>über Benchmark</span></div>
+          <div className="kpi"><b className="mono">{s.podiums}</b><span>Podien</span></div>
         </div>
         <details className="tierladder">
           <summary>So funktionieren die Karrierepunkte</summary>
@@ -69,12 +69,12 @@ export default function CareerView({ rows, error, showGames = true }: { rows: Ca
 
       <div className="dashcard">
         <h2>Auszeichnungen ({earned}/{badges.length})</h2>
-        <div className="badgegrid">
+        <div className="awardgrid">
           {badges.map((b) => (
-            <div key={b.id} className={"badge" + (b.done ? " badge-on" : "")} title={b.desc}>
-              <span className="badgeicon" aria-hidden="true">{b.icon}</span>
+            <div key={b.id} className={"award" + (b.done ? " award-on" : "")} title={b.desc}>
+              <span className="awardicon" aria-hidden="true">{b.icon}</span>
               <div>
-                <div className="badgename">{b.name}</div>
+                <div className="awardname">{b.name}</div>
                 <div className="dashsub">{b.desc}</div>
                 {!b.done && b.need > 1 && (
                   <div className="dashsub mono">{b.have} / {b.need}</div>

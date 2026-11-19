@@ -1,10 +1,11 @@
 /* Wegwerf-Route für die Seiten außerhalb des Spiels: Karriere/Profil,
    Admin-Übersicht und Nutzerliste — mit festen Beispieldaten statt der
-   Datenbank. `?view=career|admin|users|empty`. Siehe SKILL.md. */
+   Datenbank. `?view=career|admin|users|empty|feedback`. Siehe SKILL.md. */
 import CareerView from "@/components/career/CareerView";
 import AdminOverview, { type AdminStats } from "@/components/admin/AdminOverview";
 import UserList, { type AdminUserRow } from "@/app/admin/users/UserList";
 import type { CareerRow } from "@/lib/career/career";
+import FeedbackForm from "@/app/feedback/FeedbackForm";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ v
       <div className={"dashinner" + (view === "admin" || view === "users" ? " dashinner-wide" : "")}>
         {view === "career" && <CareerView rows={CAREER} />}
         {view === "empty" && <CareerView rows={[]} />}
+        {view === "feedback" && <FeedbackForm />}
         {view === "admin" && (
           <AdminOverview stats={STATS} audit={[
             { id: 3, admin_email: "admin@example.org", action: "user.access", target: "Bravo", created_at: day(0) },

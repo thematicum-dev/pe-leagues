@@ -75,36 +75,36 @@ export default function AdminOverview({ stats, audit }: { stats: AdminStats; aud
     <>
       <div className="dashcard dashcard-accent">
         <h2>Auf einen Blick</h2>
-        <div className="statgrid">
-          <div className="stat">
+        <div className="kpigrid">
+          <div className="kpi">
             <b className="mono">{fmtInt(u.active_7d)}</b><span>aktiv in 7 Tagen</span>
             <em>{fmtInt(u.active_1d)} heute · {fmtInt(u.active_30d)} in 30 T.</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtInt(u.total)}</b><span>Konten</span>
             <em>+{fmtInt(u.new_7d)} in 7 T. · +{fmtInt(u.new_30d)} in 30 T.</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtInt(s.running)}</b><span>laufende Partien</span>
             <em>⌀ Halbjahr {String(s.avg_half_year_running).replace(".", ",")} · {fmtInt(s.lobby)} Lobbys</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtInt(u.pending)}</b><span>offene Anfragen</span>
             <em className={u.pending > 0 ? "warn" : ""}>{u.pending > 0 ? "warten auf Freigabe" : "nichts offen"}</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtPct(disc)}</b><span>Abgabedisziplin</span>
             <em>{fmtInt(stats.discipline.submitted)} von {fmtInt(stats.discipline.due)} Halbjahren</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtPct(s.completion_rate)}</b><span>zu Ende gespielt</span>
             <em>{fmtInt(s.finished)} beendet · {fmtInt(s.aborted)} abgebrochen</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtPct(stick)}</b><span>DAU / MAU</span>
             <em>Anteil der Monatsaktiven, die heute da waren</em>
           </div>
-          <div className="stat">
+          <div className="kpi">
             <b className="mono">{fmtInt(u.dormant_30d)}</b><span>freigegeben, inaktiv</span>
             <em className={u.dormant_30d > 0 ? "warn" : ""}>seit 30 Tagen nicht gesehen</em>
           </div>
