@@ -24,3 +24,11 @@ in den beiden Blöcken in `ui.tsx` und, falls betroffen, in `app/globals.css`.
 Bewusst nicht als Token geführt: Hautfarben und Haare der Avatare (`draft.tsx`),
 die Metallverläufe der Kartenstufen und die Konfettifarben. Das sind Illustrationen,
 keine Oberflächenfarben.
+
+## Redesign v1
+
+`redesign-v1.css` ist der Entwurf, der in der Figma-Datei auf der Seite „Redesign v1“
+zu sehen ist. Er liegt als zusätzliche Stilschicht über dem bestehenden Spiel-Stylesheet
+(Selektoren mit `html body .pel …`) und ändert keine Inhalte, Bilder oder Farbwerte.
+Wird er übernommen, gehören die Regeln in die CSS-Konstanten von `ui.tsx`, `battle.tsx`
+und `draft.tsx`; die vorangestellten `html body` entfallen dann.
