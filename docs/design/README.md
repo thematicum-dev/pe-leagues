@@ -11,7 +11,13 @@ mit den CSS-Variablen: `ink2` in Figma ist `--ink2` im Code.
 - `theme/hell` und `theme/dunkel`: themeabhängige Farben, in Figma als zwei Modes.
 - `panel`: Töne für Flächen, die in beiden Themes dunkel sind (Kopfleiste,
   Draft-Leiste, Teamkasten). Bewusst themeunabhängig.
+- `sektor`: die fünf Sektorgrundfarben aus `SECCOLOR` in `lib/engine/engine.ts`. Die Farbe
+  einer einzelnen Firma ist eine daraus abgeleitete Abwandlung (`identityOf()` in
+  `components/pel/battle.tsx`) und deshalb kein eigenes Token.
 - `basis`: Radius und Schriften.
+
+Die Figma-Datei „PE-Leagues – Ist-Stand“ führt dieselben Werte als Variablen
+(Sammlungen Theme, Panel, Sektor, Basis); bei jeder Variable ist der Name im Code hinterlegt.
 
 Wer in Figma einen Wert ändert, ändert ihn im Code an genau einer Stelle:
 in den beiden Blöcken in `ui.tsx` und, falls betroffen, in `app/globals.css`.

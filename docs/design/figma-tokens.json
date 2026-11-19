@@ -182,8 +182,36 @@
     "tokenSetOrder": [
       "basis",
       "panel",
+      "sektor",
       "theme/hell",
       "theme/dunkel"
     ]
+  },
+  "sektor": {
+    "industrials": {
+      "value": "#D2A03F",
+      "type": "color",
+      "description": "SECCOLOR.Industrials in lib/engine/engine.ts"
+    },
+    "healthcare": {
+      "value": "#12B886",
+      "type": "color",
+      "description": "SECCOLOR.Healthcare in lib/engine/engine.ts"
+    },
+    "software": {
+      "value": "#3B82F6",
+      "type": "color",
+      "description": "SECCOLOR.Software in lib/engine/engine.ts"
+    },
+    "services": {
+      "value": "#D9538E",
+      "type": "color",
+      "description": "SECCOLOR.Services in lib/engine/engine.ts"
+    },
+    "consumer": {
+      "value": "#A855F7",
+      "type": "color",
+      "description": "SECCOLOR.Consumer in lib/engine/engine.ts"
+    }
   }
 }
