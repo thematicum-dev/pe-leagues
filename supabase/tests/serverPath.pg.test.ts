@@ -279,7 +279,8 @@ describe.skipIf(!ON)("Testprotokoll Mehrspieler — Serverpfad gegen Postgres", 
     // Wer abgegeben hat, sieht jeder Mitspieler mit Namen, aber nicht was und nicht wann
     const roster = (await asUser(b, "select * from public.season_submission_roster($1)", [season])).rows as Any[];
     expect(roster.length).toBe(2);
-    expect(roster.map((x) => [x.display_name.replace(` ${TAG}`, ""), x.is_me, x.submitted]))
+    // Sortiert nach Fondsplatz, und den mischt start_season() — hier nach Namen verglichen
+    expect(roster.map((x) => [x.display_name.replace(` ${TAG}`, ""), x.is_me, x.submitted]).sort((p, q) => String(q[0]).localeCompare(String(p[0]))))
       .toEqual([["Rita Recht", false, true], ["Bert Beobachter", true, false]]);
     expect(roster[0]).not.toHaveProperty("payload");
     expect(roster[0]).not.toHaveProperty("submitted_at");

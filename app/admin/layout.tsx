@@ -1,27 +1,25 @@
 import Link from "next/link";
 import { requireAdmin } from "./adminAuth";
+import AdminNav from "./AdminNav";
+
+export const metadata = { title: "Admin", robots: { index: false } };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+  const { user } = await requireAdmin();
 
   return (
-    <main className="dashwrap">
-      <div className="dashinner">
+    <main className="dashwrap" style={{ alignItems: "flex-start" }}>
+      <div className="dashinner dashinner-wide">
         <div className="dashheader">
           <div>
             <h1>Admin</h1>
-            <div className="dashsub">Nur für thematicum.dev@gmail.com sichtbar</div>
+            <div className="dashsub">Angemeldet als {user.email} · nur für Administratoren sichtbar</div>
           </div>
           <Link href="/dashboard" className="btn-secondary">
             Zum Dashboard
           </Link>
         </div>
-        <nav className="adminnav">
-          <Link href="/admin/seasons">Partien</Link>
-          <Link href="/admin/users">Nutzer &amp; Zugänge</Link>
-          <Link href="/admin/universes">Universen</Link>
-          <Link href="/admin/feedback">Feedback</Link>
-        </nav>
+        <AdminNav />
         {children}
       </div>
     </main>

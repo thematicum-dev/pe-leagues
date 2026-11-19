@@ -76,15 +76,43 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Wunsch einen neuen Link.
 
 - **`app/admin/`**
-  Der Admin-Bereich: Partien, Nutzer samt Freigaben und Universen. Universen
+  Der Admin-Bereich: eine Übersicht mit Kennzahlen (aktive Konten, Trichter
+  von der Registrierung zum Stammspieler, Abgabedisziplin, Kohorten), Partien,
+  Nutzer samt Freigaben (Suche, Filter, CSV-Export), Zugangscodes, Universen
+  und das Protokoll der Admin-Eingriffe. Universen
   sind voneinander getrennte Spielwelten (zu Beginn Test und Live, beliebig
   erweiterbar) — Partien und Ranglisten des einen sind im anderen
   unsichtbar.
 
+- **`app/profile/`, `lib/career/career.ts`, `components/career/`**
+  Der Track Record eines Spielers: jede beendete Partie mit Platz und
+  Kennzahlen, daraus Karrierepunkte, eine Karrierestufe (Analyst bis Managing
+  Partner) und Auszeichnungen. Dazu die Einstellungen: Anzeigename ändern,
+  Nutzungsauswertung abschalten, Konto löschen. Die Rechnung ist ohne
+  Datenbank und ohne React geschrieben und getestet.
+
+- **`lib/analytics/track.ts`, `components/Tracker.tsx`**
+  Eigene Nutzungsauswertung: Seitenaufrufe und ein paar benannte Ereignisse
+  gehen in die eigene Datenbank, ohne Drittanbieter und ohne Cookies. Die
+  Auswertung steht in der Admin-Übersicht (`/admin`).
+
+- **`app/impressum/`, `app/datenschutz/`, `app/agb/`**
+  Die Rechtstexte — als **Vorlage**: Die Angaben des Betreibers sind als
+  Platzhalter markiert, und über jeder Seite steht ein Entwurfshinweis, bis
+  `NEXT_PUBLIC_LEGAL_READY=1` gesetzt ist. Vor dem öffentlichen Start
+  ausfüllen und rechtlich prüfen lassen.
+
+- **`scripts/agent-match.ts`, `docs/playtest-2026-11.md`**
+  Eine Mehrspielerpartie über die Kommandozeile, damit zwei Agenten (oder ein
+  Skript) gegeneinander spielen können — mit derselben Auswertung wie auf dem
+  Server und nur mit dem Wissen, das die Oberfläche einem Fondsplatz zeigt.
+  Das Protokoll der ersten Partie samt den Regeländerungen, die daraus
+  folgten, und den offenen Punkten steht in `docs/playtest-2026-11.md`.
+
 - **`app/page.tsx`**
-  Die Startseite. Sie macht nichts anderes, als das Spiel aus
-  `components/PeLeagues.tsx` anzuzeigen. Wer die Webseite öffnet, landet
-  hier.
+  Die Startseite für Besucher ohne Anmeldung: was das Spiel ist, wie man
+  hineinkommt, häufige Fragen. Wer angemeldet ist, landet direkt auf dem
+  Dashboard.
 
 - **`app/layout.tsx`**
   Das "Grundgerüst" jeder Seite (z. B. der `<html>`-Rahmen und der

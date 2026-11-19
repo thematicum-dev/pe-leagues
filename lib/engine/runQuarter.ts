@@ -28,7 +28,7 @@ import {
   COV_DEFAULT, ADDON_HEADROOM, REPEAT_MAX,
   RESERVE_PROP, RESERVE_PROC, CAPITAL, INVEST_PERIOD, MGMT_FEE, MIN_HOLD, PERIODS, PROC_Q, PROC_FEE, BIL_FEE, BIL_DISC,
   CV_STAKE, CV_DISC, CV_FEE, IPO_PLACE, IPO_DISC, IPO_FEE, LM_ANNOUNCE, LM_DEAL, DD_COST,
-  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, candOfChoice, EVENTS, maturePeople, buildInit, initsOf,
+  ebitdaOf, spendFund, investableOf, makeSeats, seatLoad, stepCompany, candOfChoice, EVENTS, maturePeople, buildInit, initsOf, initById,
   botDraft, seatFromCand, onboardOf, searchLagOf, vacateForSearch, teamScoreOf, teamMove,
   fitOf, initRuns, overstretch, retainerOf, signBonusOf, severanceOf,
   newDeal, newLandmark, landmarkAsk, announceLandmark, makeOffers, applyProceeds, markMultiple, dealMultiple, fairOf, eqvOf, navValueOf,
@@ -243,6 +243,10 @@ function applyImmediateDecisions(
      off-market gekauften Beteiligung dauerhaft uneinordenbar. */
   (decisions.studies || []).forEach((uid: string) => {
     const c = holdingByUid(uid);
+    if (c && c.dd && !compat.legacyAddonGrowth) {
+      pushFeed(news, quarter, "📊", "neu",
+        `${c.name}: Keine Benchmarkstudie beauftragt — die Branchenreferenz liegt bereits vor. Es sind keine Kosten entstanden.`, f.slot);
+    }
     if (!c || c.dd) return;
     spendFund(f, DD_COST / 2, quarter, true);
     c.dd = true;
@@ -314,9 +318,19 @@ function applyImmediateDecisions(
   (decisions.initiatives || []).forEach((intent) => {
     const c = holdingByUid(intent.holdingUid);
     if (!c) return;
-    if (intent.dim === "plat" && c.initP) return;
-    if (intent.dim === "acc" && c.initA) return;
-    if (busyInitSlots >= maxInitSlots) return;
+    /* Was nicht gestartet wird, bekommt eine Meldung. Bis zum 11.11.2026 fiel
+       jede dieser Abgaben wortlos weg: Der Spieler plante vier Maßnahmen,
+       zwei liefen an, und nichts sagte ihm, welche oder warum. */
+    const specName = initById(intent.dim, intent.id)?.n ?? intent.id;
+    const notStarted = (why: string) => {
+      if (!compat.legacyAddonGrowth) pushFeed(news, quarter, "🛠️", "neg", `${c.name}: ${specName} nicht gestartet — ${why}`, f.slot);
+    };
+    if (intent.dim === "plat" && c.initP) { notStarted("dort läuft bereits ein Plattform-Programm."); return; }
+    if (intent.dim === "acc" && c.initA) { notStarted("dort läuft bereits ein Wachstumsprogramm."); return; }
+    if (busyInitSlots >= maxInitSlots) {
+      notStarted(`alle ${maxInitSlots} Maßnahmen-Slots des Fonds sind belegt. Ein Slot wird frei, sobald ein laufendes Programm abschließt.`);
+      return;
+    }
     /* Das Zukaufsmandat kommt aus der Abgabe und wird hier gekappt, nicht in
        der Ansicht: Zielgröße gegen ADDON_MAX_SHARE des Plattform-EBITDA,
        Eigenkapital gegen das investierbare Kapital — mehr als das kann der
@@ -331,7 +345,8 @@ function applyImmediateDecisions(
       equity: Math.min(Math.max(0, Number(intent.equity) || 0), investableOf(f, quarter)),
     } : {};
     const B = buildInit(rng, c, intent.dim, intent.id, market, quarter, compat, mandate);
-    if (!B || B.blocked) return;
+    if (!B) { notStarted("die Voraussetzungen sind nicht erfüllt oder das Programm wurde hier schon zu oft aufgelegt."); return; }
+    if (B.blocked) { notStarted("der Zukauf ließe zu wenig Abstand zum Covenant. Kleineres Ziel wählen oder Eigenkapital beisteuern."); return; }
     const eqIn = B.spec.ma ? (B.chk?.equity || 0) : 0;
     // Das Eigenkapital fließt unmittelbar an den Verkäufer weiter (toDebt:
     // false) — es senkt die Nettoverschuldung der Plattform nicht, sondern
@@ -593,6 +608,10 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
         const decisions = decisionsBySlot[f.slot] || {};
         const bid = (decisions.bids || []).find((b) => b.dealId === d.id);
         if (!bid) return;
+        /* Die Karte zeigt die Obergrenze gerundet: Wer genau diese Zahl bietet,
+           liegt um Rundung darüber. Das ist kein ungültiges Gebot, sondern
+           eines auf dem Höchstwert. */
+        if (!compat.legacyAddonGrowth && bid.leverage > d.levCap && bid.leverage <= d.levCap + 0.05) bid.leverage = d.levCap;
         if (!(bid.multiple > 0) || !(bid.leverage >= 0) || bid.leverage > d.levCap + 1e-6) {
           humanBids.push({ f, mult: bid.multiple, reason: "ungültig" });
           return;
@@ -797,7 +816,7 @@ export function runQuarter(input: RunQuarterInput): RunQuarterOutput {
           const e = rng.pick(pool);
           const mitig = e.m && f.attrs[e.m as keyof typeof f.attrs] >= 4 && rng.rnd() < 0.5;
           if (!mitig) {
-            e.f(c);
+            e.f(c, compat);
             const seat = e.t.startsWith("CEO") ? "ceo" : e.t.startsWith("CFO") ? "cfo" : null;
             if (!f.isAi) pushFeed(news, q, e.bad ? (seat ? "🚪" : "🔻") : "🔺", e.bad ? "neg" : "pos",
               `${c.name}: ${e.t}${seat ? " — die Position ist vakant." : ""}`, f.slot);

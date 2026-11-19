@@ -10,6 +10,7 @@ export async function resetSeasonAction(seasonId: string): Promise<{ error: stri
   // supabase/migrations/20260819110200_admin_reset_season.sql) -- der
   // requireAdmin()-Aufruf oben ist nur für den sofortigen Redirect da.
   const { error } = await supabase.rpc("admin_reset_season", { p_season_id: seasonId });
+  if (!error) await supabase.rpc("admin_log", { p_action: "season.reset", p_target: seasonId.slice(0, 8), p_details: { season_id: seasonId } });
 
   revalidatePath("/admin/seasons");
   return { error: error ? error.message : null };
@@ -23,6 +24,7 @@ export async function advanceSeasonAction(seasonId: string): Promise<{ error: st
   // nur die Frist vor und stößt die Auswertung an; die Edge Function rechnet
   // asynchron, der neue Stand erscheint nach einem Neuladen.
   const { error } = await supabase.rpc("admin_advance_season", { p_season_id: seasonId });
+  if (!error) await supabase.rpc("admin_log", { p_action: "season.advance", p_target: seasonId.slice(0, 8), p_details: { season_id: seasonId } });
 
   revalidatePath("/admin/seasons");
   return { error: error ? error.message : null };

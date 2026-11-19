@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { requireAccess } from "@/lib/access/context";
 import type { RankingRow } from "@/app/season/[id]/seasonReport";
+import CareerView from "@/components/career/CareerView";
+import type { CareerRow } from "@/lib/career/career";
+import ProfileSettings from "./ProfileSettings";
 
-/* Profil mit dem eigenen Track Record: alle Partien, an denen man
+export const metadata = { title: "Profil" };
+
+/* Profil mit dem eigenen Track Record.
+
+   Oben die Karriere (Stufe, Punkte, Bestwerte, Auszeichnungen) aus
+   my_career() und lib/career/career.ts. Darunter alle Partien, an denen man
    teilgenommen hat, und von jeder beendeten oder abgebrochenen der Weg zurück
    zur Abschlussauswertung (Rendite und Value Bridge auf /season/[id]).
 
@@ -11,7 +19,8 @@ import type { RankingRow } from "@/app/season/[id]/seasonReport";
    und mit ihr die Auswertung. Hier bleibt sie stehen.
 
    Sichtbar sind über RLS (seasons_select) nur Partien in Universen, denen
-   man zugeteilt ist; die Liste geht deshalb bewusst über alle davon. */
+   man zugeteilt ist; die Liste geht deshalb bewusst über alle davon. Ganz
+   unten die Einstellungen des Kontos. */
 
 interface SeasonRow {
   id: string;
@@ -29,13 +38,18 @@ const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-dig
 export default async function ProfilePage() {
   const { supabase, user, profile, universes } = await requireAccess("/profile");
 
-  const { data: rows } = await supabase
-    .from("season_players")
-    .select(
-      "slot, seasons!inner(id, status, started_at, lobby_opened_at, current_half_year, final_ranking, cancelled_reason, universe_id)",
-    )
-    .eq("profile_id", user.id)
-    .in("seasons.status", ["running", "finished", "cancelled"]);
+  const [{ data: rows }, { data: career, error: careerError }, { data: prefs }, { data: isRoot }] = await Promise.all([
+    supabase
+      .from("season_players")
+      .select(
+        "slot, seasons!inner(id, status, started_at, lobby_opened_at, current_half_year, final_ranking, cancelled_reason, universe_id)",
+      )
+      .eq("profile_id", user.id)
+      .in("seasons.status", ["running", "finished", "cancelled"]),
+    supabase.rpc("my_career"),
+    supabase.rpc("my_preferences").maybeSingle<{ analytics_opt_out: boolean }>(),
+    supabase.rpc("is_root_admin"),
+  ]);
 
   const played = (rows ?? [])
     .map((r) => ({ slot: r.slot as number, s: (Array.isArray(r.seasons) ? r.seasons[0] : r.seasons) as SeasonRow | null }))
@@ -50,10 +64,6 @@ export default async function ProfilePage() {
     return { slot, s, rank: idx >= 0 ? idx + 1 : null, row: idx >= 0 ? ranking[idx] : null, field: ranking.length };
   });
 
-  const finished = results.filter((r) => r.s.status === "finished" && r.row);
-  const avgScore = finished.length ? finished.reduce((a, r) => a + (r.row?.score ?? 0), 0) / finished.length : null;
-  const bestRank = finished.length ? Math.min(...finished.map((r) => r.rank ?? Infinity)) : null;
-  const wins = finished.filter((r) => r.rank === 1).length;
   const universeName = new Map(universes.map((u) => [u.id, u.name]));
   const showUniverse = universes.length > 1;
 
@@ -70,28 +80,7 @@ export default async function ProfilePage() {
           </Link>
         </div>
 
-        <div className="dashsection">
-          <h2>Track Record</h2>
-          <span className="dashsub">Gewertete Partien</span>
-        </div>
-        <div className="profstats">
-          <div className="profstat">
-            <span className="profstatv">{finished.length}</span>
-            <span className="profstatl">Beendet</span>
-          </div>
-          <div className="profstat">
-            <span className="profstatv">{avgScore != null ? avgScore.toFixed(2).replace(".", ",") : "—"}</span>
-            <span className="profstatl">Ø Wertung</span>
-          </div>
-          <div className="profstat">
-            <span className="profstatv">{bestRank != null && Number.isFinite(bestRank) ? `${bestRank}.` : "—"}</span>
-            <span className="profstatl">Bester Platz</span>
-          </div>
-          <div className="profstat">
-            <span className="profstatv">{wins}</span>
-            <span className="profstatl">Siege</span>
-          </div>
-        </div>
+        <CareerView rows={(career ?? []) as CareerRow[]} error={careerError?.message ?? null} showGames={false} />
 
         <div className="dashsection">
           <h2>Gespielte Partien</h2>
@@ -137,6 +126,16 @@ export default async function ProfilePage() {
             );
           })}
         </div>
+
+        <div className="dashsection">
+          <h2>Einstellungen</h2>
+        </div>
+        <ProfileSettings
+          displayName={profile.displayName}
+          email={user.email ?? ""}
+          analyticsOptOut={prefs?.analytics_opt_out ?? false}
+          canDelete={!isRoot}
+        />
       </div>
     </main>
   );

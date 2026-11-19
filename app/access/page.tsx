@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
 import { getAccessContext } from "@/lib/access/context";
 import Logo from "@/components/Logo";
+import RedeemCodeForm from "./RedeemCodeForm";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ export default async function AccessPage() {
         {ctx.profile.accessNote && (
           <p className="authhint">Nachricht des Administrators: {ctx.profile.accessNote}</p>
         )}
+        {!rejected && <RedeemCodeForm />}
         <form action={signOut}>
           <button type="submit">Abmelden</button>
         </form>

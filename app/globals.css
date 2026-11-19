@@ -1015,6 +1015,628 @@ body {
   }
 }
 
+/* ---------- Profil, Karriere, Admin-Übersicht (10.11.2026) ---------- */
+
+/* Formularfelder in Karten außerhalb der Anmeldung (Profil, Zugangscodes) */
+.dashcard .dashform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink2);
+  flex: 1 1 160px;
+}
+
+.dashcard .dashform input[type="text"],
+.dashcard .dashform input[type="number"],
+.dashcard .dashform input[type="date"],
+.dashcard .dashform input[type="search"],
+.dashcard .dashform select {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.dashcard a {
+  color: var(--teal);
+}
+
+.rowlink {
+  font-size: 12px;
+  color: var(--teal);
+}
+
+.checkrow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  padding: 4px 0 10px;
+  cursor: pointer;
+}
+
+.checkrow input {
+  margin-top: 3px;
+  accent-color: var(--teal);
+}
+
+/* Kennzahlenraster: vier Spalten, auf dem Telefon zwei */
+.statgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+@media (max-width: 460px) {
+  .statgrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px 10px 9px;
+  min-width: 0;
+}
+
+.stat b {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.stat span {
+  display: block;
+  font-size: 11px;
+  color: var(--ink2);
+  margin-top: 2px;
+}
+
+.stat em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  margin-top: 2px;
+  color: var(--teal);
+}
+
+.stat em.warn {
+  color: var(--ox);
+}
+
+/* Karrierestufe */
+.tierbox {
+  padding: 2px 0 0;
+}
+
+.tierhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tiername {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--gold);
+}
+
+.tierbox-compact .tiername {
+  font-size: 16px;
+}
+
+.tierpoints {
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+.tierbar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--rule);
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+
+.tierbar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+}
+
+.tierladder {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.tierladder summary {
+  cursor: pointer;
+  color: var(--ink2);
+}
+
+.tiersteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tiersteps span {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  color: var(--ink2);
+}
+
+.tiersteps span.on {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--rule));
+}
+
+.tiersteps i {
+  font-style: normal;
+  opacity: 0.7;
+}
+
+/* Auszeichnungen: offene bleiben lesbar, aber sichtbar zurückgenommen */
+.badgegrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 460px) {
+  .badgegrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.badge {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 10px;
+  opacity: 0.55;
+  min-width: 0;
+}
+
+.badge-on {
+  opacity: 1;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--rule));
+  background: color-mix(in srgb, var(--gold) 6%, transparent);
+}
+
+.badgeicon {
+  font-size: 20px;
+  line-height: 1.2;
+  filter: grayscale(1);
+}
+
+.badge-on .badgeicon {
+  filter: none;
+}
+
+.badgename {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.badge .dashsub {
+  font-size: 12px;
+}
+
+/* "Du bist dran" auf dem Dashboard */
+.turnflag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--paper);
+  background: var(--gold);
+}
+
+.turnflag-done {
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 14%, transparent);
+}
+
+/* Admin: breitere Arbeitsfläche als das Spieler-Dashboard */
+.dashinner-wide {
+  max-width: 880px;
+}
+
+.adminnav a.on {
+  color: var(--ink);
+  border-color: var(--ink2);
+}
+
+.admingrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.admingrid .dashcard {
+  margin-bottom: 0;
+}
+
+.admingrid + .dashcard,
+.admingrid + .admingrid {
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .admingrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Trichter: ein Balken je Stufe, Breite relativ zur ersten */
+.funnelrow {
+  display: grid;
+  grid-template-columns: 150px 1fr 86px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  padding: 5px 0;
+}
+
+@media (max-width: 460px) {
+  .funnelrow {
+    grid-template-columns: 110px 1fr 70px;
+    font-size: 12px;
+  }
+}
+
+.funnelbar {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.funnelbar i {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+  border-radius: 4px;
+  min-width: 2px;
+}
+
+.funnelrow .mono {
+  text-align: right;
+  font-size: 12px;
+}
+
+.funnelrow .mono small {
+  color: var(--ink2);
+  margin-left: 4px;
+}
+
+/* Tagesverlauf als Säulen */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 64px;
+  margin: 6px 0 4px;
+}
+
+.spark i {
+  flex: 1;
+  background: var(--teal);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  opacity: 0.85;
+}
+
+.spark i.zero {
+  background: var(--rule);
+}
+
+.sparkaxis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ink2);
+}
+
+.admintable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.admintable th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.admintable td {
+  padding: 7px 8px 7px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.admintable tr:last-child td {
+  border-bottom: none;
+}
+
+.admintable .num {
+  text-align: right;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.tablewrap {
+  overflow-x: auto;
+}
+
+.filterbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.filterbar input[type="search"] {
+  flex: 1 1 180px;
+}
+
+.filterbar .btn-quiet.on {
+  color: var(--ink);
+  border-color: var(--teal);
+}
+
+.pill {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-radius: 999px;
+  padding: 3px 8px;
+  border: 1px solid var(--rule);
+  color: var(--ink2);
+  white-space: nowrap;
+}
+
+.pill-teal { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, var(--rule)); }
+.pill-gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, var(--rule)); }
+.pill-ox { color: var(--ox); border-color: color-mix(in srgb, var(--ox) 40%, var(--rule)); }
+
+.codebox {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+/* ---------- Startseite, Rechtstexte, Fußzeile ---------- */
+
+.landing-long {
+  align-items: flex-start;
+  padding-top: 48px;
+  padding-bottom: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.landingfeatures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 880px;
+  width: 100%;
+  margin: 28px auto 0;
+}
+
+@media (max-width: 720px) {
+  .landingfeatures {
+    grid-template-columns: 1fr;
+  }
+}
+
+.landingfeature {
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 16px 18px 18px;
+  backdrop-filter: blur(6px);
+}
+
+.landingfeature h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--gold);
+}
+
+.landingfeature p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+
+.landingsteps {
+  max-width: 880px;
+  width: 100%;
+  margin: 28px auto 0;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 6px 20px 18px;
+  box-sizing: border-box;
+  backdrop-filter: blur(6px);
+}
+
+.landingsteps h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 16px 0 10px;
+}
+
+.landingsteps ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink2);
+}
+
+.landingsteps ol strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.landingsteps details {
+  border-top: 1px solid var(--rule);
+  padding: 10px 0;
+  font-size: 13.5px;
+}
+
+.landingsteps details:first-of-type {
+  border-top: none;
+}
+
+.landingsteps summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+
+.landingsteps details p {
+  color: var(--ink2);
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
+
+.sitefooter {
+  width: 100%;
+  max-width: 880px;
+  margin: 32px auto 0;
+  padding: 18px 0 28px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px 20px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink2);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.sitefooter nav {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sitefooter a {
+  color: var(--ink2);
+  text-decoration: none;
+}
+
+.sitefooter a:hover {
+  color: var(--ink);
+}
+
+.dashinner .sitefooter {
+  margin-top: 24px;
+  padding-bottom: 8px;
+}
+
+.legalwrap {
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  padding: 32px 16px 0;
+  box-sizing: border-box;
+}
+
+.legal {
+  max-width: 680px;
+  margin: 0 auto;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.legal h1 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  margin: 18px 0 6px;
+}
+
+.legal h2 {
+  font-size: 17px;
+  margin: 28px 0 6px;
+}
+
+.legal p,
+.legal li {
+  color: color-mix(in srgb, var(--ink) 82%, var(--ink2));
+}
+
+.legal a {
+  color: var(--teal);
+}
+
+.legaldraft {
+  border: 1px solid color-mix(in srgb, var(--gold) 50%, var(--rule));
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin: 14px 0;
+}
+
+.legal mark {
+  background: color-mix(in srgb, var(--gold) 28%, transparent);
+  color: var(--ink);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.notice {
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, var(--rule));
+  background: color-mix(in srgb, var(--teal) 8%, transparent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.seasonrow-self {
+  background: color-mix(in srgb, var(--teal) 7%, transparent);
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 8px;
 /* ---------- Feedback ---------- */
 
 .starrow {

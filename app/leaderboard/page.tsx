@@ -4,7 +4,7 @@ import BestDeals, { type BestDealRow } from "./BestDeals";
 import PlayerRanking, { type LeaderboardRow } from "./PlayerRanking";
 
 export default async function LeaderboardPage() {
-  const { supabase, universes, activeUniverse } = await requireAccess("/leaderboard");
+  const { supabase, user, universes, activeUniverse } = await requireAccess("/leaderboard");
 
   // Wie im Dashboard: Das Universum wird erst benannt, wenn der Spieler in
   // mehreren unterwegs ist.
@@ -41,6 +41,7 @@ export default async function LeaderboardPage() {
 
         <PlayerRanking
           rows={rows}
+          selfId={user.id}
           error={error?.message ?? null}
           emptyText={
             showUniverse

@@ -14,6 +14,9 @@ export default defineConfig({
   },
   test: {
     include: ["supabase/tests/**/*.pg.test.ts"],
+    // Eine Datenbank für alle: Die Kennzahlen der Admin-Übersicht zählen über
+    // alle Partien, nebeneinander laufende Dateien verfälschten die Differenzen.
+    fileParallelism: false,
     testTimeout: 600_000,
     hookTimeout: 120_000,
   },

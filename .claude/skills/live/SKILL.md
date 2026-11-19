@@ -32,7 +32,7 @@ http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test?hy=8
 http://127.0.0.1:$(cat /tmp/pel-live-port)/live-test/practice
 ```
 
-Drei Routen, drei Zwecke:
+Vier Routen, vier Zwecke:
 
 - **`/live-test`** rendert die Mehrspielerpartie auf einem fertigen Zustand.
   Gut für Ansichten, Karten und Meldungen — aber ein Halbjahr lässt sich dort
@@ -48,6 +48,14 @@ Drei Routen, drei Zwecke:
   Browser und lässt sich deshalb wirklich durchspielen: kaufen, Maßnahmen
   starten, zwanzig Halbjahre abschließen, Berichte lesen. Das ist der Weg,
   wenn eine Wirkung über mehrere Perioden zu prüfen ist.
+
+- **`/live-test/platform`** zeigt die Seiten außerhalb des Spiels mit festen
+  Beispieldaten: `?view=career` (Profil mit Karrierestufe, Auszeichnungen,
+  beendeten Partien), `?view=empty` (dasselbe ohne Partie), `?view=admin`
+  (Admin-Übersicht mit Kennzahlen, Trichter, Tagesverlauf) und `?view=users`
+  (Nutzerliste mit Suche, Filtern und CSV-Export). Startseite und Rechtstexte
+  (`/`, `/impressum`, `/datenschutz`, `/agb`) brauchen keine Daten und lassen
+  sich direkt aufrufen.
 
 Parameter der Route:
 

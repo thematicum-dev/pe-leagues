@@ -37,6 +37,7 @@ export async function createUniverseAction(
     return { error: error.message };
   }
 
+  await supabase.rpc("admin_log", { p_action: "universe.create", p_target: key, p_details: { name } });
   revalidatePath("/admin/universes");
   return { error: null, success: true };
 }
@@ -65,6 +66,7 @@ export async function updateUniverseAction(
 
   if (error) return { error: error.message };
 
+  await supabase.rpc("admin_log", { p_action: "universe.update", p_target: name, p_details: { universe_id: id, is_active: isActive } });
   revalidatePath("/admin/universes");
   return { error: null, success: true };
 }
