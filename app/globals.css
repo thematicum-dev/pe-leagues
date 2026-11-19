@@ -2413,3 +2413,18 @@ a.fbstatlink:hover {
 .dashcard a.btn-secondary {
   color: var(--ink);
 }
+
+/* Sehr schmale Handys (320 px): Admin-Tabellen passten mit den größeren
+   Tabellenköpfen nicht mehr in die Karte */
+@media (max-width: 360px) {
+  .dashcard {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .admintable {
+    font-size: 11.5px;
+  }
+  .admintable th {
+    font-size: 11px;
+  }
+}

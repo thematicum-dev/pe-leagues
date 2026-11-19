@@ -358,4 +358,41 @@ export const REDESIGN_CSS = `
 .pel.pel .coach .ceyebrow { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 650; }
 .pel.pel .coach h4 { font-size: 17px; font-weight: 650; }
 .pel.pel .coach .why { border-left-width: 3px; border-radius: 2px; }
+
+/* ---------- Schmale Handys ----------
+   Gerätetest: Bei 360 px (Galaxy S8) fehlten den drei Leitzahlen 4 px, bei
+   320 px (iPhone SE der ersten Generation) bis zu 18 px, den Beschriftungen
+   der Kennzahlkacheln bis zu 36 px. Vor dem Redesign passte alles; die
+   größeren Zahlen und Innenabstände brauchen hier eine kleinere Stufe. */
+@media (max-width: 380px) {
+  .pel.pel .bheadline > div { padding: 11px 6px 12px 8px; }
+  .pel.pel .bheadline .v { font-size: 14px; letter-spacing: -0.03em; }
+  .pel.pel .bicons { gap: 6px; padding: 8px 12px 4px; }
+  .pel.pel .bicons > div { grid-template-columns: 28px 1fr; column-gap: 8px; padding: 10px 9px; }
+  .pel.pel .bicons .ic { width: 28px; height: 28px; border-radius: 9px; }
+  .pel.pel .bicons .ic .bsi { width: 16px; height: 16px; }
+  .pel.pel .bicons .l { font-size: 11px; }
+}
+@media (max-width: 340px) {
+  .pel.pel .bheadline .v { font-size: 12.5px; letter-spacing: -0.035em; }
+  .pel.pel .bheadline .l { font-size: 10.5px; }
+  .pel.pel .bicons > div { grid-template-columns: 1fr; }
+  .pel.pel .bicons .ic { display: none; }
+  .pel.pel .bicons .v { font-size: 15px; }
+}
+
+/* Draft und Battle Card: Die Aktionsleiste klebt am unteren Rand des Sheets.
+   Gerätetest: Auf dem iPhone SE (667 px) und dem iPhone 15 Pro mit
+   Safari-Leisten (659 px) lag sie rund 80 px unter dem sichtbaren Bereich,
+   weil die Karte mindestens 480 px hoch ist — die eigentliche Entscheidung
+   war erst nach dem Scrollen zu sehen. */
+.pel.pel .ddraft .dbar {
+  position: sticky; bottom: 0; z-index: 4;
+  margin-top: 6px; padding-top: 18px; padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to bottom, transparent, var(--panel) 34%);
+}
+/* Der Innenabstand des Sheets unten wandert in Leiste und Hinweis — sonst
+   klebt die Leiste über einem Streifen, durch den die Karte durchscheint. */
+.pel.pel .ddraft { padding-bottom: 0; }
+.pel.pel .ddraft > :last-child:not(.dbar) { padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
 `;
