@@ -1066,7 +1066,7 @@ body {
 }
 
 /* Kennzahlenraster: vier Spalten, auf dem Telefon zwei */
-.statgrid {
+.kpigrid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
@@ -1074,12 +1074,12 @@ body {
 }
 
 @media (max-width: 460px) {
-  .statgrid {
+  .kpigrid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-.stat {
+.kpi {
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   border: 1px solid var(--rule);
   border-radius: 8px;
@@ -1087,21 +1087,21 @@ body {
   min-width: 0;
 }
 
-.stat b {
+.kpi b {
   display: block;
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-.stat span {
+.kpi span {
   display: block;
   font-size: 11px;
   color: var(--ink2);
   margin-top: 2px;
 }
 
-.stat em {
+.kpi em {
   display: block;
   font-style: normal;
   font-size: 11px;
@@ -1109,7 +1109,7 @@ body {
   color: var(--teal);
 }
 
-.stat em.warn {
+.kpi em.warn {
   color: var(--ox);
 }
 
@@ -1193,19 +1193,19 @@ body {
 }
 
 /* Auszeichnungen: offene bleiben lesbar, aber sichtbar zurückgenommen */
-.badgegrid {
+.awardgrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 @media (max-width: 460px) {
-  .badgegrid {
+  .awardgrid {
     grid-template-columns: 1fr;
   }
 }
 
-.badge {
+.award {
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -1216,29 +1216,29 @@ body {
   min-width: 0;
 }
 
-.badge-on {
+.award-on {
   opacity: 1;
   border-style: solid;
   border-color: color-mix(in srgb, var(--gold) 45%, var(--rule));
   background: color-mix(in srgb, var(--gold) 6%, transparent);
 }
 
-.badgeicon {
+.awardicon {
   font-size: 20px;
   line-height: 1.2;
   filter: grayscale(1);
 }
 
-.badge-on .badgeicon {
+.award-on .awardicon {
   filter: none;
 }
 
-.badgename {
+.awardname {
   font-size: 13.5px;
   font-weight: 600;
 }
 
-.badge .dashsub {
+.award .dashsub {
   font-size: 12px;
 }
 
@@ -1637,6 +1637,8 @@ body {
   padding-left: 12px;
   padding-right: 12px;
   border-radius: 8px;
+}
+
 /* ---------- Feedback ---------- */
 
 .starrow {

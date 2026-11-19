@@ -97,10 +97,9 @@ das dafür sorgt, dass eine Webseite daraus gebaut werden kann.
   Auswertung steht in der Admin-Übersicht (`/admin`).
 
 - **`app/impressum/`, `app/datenschutz/`, `app/agb/`**
-  Die Rechtstexte — als **Vorlage**: Die Angaben des Betreibers sind als
-  Platzhalter markiert, und über jeder Seite steht ein Entwurfshinweis, bis
-  `NEXT_PUBLIC_LEGAL_READY=1` gesetzt ist. Vor dem öffentlichen Start
-  ausfüllen und rechtlich prüfen lassen.
+  Die Rechtstexte mit den Angaben des Betreibers. Über jeder Seite steht
+  ein Hinweis, dass sie noch nicht rechtlich geprüft sind, bis
+  `NEXT_PUBLIC_LEGAL_READY=1` gesetzt ist.
 
 - **`scripts/agent-match.ts`, `docs/playtest-2026-11.md`**
   Eine Mehrspielerpartie über die Kommandozeile, damit zwei Agenten (oder ein
