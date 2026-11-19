@@ -9,6 +9,7 @@ const PROTECTED_PREFIXES = [
   "/access",
   "/admin",
   "/leaderboard",
+  "/profile",
   "/season",
   "/practice",
   "/explain",
