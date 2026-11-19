@@ -572,8 +572,8 @@ export const DRAFT_CSS = `
   --cs-foil:linear-gradient(105deg,transparent 30%,rgba(233,198,106,.20) 42%,rgba(255,247,214,.62) 50%,rgba(233,198,106,.20) 58%,transparent 70%);
   --cs-foilmix:normal;}
 .pel [data-side="dunkel"]{--cs-surf:#10171A;--cs-ink:#EDF1EE;--cs-ink2:#9AA8A6;--cs-track:#243033;--cs-trait:#182226;
-  --cs-hair:rgba(255,255,255,.08);--cs-good:#5FC4B1;--cs-goodbg:rgba(95,196,177,.16);--cs-bad:#EC9F95;--cs-chip:#1C282B;
-  --cs-chipink:#C9D2D0;--cs-cap:#E3897F;--cs-ring:rgba(255,255,255,.70);
+  --cs-hair:rgba(255,255,255,.08);--cs-good:#3DD6B0;--cs-goodbg:rgba(61,214,176,.16);--cs-bad:#EC9F95;--cs-chip:#1E2E35;
+  --cs-chipink:#C9D2D0;--cs-cap:#FF8573;--cs-ring:rgba(255,255,255,.70);
   --cs-foil:linear-gradient(105deg,transparent 30%,rgba(255,236,170,.22) 42%,rgba(255,255,255,.34) 50%,rgba(255,236,170,.22) 58%,transparent 70%);
   --cs-foilmix:screen;}
 .pel [data-tier="bronze"][data-side="hell"]{--tink:#8A5530;} .pel [data-tier="bronze"][data-side="dunkel"]{--tink:#D9A77D;}

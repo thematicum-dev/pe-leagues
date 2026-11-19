@@ -308,7 +308,10 @@ export default function LobbyOverview({
               {/* Link statt <a>: Der Wechsel ins Spiel läuft dann innerhalb der
                   App und blendet über (app/template.tsx), statt die Seite neu
                   zu laden. */}
-              <Link className="btn-secondary" href={`/season/${season.id}`}>
+              {/* Wer am Zug ist, sieht den Weg ins Spiel als Hauptaktion */}
+              <Link
+                className={season.status === "running" && openTurns[season.id] && !openTurns[season.id].submitted ? "btn-primary" : "btn-secondary"}
+                href={`/season/${season.id}`}>
                 Zur Partie
               </Link>
             </div>

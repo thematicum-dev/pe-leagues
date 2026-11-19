@@ -1,7 +1,7 @@
 {
   "theme/hell": {
     "paper": {
-      "value": "#F4F6F2",
+      "value": "#EEF2F0",
       "type": "color"
     },
     "card": {
@@ -9,142 +9,142 @@
       "type": "color"
     },
     "ink": {
-      "value": "#12201F",
+      "value": "#0F1D1C",
       "type": "color"
     },
     "ink2": {
-      "value": "#6B7B79",
+      "value": "#526462",
       "type": "color"
     },
     "rule": {
-      "value": "#E2E7DF",
+      "value": "#DCE5E1",
       "type": "color"
     },
     "ox": {
-      "value": "#B4443C",
+      "value": "#BB3628",
       "type": "color"
     },
     "teal": {
-      "value": "#1B7A6B",
+      "value": "#07735E",
       "type": "color"
     },
     "gold": {
-      "value": "#B08430",
+      "value": "#8A5B06",
       "type": "color"
     },
     "shade": {
-      "value": "#EDF1EA",
+      "value": "#E5ECE9",
       "type": "color"
     },
     "panel": {
-      "value": "#12201F",
+      "value": "#0F1D1C",
       "type": "color"
     },
     "onpanel": {
-      "value": "#F4F6F2",
+      "value": "#EEF3F1",
       "type": "color"
     },
     "cfin": {
-      "value": "#0E8C76",
+      "value": "#0B8068",
       "type": "color"
     },
     "cfout": {
-      "value": "#C2453B",
+      "value": "#C23A2B",
       "type": "color"
     }
   },
   "theme/dunkel": {
     "paper": {
-      "value": "#0C1214",
+      "value": "#091013",
       "type": "color"
     },
     "card": {
-      "value": "#161F22",
+      "value": "#152127",
       "type": "color"
     },
     "ink": {
-      "value": "#EDF1EE",
+      "value": "#EEF3F1",
       "type": "color"
     },
     "ink2": {
-      "value": "#8E9C9B",
+      "value": "#95A7A8",
       "type": "color"
     },
     "rule": {
-      "value": "#243033",
+      "value": "#26363D",
       "type": "color"
     },
     "ox": {
-      "value": "#E3897F",
+      "value": "#FF8573",
       "type": "color"
     },
     "teal": {
-      "value": "#5FC4B1",
+      "value": "#3DD6B0",
       "type": "color"
     },
     "gold": {
-      "value": "#DCB264",
+      "value": "#F2C14E",
       "type": "color"
     },
     "shade": {
-      "value": "#1C282B",
+      "value": "#1E2E35",
       "type": "color"
     },
     "panel": {
-      "value": "#080D0F",
+      "value": "#060B0E",
       "type": "color"
     },
     "onpanel": {
-      "value": "#EDF1EE",
+      "value": "#EEF3F1",
       "type": "color"
     },
     "cfin": {
-      "value": "#22A98F",
+      "value": "#1EAA8C",
       "type": "color"
     },
     "cfout": {
-      "value": "#E06A5E",
+      "value": "#E8604F",
       "type": "color"
     }
   },
   "panel": {
     "pteal": {
-      "value": "#5FC4B1",
+      "value": "#3DD6B0",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "pgold": {
-      "value": "#DCB264",
+      "value": "#F2C14E",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "pox": {
-      "value": "#E3897F",
+      "value": "#FF8573",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "ptext": {
-      "value": "#EDF1EE",
+      "value": "#EEF3F1",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "pmute": {
-      "value": "#8E9C9B",
+      "value": "#95A7A8",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "psoft": {
-      "value": "#C9D2D0",
+      "value": "#C6D3D2",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "pline": {
-      "value": "#2E3C3F",
+      "value": "#2C3D44",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
     "pshade": {
-      "value": "#1C282B",
+      "value": "#1E2E35",
       "type": "color",
       "description": "themeunabhängig, für dunkle Flächen"
     },
@@ -175,6 +175,11 @@
         "value": "JetBrains Mono",
         "type": "fontFamilies"
       }
+    },
+    "cta": {
+      "value": "#F2C14E",
+      "type": "color",
+      "description": "Handlungsfarbe (Primärknopf), in beiden Themes gleich"
     }
   },
   "$themes": [],

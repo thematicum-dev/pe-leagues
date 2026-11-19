@@ -35,7 +35,7 @@ export const REDESIGN_CSS = `
   --rcard: 24px;
   --rbtn: 14px;
   --num: "Inter", system-ui, sans-serif;
-  --cta: #DCB264;          /* Handlungsfarbe, in beiden Themes gleich */
+  --cta: #F2C14E;          /* Handlungsfarbe, in beiden Themes gleich */
   --oncta: #12201F;
   letter-spacing: -0.006em;
 }
@@ -266,7 +266,8 @@ export const REDESIGN_CSS = `
    Auf Touch-Geräten bleibt :hover nach dem Tippen stehen, deshalb keine Flächen. */
 .pel.pel :is(button.solid, button.cta-big):hover:not(:disabled),
 .pel.pel .dbar button.solid:hover:not(:disabled) {
-  background: var(--cta); border-color: var(--cta); color: var(--oncta); filter: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cta) 82%, #fff), var(--cta) 55%, color-mix(in srgb, var(--cta) 88%, #8a5b06));
+  border-color: var(--cta); color: var(--oncta); filter: none;
 }
 .pel.pel :is(:is(button:not([class]), button[class=""]):not(table button):not(.barrow button):not(.ddots button):not(.tabs button), .bacts button:not(.solid):not(.cta-big):not(.ox)):hover:not(:disabled) {
   background: var(--shade); border-color: transparent; color: var(--ink);
@@ -338,4 +339,23 @@ export const REDESIGN_CSS = `
    Tabellenziffern bündig. Reine Zahlentabellen (.ledger ohne .fix) bleiben Mono. */
 .pel.pel .ledger.fix td:last-child { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 550; }
 .pel.pel .ledger.fix td.lab { color: var(--ink2); }
+
+/* Primärknopf mit leichtem Goldverlauf und Lichtkante: die Hauptaktion soll
+   nach Belohnung aussehen, nicht nach einer flachen Fläche. */
+.pel.pel :is(button.solid, button.cta-big):not(:disabled),
+.pel.pel .dbar button.solid:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cta) 82%, #fff), var(--cta) 55%, color-mix(in srgb, var(--cta) 88%, #8a5b06));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 10px 24px -14px var(--cta);
+}
+
+/* Coach im Erklärmodus: randlose Karte mit warmer Goldfläche statt dünnem
+   Goldrahmen, Schrittangabe in normaler Schreibweise */
+.pel.pel .coach {
+  border: 0; border-radius: 20px; padding: 18px 18px 16px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gold) 16%, var(--card)), color-mix(in srgb, var(--gold) 6%, var(--card)) 70%);
+  box-shadow: 0 16px 36px -28px var(--gold);
+}
+.pel.pel .coach .ceyebrow { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 650; }
+.pel.pel .coach h4 { font-size: 17px; font-weight: 650; }
+.pel.pel .coach .why { border-left-width: 3px; border-radius: 2px; }
 `;

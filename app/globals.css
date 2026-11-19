@@ -14,19 +14,19 @@ body {
    im Original-Einzelspieler nicht vorgesehen, sollen aber sichtbar zum
    selben Produkt gehören statt wie ein separates Formular zu wirken. */
 :root {
-  --paper: #0c1214;
-  --card: #161f22;
-  --ink: #edf1ee;
-  --ink2: #8e9c9b;
-  --rule: #243033;
-  --accent: #e3897f;
+  --paper: #091013;
+  --card: #152127;
+  --ink: #eef3f1;
+  --ink2: #95a7a8;
+  --rule: #26363d;
+  --accent: #ff8573;
   /* Warnfarbe. Heißt im Spiel-Stylesheet (components/pel/ui.tsx) --ox und ist
      dort derselbe Ton; hier stand bisher nur --accent, während .fppoints
      bereits var(--ox) benutzte — die Farbe fiel damit still aus und eine
      unvollständige Punkteverteilung sah aus wie eine vollständige. */
-  --ox: #e3897f;
-  --teal: #5fc4b1;
-  --gold: #dcb264;
+  --ox: #ff8573;
+  --teal: #3dd6b0;
+  --gold: #f2c14e;
   --r: 10px;
 }
 
@@ -1963,8 +1963,8 @@ a.fbstatlink:hover {
    damit bei gleicher Spezifität gegen die Regeln weiter oben.
    ========================================================================== */
 :root {
-  --shade: #1c282b;
-  --cta: #dcb264;
+  --shade: #1e2e35;
+  --cta: #f2c14e;
   --oncta: #12201f;
   --rcard: 24px;
   --rfield: 12px;
@@ -2156,4 +2156,260 @@ a.fbstatlink:hover {
   align-items: center;
   justify-content: center;
   white-space: nowrap;
+}
+
+/* ---------- Dashboard (Redesign v1) ----------
+   Oben eine Spielerkarte: Name, Karrierestufe, Bilanz. Sie ist der einzige
+   Ort mit Farbverlauf und soll Lust auf die nächste Partie machen; darunter
+   bleibt alles ruhig und in klaren Abschnitten. */
+.dhero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 20px 18px 18px;
+  margin-bottom: 14px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--gold) 22%, transparent), transparent 60%),
+    radial-gradient(90% 80% at 0% 100%, color-mix(in srgb, var(--teal) 20%, transparent), transparent 62%),
+    var(--card);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 18%, transparent);
+}
+.dhero-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.dhero-avatar {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--oncta);
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  box-shadow: 0 8px 22px -10px var(--gold);
+}
+.dhero-hello {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dhero-hello h1 {
+  margin: 1px 0 2px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.dhero-kicker {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--gold);
+}
+.dhero-hello .dashsub {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dhero-universe {
+  margin-top: 10px;
+}
+.dhero-career {
+  display: block;
+  margin-top: 16px;
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  text-decoration: none;
+  color: inherit;
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+  transition: background 0.15s;
+}
+.dhero-career:hover {
+  background: color-mix(in srgb, var(--paper) 35%, transparent);
+}
+.dhero-career .tierbar {
+  height: 8px;
+}
+.dhero-career .tiername {
+  font-size: 19px;
+}
+.dhero-stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 12px;
+  color: var(--ink2);
+}
+.dhero-stats span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.dhero-stats b {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.dhero-go {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  color: var(--ink2);
+}
+
+/* Navigation als ruhige Pillenreihe */
+.dashnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dashnav form {
+  margin: 0;
+}
+.dashnav .btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 8px 13px;
+  color: var(--ink);
+}
+.dashnav .btn-quiet svg {
+  width: 15px;
+  height: 15px;
+  color: var(--ink2);
+}
+
+/* "Du bist dran": das wichtigste Signal auf der Seite, mit Puls */
+.turnflag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 5px 11px;
+  color: var(--oncta);
+  background: var(--cta);
+}
+.turnflag:not(.turnflag-done)::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: turnpulse 1.6s ease-in-out infinite;
+}
+.turnflag-done {
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 15%, transparent);
+}
+@keyframes turnpulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turnflag::before { animation: none; }
+}
+
+/* Übungswege als Kacheln mit Zeichen und eigener Akzentfarbe */
+.modecard {
+  position: relative;
+  padding: 16px 16px 18px;
+}
+.modeicon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 15%, transparent);
+}
+.modeicon svg {
+  width: 20px;
+  height: 20px;
+}
+.modecard h3 {
+  font-size: 15px;
+}
+.modecard-gold .modeicon {
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 15%, transparent);
+}
+.modecard-teal {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--teal) 9%, var(--card)), var(--card) 60%);
+}
+.modecard-gold {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gold) 9%, var(--card)), var(--card) 60%);
+}
+.modecard-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.modecard-row .modeicon {
+  flex: none;
+  margin-bottom: 0;
+}
+.modego {
+  flex: none;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  color: var(--ink2);
+}
+
+/* Primärknopf mit leichtem Goldverlauf: die Hauptaktion soll nach Belohnung
+   aussehen, nicht nach einer flachen Fläche */
+.btn-primary,
+.authcard button {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cta) 82%, #fff), var(--cta) 55%, color-mix(in srgb, var(--cta) 88%, #8a5b06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 10px 24px -14px var(--cta);
+}
+.btn-primary:hover:not(:disabled),
+.authcard button:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cta) 82%, #fff), var(--cta) 55%, color-mix(in srgb, var(--cta) 88%, #8a5b06));
+}
+.dashcard .btn-primary:disabled {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Status einer eigenen Partie ohne offenen Zug: als ruhiges Abzeichen */
+.seasonstatus {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+}
+
+/* Knöpfe, die Links sind, behalten ihre Schriftfarbe. ".dashcard a" färbt
+   Links in Karten türkis — auf dem goldenen Primärknopf war das unlesbar. */
+.dashcard a.btn-primary {
+  color: var(--oncta);
+}
+.dashcard a.btn-secondary {
+  color: var(--ink);
 }

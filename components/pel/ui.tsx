@@ -41,34 +41,37 @@ export const TAB_IDX = { deals: 0, port: 1, rank: 2 };
 export const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-.pel { --paper:#F4F6F2; --card:#FFFFFF; --ink:#12201F; --ink2:#6B7B79;
-  --rule:#E2E7DF; --ox:#B4443C; --teal:#1B7A6B; --gold:#B08430; --shade:#EDF1EA;
-  --zebra:transparent; --panel:#12201F; --onpanel:#F4F6F2; --glow:rgba(18,32,31,.05);
-  --cfin:#0E8C76; --cfout:#C2453B;
+/* Palette seit dem Redesign (November 2026): Akzente frischer und gesättigter,
+   Flächen klarer gestuft; im hellen Theme erreichen alle Textfarben auf allen
+   drei Flächen mindestens 4,5:1 (vorher Gold 3,0 und ink2 3,9). */
+.pel { --paper:#EEF2F0; --card:#FFFFFF; --ink:#0F1D1C; --ink2:#526462;
+  --rule:#DCE5E1; --ox:#BB3628; --teal:#07735E; --gold:#8A5B06; --shade:#E5ECE9;
+  --zebra:transparent; --panel:#0F1D1C; --onpanel:#EEF3F1; --glow:rgba(15,29,28,.06);
+  --cfin:#0B8068; --cfout:#C23A2B;
   /* Signalfarben für die Kopfleiste. Die Leiste steht in beiden Themes auf
      --panel, also immer auf dunklem Grund — die themeabhängigen --ox/--teal/
      --gold sind im hellen Theme für dunklen Text auf hellem Grund gemacht und
      hätten dort keinen Kontrast. Diese drei sind deshalb bewusst nicht
      themeabhängig: Sie entsprechen den dunkelthemigen Tönen, die für genau
      diesen Untergrund gewählt wurden.                                       */
-  --pteal:#5FC4B1; --pgold:#DCB264; --pox:#E3897F;
+  --pteal:#3DD6B0; --pgold:#F2C14E; --pox:#FF8573;
   /* Weitere Töne für dunkle Flächen (Kopfleiste, Draft-Leiste, Teamkasten),
      ebenfalls themeunabhängig: Text, gedämpfter Text, weicher Text, Linie,
      angehobene Fläche, dunkle Schrift auf hellen Signalflächen. --violet ist
      die dritte Hebelfamilie neben --teal und --gold. Alle Werte standen
      vorher als Literale in draft.tsx und battle.tsx; die Namen entsprechen
      den Figma-Variablen.                                                    */
-  --ptext:#EDF1EE; --pmute:#8E9C9B; --psoft:#C9D2D0; --pline:#2E3C3F;
-  --pshade:#1C282B; --pdeep:#12201F; --violet:#8478BE;
+  --ptext:#EEF3F1; --pmute:#95A7A8; --psoft:#C6D3D2; --pline:#2C3D44;
+  --pshade:#1E2E35; --pdeep:#12201F; --violet:#8478BE;
   --r:10px;
   font-family:'Inter',system-ui,sans-serif; color:var(--ink); background:var(--paper);
   min-height:100%; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;
   transition:background .25s ease,color .25s ease; }
 
-.pel.dark { --paper:#0C1214; --card:#161F22; --ink:#EDF1EE; --ink2:#8E9C9B;
-  --rule:#243033; --ox:#E3897F; --teal:#5FC4B1; --gold:#DCB264; --shade:#1C282B;
-  --zebra:transparent; --panel:#080D0F; --onpanel:#EDF1EE; --glow:rgba(0,0,0,.4);
-  --cfin:#22A98F; --cfout:#E06A5E; }
+.pel.dark { --paper:#091013; --card:#152127; --ink:#EEF3F1; --ink2:#95A7A8;
+  --rule:#26363D; --ox:#FF8573; --teal:#3DD6B0; --gold:#F2C14E; --shade:#1E2E35;
+  --zebra:transparent; --panel:#060B0E; --onpanel:#EEF3F1; --glow:rgba(0,0,0,.4);
+  --cfin:#1EAA8C; --cfout:#E8604F; }
 .pel *{box-sizing:border-box;}
 .pel .wrap{max-width:520px;margin:0 auto;padding-bottom:88px;}
 .pel .disp{font-weight:600;letter-spacing:-.025em;line-height:1.15;}
@@ -2336,7 +2339,7 @@ export function ScoreChart({ hist, meIdx }) {
    Die beiden Farben (--cfin, --cfout) sind eigene Stufen nahe an --teal und
    --ox: Die Markenfarben selbst lagen für Flächen unter der Sättigungsgrenze
    bzw. im dunklen Theme zu hell. Geprüft mit dem Palettenprüfer, hell gegen
-   #FFFFFF, dunkel gegen #161F22, alle Prüfungen bestanden.                   */
+   #FFFFFF, dunkel gegen #152127 (Palette November 2026), alle Prüfungen bestanden.                   */
 export function cashflowByHalfYear(f) {
   const calls = new Array(PERIODS + 1).fill(0), dists = new Array(PERIODS + 1).fill(0);
   const at = (q) => Math.min(PERIODS, Math.max(1, Math.round(q || 0)));
