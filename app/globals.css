@@ -1951,3 +1951,209 @@ a.fbstatlink:hover {
   white-space: nowrap;
   min-width: 0;
 }
+
+/* ==========================================================================
+   Redesign v1 (November 2026) — Startseite, Anmeldung, Dashboard, Profil,
+   Rangliste, Admin
+
+   Dieselben Grundsätze wie im Spiel (components/pel/redesign.ts):
+   Flächen statt Rahmen, einheitliche Radien (Karten 24, Felder 12, Knöpfe 14),
+   Kennzahlen in Inter mit Tabellenziffern, Beschriftungen ohne gesperrte
+   Großbuchstaben, Gold als Handlungsfarbe. Steht am Ende der Datei und gewinnt
+   damit bei gleicher Spezifität gegen die Regeln weiter oben.
+   ========================================================================== */
+:root {
+  --shade: #1c282b;
+  --cta: #dcb264;
+  --oncta: #12201f;
+  --rcard: 24px;
+  --rfield: 12px;
+  --rbtn: 14px;
+}
+
+/* Karten. Auf dem Foto von Startseite und Anmeldung behalten sie eine feine
+   Kante, sonst laufen sie ins Motiv. */
+.landingcard,
+.authcard {
+  border-radius: var(--rcard);
+  border-color: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.landingfeature,
+.landingsteps {
+  border-radius: 20px;
+  border-color: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.dashcard,
+.modecard {
+  border: 0;
+  border-radius: var(--rcard);
+  box-shadow: none;
+}
+.dashcard-accent {
+  border: 0;
+}
+.modecard:hover {
+  background: var(--shade);
+}
+.seasonrow-self {
+  border-radius: 12px;
+}
+
+/* Abschnittstitel und Tabellenköpfe in normaler Schreibweise */
+.dashsection h2 {
+  font-size: 15px;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.admintable th {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 0;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.pill-teal { background: color-mix(in srgb, var(--teal) 15%, transparent); }
+.pill-gold { background: color-mix(in srgb, var(--gold) 15%, transparent); }
+.pill-ox { background: color-mix(in srgb, var(--ox) 15%, transparent); }
+
+/* Knöpfe: Gold für die Hauptaktion, ruhige Fläche für alles andere.
+   Beim Darüberfahren bleibt jeder Knopf in seiner Farbe. */
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.authcard button {
+  border-radius: var(--rbtn);
+  padding: 13px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 48px;
+}
+.btn-primary,
+.authcard button {
+  background: var(--cta);
+  border-color: var(--cta);
+  color: var(--oncta);
+  font-weight: 650;
+}
+.btn-primary:hover:not(:disabled),
+.authcard button:hover:not(:disabled) {
+  background: var(--cta);
+  border-color: var(--cta);
+  filter: brightness(1.06);
+}
+.btn-secondary {
+  background: var(--shade);
+  border-color: transparent;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 9%, var(--shade));
+  color: var(--ink);
+  border-color: transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  color: var(--oncta);
+}
+.btn-quiet {
+  border-radius: 10px;
+  padding: 8px 13px;
+  font-size: 12.5px;
+  border-color: transparent;
+  background: var(--shade);
+}
+.btn-quiet:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 9%, var(--shade));
+}
+.filterbar .btn-quiet.on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--teal) 18%, var(--shade));
+}
+
+/* Eingabefelder als Flächen mit goldenem Fokusrahmen */
+.authcard input,
+.feedbackform textarea,
+.invitelink input,
+.universeswitch select,
+.accessnote,
+.universeform input[type="text"],
+.dashcard .dashform input[type="text"],
+.dashcard .dashform input[type="number"],
+.dashcard .dashform input[type="date"],
+.dashcard .dashform input[type="search"],
+.dashcard .dashform select {
+  border-radius: var(--rfield);
+  border: 1px solid transparent;
+  background: var(--shade);
+  padding: 12px 14px;
+}
+:is(.authcard input, .feedbackform textarea, .invitelink input, .universeswitch select, .accessnote,
+  .universeform input, .dashcard .dashform input, .dashcard .dashform select):focus {
+  outline: none;
+  border-color: var(--cta);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cta) 22%, transparent);
+}
+
+/* Kennzahlen: ruhige Kacheln, Zahl in Inter */
+.kpi {
+  border: 0;
+  border-radius: 14px;
+  background: var(--shade);
+  padding: 12px;
+}
+.kpi b,
+.kpi .mono {
+  font-family: "Inter", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+.kpigrid {
+  gap: 8px;
+}
+
+/* Auszeichnungen: erreichte als warme Fläche, offene zurückgenommen */
+.award {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.award-on {
+  border: 0;
+  background: color-mix(in srgb, var(--gold) 10%, var(--shade));
+}
+
+/* Balken */
+.tierbar,
+.funnelbar,
+.funnelbar i {
+  border-radius: 999px;
+}
+
+/* Knopfbeschriftungen bleiben einzeilig und mittig, auch wenn zwei Knöpfe
+   nebeneinander stehen (Startseite) */
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.authcard button {
+  box-sizing: border-box;
+}
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}

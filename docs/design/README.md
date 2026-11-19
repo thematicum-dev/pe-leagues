@@ -30,3 +30,6 @@ keine Oberflächenfarben.
 Umgesetzt in `components/pel/redesign.ts` (`REDESIGN_CSS`), angehängt an die Spiel-Styles
 in `ui.tsx`. Der Entwurf dazu steht in der Figma-Datei auf der Seite „Redesign v1“,
 jede Ansicht dort in dunkel und hell.
+
+Startseite, Anmeldung, Dashboard, Profil, Rangliste und Admin folgen denselben
+Grundsätzen über den Abschnitt „Redesign v1“ am Ende von `app/globals.css`.
