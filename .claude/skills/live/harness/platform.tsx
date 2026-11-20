@@ -8,6 +8,7 @@ import UserList, { type AdminUserRow } from "@/app/admin/users/UserList";
 import type { CareerRow } from "@/lib/career/career";
 import FeedbackForm from "@/app/feedback/FeedbackForm";
 import DashboardView from "@/app/dashboard/DashboardView";
+import SeasonsView, { type AdminSeasonRow } from "@/app/admin/seasons/SeasonsView";
 import { summarize } from "@/lib/career/career";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,20 @@ const USERS: AdminUserRow[] = [
   u(7, { display_name: null, access_status: "none", universes: [] }),
 ];
 
+const hours = (n: number) => new Date(NOW - n * 3600000).toISOString();
+const sr = (i: number, o: Partial<AdminSeasonRow>): AdminSeasonRow => ({
+  id: `${(0x3f2c1a00 + i).toString(16)}-0000`, status: "finished", current_half_year: 20, current_half_year_deadline: null,
+  lobby_opened_at: day(i * 2), started_at: hours(i * 48 - 6), created_by_name: "Spieler " + (i % 4 + 1), universe_name: "Live",
+  human_count: 3, ai_count: 2, submitted_count: 0, cancelled_reason: null, ...o,
+});
+const SEASONS: AdminSeasonRow[] = [
+  sr(0, { status: "lobby", started_at: null, lobby_opened_at: hours(3), human_count: 2, ai_count: 0 }),
+  sr(1, { status: "running", current_half_year: 9, current_half_year_deadline: hours(-20), lobby_opened_at: day(5), started_at: hours(110), submitted_count: 2 }),
+  sr(2, { status: "running", current_half_year: 4, current_half_year_deadline: hours(-6), lobby_opened_at: day(2), started_at: hours(40), submitted_count: 3 }),
+  sr(3, { status: "cancelled", cancelled_reason: "empty", started_at: null, lobby_opened_at: day(8) }),
+  ...Array.from({ length: 10 }, (_, k) => sr(4 + k, { lobby_opened_at: day(9 + k * 2), started_at: hours((9 + k * 2) * 24 - 8) })),
+];
+
 const UNI = { id: "x", key: "live", name: "Live", description: null, isActive: true };
 
 function Dashboard({ fresh }: { fresh: boolean }) {
@@ -92,6 +107,13 @@ function Dashboard({ fresh }: { fresh: boolean }) {
 export default async function Page({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const { view = "career" } = await searchParams;
   if (view === "dashboard" || view === "dashboard-new") return <Dashboard fresh={view === "dashboard-new"} />;
+  if (view === "seasons") return (
+    <main className="dashwrap" style={{ alignItems: "flex-start" }}>
+      <div className="dashinner dashinner-wide">
+        <SeasonsView seasons={SEASONS} subsBySeason={new Map()} now={NOW} error={null} subError={null} />
+      </div>
+    </main>
+  );
   return (
     <main className="dashwrap" style={{ alignItems: "flex-start" }}>
       <div className={"dashinner" + (view === "admin" || view === "users" ? " dashinner-wide" : "")}>

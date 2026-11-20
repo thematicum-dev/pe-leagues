@@ -395,4 +395,36 @@ export const REDESIGN_CSS = `
    klebt die Leiste über einem Streifen, durch den die Karte durchscheint. */
 .pel.pel .ddraft { padding-bottom: 0; }
 .pel.pel .ddraft > :last-child:not(.dbar) { padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- Kompaktes Cockpit (20.11.2026) ----------
+   Vier Werte in einer Zeile, darunter ein Schalter für die übrigen
+   Kennzahlen. Vorher stand jeder Wert in 24 px mit eigener Zeile darunter. */
+.pel.pel .cockmain {
+  display: grid; grid-template-columns: 1fr auto 1.25fr auto; gap: 4px 14px; align-items: end; padding-top: 10px;
+}
+.pel.pel .cockmain > div:nth-child(2), .pel.pel .cockmain > div:nth-child(4) { text-align: right; }
+.pel.pel .cockmain .stat { font-size: 11px; }
+.pel.pel .bar .cockmain .statv { font-size: 19px; white-space: nowrap; }
+.pel.pel .bar .cockmain .statv .delta { font-size: 10.5px; margin-left: 4px; vertical-align: 2px; }
+.pel.pel .cockfoot { display: flex; align-items: center; gap: 12px; margin-top: 8px; min-width: 0; }
+.pel.pel .cocktoggle {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  min-height: 0; padding: 4px 10px; border-radius: 999px; border: 0;
+  font-size: 12px; font-weight: 600; color: var(--ptext); background: var(--pshade);
+}
+.pel.pel .cocktoggle:hover:not(:disabled) { background: var(--pshade); color: var(--ptext); }
+.pel.pel .cocktoggle span { font-size: 10px; color: var(--pmute); }
+.pel.pel .cockpeek {
+  font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--pmute);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.pel.pel .cockmore { padding-top: 4px; }
+.pel.pel .cockmore .cockkpi { margin-top: 5px; }
+/* Stand prüfen: unter dem Cockpit, ohne eigene Trennlinie */
+.pel.pel > .bar .cockmain ~ .cockgrp { border-top: 0; margin-top: 4px; padding-top: 6px; }
+@media (max-width: 360px) {
+  .pel.pel .cockmain { gap: 4px 10px; }
+  .pel.pel .bar .cockmain .statv { font-size: 16.5px; }
+  .pel.pel .bar .cockmain .statv .delta { display: none; }
+}
 `;
