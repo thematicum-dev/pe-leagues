@@ -1,11 +1,14 @@
 /* Wegwerf-Route für die Seiten außerhalb des Spiels: Karriere/Profil,
    Admin-Übersicht und Nutzerliste — mit festen Beispieldaten statt der
-   Datenbank. `?view=career|admin|users|empty|feedback`. Siehe SKILL.md. */
+   Datenbank. `?view=career|admin|users|empty|feedback|dashboard|dashboard-new`.
+   Siehe SKILL.md. */
 import CareerView from "@/components/career/CareerView";
 import AdminOverview, { type AdminStats } from "@/components/admin/AdminOverview";
 import UserList, { type AdminUserRow } from "@/app/admin/users/UserList";
 import type { CareerRow } from "@/lib/career/career";
 import FeedbackForm from "@/app/feedback/FeedbackForm";
+import DashboardView from "@/app/dashboard/DashboardView";
+import { summarize } from "@/lib/career/career";
 
 export const dynamic = "force-dynamic";
 
@@ -62,8 +65,33 @@ const USERS: AdminUserRow[] = [
   u(7, { display_name: null, access_status: "none", universes: [] }),
 ];
 
+const UNI = { id: "x", key: "live", name: "Live", description: null, isActive: true };
+
+function Dashboard({ fresh }: { fresh: boolean }) {
+  return (
+    <DashboardView
+      displayName={fresh ? "Neu Hier" : "Marta Bravo"}
+      email={fresh ? "neu@example.org" : "marta@example.org"}
+      isAdmin={!fresh}
+      universes={[UNI]}
+      activeUniverse={UNI}
+      showUniverse={false}
+      mySeasons={fresh ? [] : [
+        { id: "3f2c1a9e-run", status: "running", lobbyOpenedAt: day(20), occupancy: 5 },
+        { id: "8b1d77c0-lob", status: "lobby", lobbyOpenedAt: new Date(NOW - 2 * 3600000).toISOString(), occupancy: 3 },
+      ]}
+      openLobbies={fresh ? [] : [{ id: "c4e9a210-opn", lobbyOpenedAt: new Date(NOW - 5 * 3600000).toISOString(), occupancy: 2 }]}
+      limits={{ activeMax: 3, openedToday: 0, openedMax: 3 }}
+      openTurns={fresh ? {} : { "3f2c1a9e-run": { halfYear: 9, deadline: day(-1), submitted: false } }}
+      career={summarize(fresh ? [] : CAREER)}
+      signupUrl="https://pe-leagues.example/signup"
+    />
+  );
+}
+
 export default async function Page({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const { view = "career" } = await searchParams;
+  if (view === "dashboard" || view === "dashboard-new") return <Dashboard fresh={view === "dashboard-new"} />;
   return (
     <main className="dashwrap" style={{ alignItems: "flex-start" }}>
       <div className={"dashinner" + (view === "admin" || view === "users" ? " dashinner-wide" : "")}>

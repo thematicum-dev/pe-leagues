@@ -53,8 +53,10 @@ Vier Routen, vier Zwecke:
   Beispieldaten: `?view=career` (Profil mit Karrierestufe, Auszeichnungen,
   beendeten Partien), `?view=empty` (dasselbe ohne Partie), `?view=admin`
   (Admin-Übersicht mit Kennzahlen, Trichter, Tagesverlauf) und `?view=users`
-  (Nutzerliste mit Suche, Filtern und CSV-Export) und `?view=feedback`
-  (Feedback-Formular). Startseite und Rechtstexte
+  (Nutzerliste mit Suche, Filtern und CSV-Export), `?view=feedback`
+  (Feedback-Formular), `?view=dashboard` (Dashboard mit laufender Partie, in der
+  man dran ist, Lobby und offener Lobby) und `?view=dashboard-new` (Dashboard
+  eines neuen Spielers ohne Partien). Startseite und Rechtstexte
   (`/`, `/impressum`, `/datenschutz`, `/agb`) brauchen keine Daten und lassen
   sich direkt aufrufen.
 

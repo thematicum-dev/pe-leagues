@@ -1,0 +1,222 @@
+{
+  "theme/hell": {
+    "paper": {
+      "value": "#EEF2F0",
+      "type": "color"
+    },
+    "card": {
+      "value": "#FFFFFF",
+      "type": "color"
+    },
+    "ink": {
+      "value": "#0F1D1C",
+      "type": "color"
+    },
+    "ink2": {
+      "value": "#526462",
+      "type": "color"
+    },
+    "rule": {
+      "value": "#DCE5E1",
+      "type": "color"
+    },
+    "ox": {
+      "value": "#BB3628",
+      "type": "color"
+    },
+    "teal": {
+      "value": "#07735E",
+      "type": "color"
+    },
+    "gold": {
+      "value": "#8A5B06",
+      "type": "color"
+    },
+    "shade": {
+      "value": "#E5ECE9",
+      "type": "color"
+    },
+    "panel": {
+      "value": "#0F1D1C",
+      "type": "color"
+    },
+    "onpanel": {
+      "value": "#EEF3F1",
+      "type": "color"
+    },
+    "cfin": {
+      "value": "#0B8068",
+      "type": "color"
+    },
+    "cfout": {
+      "value": "#C23A2B",
+      "type": "color"
+    }
+  },
+  "theme/dunkel": {
+    "paper": {
+      "value": "#091013",
+      "type": "color"
+    },
+    "card": {
+      "value": "#152127",
+      "type": "color"
+    },
+    "ink": {
+      "value": "#EEF3F1",
+      "type": "color"
+    },
+    "ink2": {
+      "value": "#95A7A8",
+      "type": "color"
+    },
+    "rule": {
+      "value": "#26363D",
+      "type": "color"
+    },
+    "ox": {
+      "value": "#FF8573",
+      "type": "color"
+    },
+    "teal": {
+      "value": "#3DD6B0",
+      "type": "color"
+    },
+    "gold": {
+      "value": "#F2C14E",
+      "type": "color"
+    },
+    "shade": {
+      "value": "#1E2E35",
+      "type": "color"
+    },
+    "panel": {
+      "value": "#060B0E",
+      "type": "color"
+    },
+    "onpanel": {
+      "value": "#EEF3F1",
+      "type": "color"
+    },
+    "cfin": {
+      "value": "#1EAA8C",
+      "type": "color"
+    },
+    "cfout": {
+      "value": "#E8604F",
+      "type": "color"
+    }
+  },
+  "panel": {
+    "pteal": {
+      "value": "#3DD6B0",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pgold": {
+      "value": "#F2C14E",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pox": {
+      "value": "#FF8573",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "ptext": {
+      "value": "#EEF3F1",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pmute": {
+      "value": "#95A7A8",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "psoft": {
+      "value": "#C6D3D2",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pline": {
+      "value": "#2C3D44",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pshade": {
+      "value": "#1E2E35",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "pdeep": {
+      "value": "#12201F",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    },
+    "violet": {
+      "value": "#8478BE",
+      "type": "color",
+      "description": "themeunabhängig, für dunkle Flächen"
+    }
+  },
+  "basis": {
+    "radius": {
+      "r": {
+        "value": "10",
+        "type": "borderRadius"
+      }
+    },
+    "font": {
+      "sans": {
+        "value": "Inter",
+        "type": "fontFamilies"
+      },
+      "mono": {
+        "value": "JetBrains Mono",
+        "type": "fontFamilies"
+      }
+    },
+    "cta": {
+      "value": "#F2C14E",
+      "type": "color",
+      "description": "Handlungsfarbe (Primärknopf), in beiden Themes gleich"
+    }
+  },
+  "$themes": [],
+  "$metadata": {
+    "tokenSetOrder": [
+      "basis",
+      "panel",
+      "sektor",
+      "theme/hell",
+      "theme/dunkel"
+    ]
+  },
+  "sektor": {
+    "industrials": {
+      "value": "#D2A03F",
+      "type": "color",
+      "description": "SECCOLOR.Industrials in lib/engine/engine.ts"
+    },
+    "healthcare": {
+      "value": "#12B886",
+      "type": "color",
+      "description": "SECCOLOR.Healthcare in lib/engine/engine.ts"
+    },
+    "software": {
+      "value": "#3B82F6",
+      "type": "color",
+      "description": "SECCOLOR.Software in lib/engine/engine.ts"
+    },
+    "services": {
+      "value": "#D9538E",
+      "type": "color",
+      "description": "SECCOLOR.Services in lib/engine/engine.ts"
+    },
+    "consumer": {
+      "value": "#A855F7",
+      "type": "color",
+      "description": "SECCOLOR.Consumer in lib/engine/engine.ts"
+    }
+  }
+}

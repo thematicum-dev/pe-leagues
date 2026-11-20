@@ -1,13 +1,8 @@
-import { signOut } from "@/app/auth/actions";
-import Link from "next/link";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/access/context";
-import LobbyOverview, { type LobbySummary, type MySeasonSummary, type OpenTurn, type SeasonLimits } from "./LobbyOverview";
-import { TierBadge } from "@/components/career/CareerView";
-import SiteFooter from "@/components/SiteFooter";
+import { type LobbySummary, type MySeasonSummary, type OpenTurn, type SeasonLimits } from "./LobbyOverview";
 import { summarize, type CareerRow } from "@/lib/career/career";
-import UniverseSwitcher from "./UniverseSwitcher";
-import InviteFriends from "./InviteFriends";
+import DashboardView from "./DashboardView";
 
 export default async function DashboardPage() {
   // Schranke für den gesamten Spielbereich: angemeldet, Profil vorhanden,
@@ -106,126 +101,19 @@ export default async function DashboardPage() {
   const career = summarize((careerRows ?? []) as CareerRow[]);
 
   return (
-    <main className="dashwrap">
-      <div className="dashinner">
-        <div className="dashheader">
-          <div>
-            <h1>Willkommen, {profile.displayName}</h1>
-            <div className="dashsub">{user.email}</div>
-            {showUniverse && (
-              <div className="dashsub">
-                Universum: <strong>{activeUniverse.name}</strong>
-                {activeUniverse.description ? ` — ${activeUniverse.description}` : ""}
-              </div>
-            )}
-          </div>
-          <div className="dashtools">
-            <Link href="/profile" className="btn-quiet">
-              Profil
-            </Link>
-            <Link href="/leaderboard" className="btn-quiet">
-              Rangliste
-            </Link>
-            <Link href="/feedback" className="btn-quiet">
-              Feedback
-            </Link>
-            {isAdmin && (
-              <a href="/admin" className="btn-quiet">
-                Admin
-              </a>
-            )}
-            <form action={signOut}>
-              <button type="submit" className="btn-quiet">
-                Abmelden
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <UniverseSwitcher universes={universes} activeUniverseId={activeUniverse.id} />
-
-        {/* Der Spielmodus steht oben und ist die einzige farbig hervorgehobene
-            Karte -- alles andere ist Vorbereitung darauf. */}
-        <div className="dashsection">
-          <h2>Spielmodus</h2>
-          <span className="dashsub">Gegen vier Mitspieler, ein Halbjahr je Zug</span>
-        </div>
-
-        {/* key je Universum: LobbyOverview setzt mySeason und openLobbies über
-            useState aus den Props auf. Das greift nur beim Einhängen -- nach
-            einem Universumswechsel lieferte der Server zwar neue Werte, die
-            Komponente zeigte aber weiter die Partie des vorigen Universums.
-            Nur die Überschrift folgte, weil universeName eine reine Prop ist.
-            Der key erzwingt das Neuaufsetzen mit den neuen Daten. */}
-        <LobbyOverview
-          key={activeUniverse.id}
-          initialMySeasons={mySeasons}
-          initialOpenLobbies={openLobbies}
-          limits={limits}
-          universeId={activeUniverse.id}
-          universeName={activeUniverse.name}
-          universeActive={activeUniverse.isActive}
-          showUniverse={showUniverse}
-          openTurns={openTurns}
-        />
-
-        {/* Was über die einzelne Partie hinaus wächst: Karrierestufe und Punkte.
-            Ohne beendete Partie steht hier das Ziel statt einer leeren Karte. */}
-        <div className="dashsection">
-          <h2>Karriere</h2>
-          <span className="dashsub">
-            {career.played === 0 ? "Beginnt mit der ersten beendeten Partie" : `${career.played} ${career.played === 1 ? "Partie" : "Partien"} · ${career.wins} ${career.wins === 1 ? "Sieg" : "Siege"}`}
-          </span>
-        </div>
-        <Link href="/profile" className="modecard" style={{ marginBottom: 16 }}>
-          <TierBadge points={career.points} compact />
-        </Link>
-
-        <div className="dashsection">
-          <h2>Üben</h2>
-          <span className="dashsub">Allein, jederzeit</span>
-        </div>
-
-        <div className="modegrid">
-          {/* Link statt <a>: Wechsel innerhalb der App, mit Überblendung
-              (app/template.tsx) statt eines harten Neuladens. */}
-          <Link href="/explain" className="modecard">
-            <h3>Einführung</h3>
-            <p>
-              Geführt durch alle Entscheidungen: eine Beteiligung über zehn Halbjahre,
-              ein Coach erklärt jeden Schritt.
-            </p>
-          </Link>
-          <Link href="/practice" className="modecard">
-            <h3>Übungsmodus</h3>
-            <p>
-              Eine vollständige Solopartie gegen vier Fonds derselben Kohorte — wie im
-              Spielmodus, nur ohne Mitspieler.
-            </p>
-          </Link>
-        </div>
-
-        <div className="dashsection">
-          <h2>Mitspieler</h2>
-          <span className="dashsub">Per Link, jederzeit</span>
-        </div>
-        <InviteFriends signupUrl={signupUrl} />
-
-        <div className="dashsection">
-          <h2>Feedback</h2>
-          <span className="dashsub">Hilf uns, PE Leagues besser zu machen</span>
-        </div>
-        <div className="modegrid">
-          <Link href="/feedback" className="modecard">
-            <h3>Feedback geben</h3>
-            <p>
-              Bewerte das Spiel mit 1 bis 5 Sternen und sag uns, was wir an Spielerlebnis,
-              Simulation oder Bedienung verbessern können.
-            </p>
-          </Link>
-        </div>
-        <SiteFooter />
-      </div>
-    </main>
+    <DashboardView
+      displayName={profile.displayName}
+      email={user.email}
+      isAdmin={!!isAdmin}
+      universes={universes}
+      activeUniverse={activeUniverse}
+      showUniverse={showUniverse}
+      mySeasons={mySeasons}
+      openLobbies={openLobbies}
+      limits={limits}
+      openTurns={openTurns}
+      career={career}
+      signupUrl={signupUrl}
+    />
   );
 }

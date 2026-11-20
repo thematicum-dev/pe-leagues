@@ -1620,7 +1620,7 @@ export const BATTLE_CSS = `
 .pel .babpip.on{opacity:1;}
 .pel .babpip.half{opacity:.6;}
 .pel .babpip.p{background:var(--gold);} .pel .babpip.l{background:var(--teal);}
-.pel .babpip.a{background:#8478BE;}
+.pel .babpip.a{background:var(--violet);}
 .pel .babst{flex:none;min-width:74px;text-align:right;font-size:9.5px;color:var(--ink2);
   font-weight:600;letter-spacing:.02em;}
 .pel .babst.warn{color:var(--ox);} .pel .babst.run{color:var(--gold);}
@@ -1749,12 +1749,12 @@ export const BATTLE_CSS = `
 .pel .babic .bli{width:14px;height:14px;}
 .pel .babic.p{color:var(--gold);background:color-mix(in srgb, var(--gold) 14%, transparent);}
 .pel .babic.l{color:var(--teal);background:color-mix(in srgb, var(--teal) 14%, transparent);}
-.pel .babic.a{color:#8478BE;background:color-mix(in srgb, #8478BE 16%, transparent);}
+.pel .babic.a{color:var(--violet);background:color-mix(in srgb, var(--violet) 16%, transparent);}
 .pel .bcard.hold .bablab{width:82px;font-size:10.5px;letter-spacing:.02em;text-transform:none;color:var(--ink);font-weight:700;}
 .pel .bcard.hold .babpip{height:10px;}
 .pel .bcard.hold .babpip.on.p{box-shadow:0 0 8px color-mix(in srgb, var(--gold) 50%, transparent);}
 .pel .bcard.hold .babpip.on.l{box-shadow:0 0 8px color-mix(in srgb, var(--teal) 50%, transparent);}
-.pel .bcard.hold .babpip.on.a{box-shadow:0 0 8px color-mix(in srgb, #8478BE 50%, transparent);}
+.pel .bcard.hold .babpip.on.a{box-shadow:0 0 8px color-mix(in srgb, var(--violet) 50%, transparent);}
 .pel .babwarn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ox);}
 .pel .babwarn .bli{width:13px;height:13px;}
 
@@ -1779,7 +1779,7 @@ export const BATTLE_CSS = `
   background:linear-gradient(150deg,var(--fam),color-mix(in srgb, var(--fam) 22%, var(--card)) 72%);}
 .pel .blever:hover:not(:disabled){border:0;color:var(--ink);
   background:linear-gradient(150deg,var(--fam),color-mix(in srgb, var(--fam) 40%, var(--card)) 72%);}
-.pel .blever.l{--fam:var(--teal);} .pel .blever.a{--fam:#8478BE;} .pel .blever.p{--fam:var(--gold);}
+.pel .blever.l{--fam:var(--teal);} .pel .blever.a{--fam:var(--violet);} .pel .blever.p{--fam:var(--gold);}
 .pel .blever.n{--fam:var(--ink2);} .pel .blever.ox{--fam:var(--ox);}
 .pel .blever > span{display:flex;flex-direction:column;flex:1;min-width:0;border-radius:14.5px;overflow:hidden;
   background:var(--card);}
