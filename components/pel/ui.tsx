@@ -3118,8 +3118,13 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
   // Gebotsspanne: von drei Turns unter der Preisvorstellung bis zu ihr selbst.
   // Darüber zahlt niemand — mehr zu bieten kauft keinen sichereren Zukauf.
   const ask = addonAsk(c, market, addEb);
-  const [bid, setBid] = useState<number | null>(null);
-  const mult = Math.min(bid ?? ask, ask);
+  /* Das Gebot wird als Abschlag auf die Preisvorstellung gehalten, nicht als
+     absolutes Multiple. Die Preisvorstellung hängt an der Zielgröße; bis zum
+     20.11.2026 setzte jede Änderung der Größe das Gebot zurück, und der
+     Regler sprang auf den vollen Preis. Mit dem Abschlag bleibt er dort, wo
+     der Spieler ihn hingestellt hat. */
+  const [bidGap, setBidGap] = useState(0);
+  const mult = ask - clamp(bidGap, 0, 3);
   /* Eigenkapitalanteil an einem Zukauf. Voreingestellt ist genau der Betrag,
      den die Akquisitionsfinanzierung nicht mehr trägt — ein Zukauf, der nur an
      der Finanzierungsgrenze scheitert, ist damit ohne weiteres Zutun
@@ -3208,7 +3213,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                       <b>{eur(addEb)}</b> · {Math.round(chk.share * 100)} % der Plattform
                       <input type="range" min={Math.round(eb * 0.05 * 10)} max={Math.round(maxEb * 10)} step={1}
                         value={Math.round(addEb * 10)}
-                        onChange={(e) => { haptic("select"); setAddEb(Number(e.target.value) / 10); setBid(null); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setAddEb(Number(e.target.value) / 10); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Bis {eur(maxEb)} ({Math.round(ADDON_MAX_SHARE * 100)} % des Plattform-EBITDA).
@@ -3221,7 +3226,7 @@ export function InitPicker({ c, dim, market, start, close, investable = 0 }) {
                         {chk.gap > 0.05 ? `${x(chk.gap)} unter der Preisvorstellung` : "voller Preis"}</span>
                       <input type="range" min={Math.round((ask - 3) * 10)} max={Math.round(ask * 10)} step={1}
                         value={Math.round(mult * 10)}
-                        onChange={(e) => { haptic("select"); setBid(Number(e.target.value) / 10); setAddonEq(null); }}
+                        onChange={(e) => { haptic("select"); setBidGap(ask - Number(e.target.value) / 10); setAddonEq(null); }}
                         style={{ width: "100%", accentColor: "var(--gold)" }} />
                       <span className="ctl">
                         Preisvorstellung {x(ask)} — Plattformmultiple {x(markMultiple(c, market))} abzüglich

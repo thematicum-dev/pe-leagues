@@ -27,6 +27,7 @@ import {
   Offers, Sheet, Info, SeasonDrivers, TrackRow, exitSheetOf, TailEndPeek, exitValuation, CashflowChart, cashflowScale, DeploymentChart,
 } from "@/components/pel/ui";
 import { HalfYearBriefing } from "@/components/pel/briefing";
+import { usePelTheme, usePersistentFlag } from "@/components/pel/prefs";
 import { useFadeOnChange } from "@/components/pel/motion";
 import type {
   RuntimeState, RuntimeFund, TurnDecisions, InitiativeIntent, SearchIntent,
@@ -348,7 +349,10 @@ export default function MultiplayerGame({
   const supabase = useMemo(() => createClient(), []);
   const quarter = currentHalfYear - 1; // Halbjahre, die bereits ausgewertet sind
 
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = usePelTheme();
+  /* Aufgeklappte Kennzahlen in der Kopfleiste; gilt für die Sitzung, damit
+     die Leiste beim Wechsel ins nächste Halbjahr nicht wieder zuklappt. */
+  const [kpiOpen, setKpiOpen] = usePersistentFlag("pel-cockpit-open");
   const [tab, setTab] = useState<"deals" | "port" | "rank">("deals");
   const [openFund, setOpenFund] = useState<number | null>(null);
 
@@ -1290,80 +1294,92 @@ export default function MultiplayerGame({
           deadline={deadline} serverNow={serverNow} halfYear={currentHalfYear}
           dark={dark} onToggleDark={() => setDark(!dark)}
         />
-        {/* Leistung: wo stehe ich, und wohin ging es zuletzt. */}
-        <div className="cockgrp">
-          <div className="barrow">
-            <div>
-              <div className="stat">Wertung</div>
-              <div className={"statv mono" + tone(dirOf(d(score, prev?.score), 0.005))}>
-                <AnimatedNumber value={score} format={(v: number) => v.toFixed(2)} className={undefined} style={undefined} />
-                <Delta value={d(score, prev?.score)} eps={0.005} format={(v) => v.toFixed(2)} />
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="stat">Platz</div>
-              <div className={"statv mono" + tone(dirOf(d(myRank, prev?.rank), 0.5, true))}>
-                {myRank}<span style={{ opacity: .5 }}>/{state.funds.length}</span>
-                <Delta value={d(myRank, prev?.rank)} eps={0.5} invert format={(v) => String(Math.round(v))} />
-              </div>
+        {/* Kompaktes Cockpit (seit 20.11.2026): eine Zeile mit den vier Werten,
+            nach denen man im Spiel steuert. Die Kennzahlen dahinter (TVCC,
+            IRR, TVPI, DPI, Commitment) klappen auf Wunsch auf — vorher nahm
+            die Leiste auf dem Handy fast ein Drittel des Bildschirms ein.
+            Warnungen (Tail-End, aufgelaufene Gebühren) bleiben immer sichtbar. */}
+        <div className="cockmain">
+          <div>
+            <div className="stat">Wertung</div>
+            <div className={"statv mono" + tone(dirOf(d(score, prev?.score), 0.005))}>
+              <AnimatedNumber value={score} format={(v: number) => v.toFixed(2)} className={undefined} style={undefined} />
+              <Delta value={d(score, prev?.score)} eps={0.005} format={(v) => v.toFixed(2)} />
             </div>
           </div>
-          {/* Erste Zeile: die beiden Kennzahlen, aus denen die Wertung besteht.
-              Zweite Zeile: TVPI und DPI, zur Information. */}
-          <div className="cockkpi mono">
-            <span>TVCC {tvcc.toFixed(2)}×
-              <Delta value={d(tvcc, prev?.tvcc)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
-            <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
-              <Delta value={d(irr, prev?.irr)} eps={0.0005}
-                format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
-          </div>
-          <div className="cockkpi mono">
-            <span>TVPI {tvpi.toFixed(2)}×
-              <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
-            <span>DPI {dpi.toFixed(2)}×
-              <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
-          </div>
-          {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands,
-              was davon nach der Zwangsverwertung übrig bliebe. Ohne diese
-              Zeile springt die Wertung erst in der Endabrechnung. */}
-          {PERIODS - quarter <= END_PRESSURE_FROM + PROC_Q && (
-            <div className="cockkpi mono">
-              <TailEndPeek fund={me} market={state.market} quarter={quarter} />
+          <div>
+            <div className="stat">Platz</div>
+            <div className={"statv mono" + tone(dirOf(d(myRank, prev?.rank), 0.5, true))}>
+              {myRank}<span style={{ opacity: .5 }}>/{state.funds.length}</span>
+              <Delta value={d(myRank, prev?.rank)} eps={0.5} invert format={(v) => String(Math.round(v))} />
             </div>
+          </div>
+          <div>
+            <div className="stat">Dry Powder</div>
+            <div className="statv mono">
+              {/* Ohne Farbe: Sinkendes Dry Powder heißt, dass investiert wurde —
+                  das ist der Zweck des Fonds und kein Rückschlag. */}
+              <AnimatedNumber value={investableOf(me, quarter)} format={eur} className={undefined} style={undefined} />
+            </div>
+          </div>
+          <div>
+            <div className="stat">PortCos</div>
+            <div className="statv mono">
+              {me.holdings.length}<span style={{ opacity: .5 }}>/{MAX_SLOTS}</span>
+            </div>
+          </div>
+        </div>
+        <div className="cockfoot">
+          <button type="button" className="cocktoggle" aria-expanded={kpiOpen}
+            onClick={() => { haptic(6); setKpiOpen(!kpiOpen); }}>
+            {kpiOpen ? "Weniger" : "Kennzahlen"}<span aria-hidden="true">{kpiOpen ? "▴" : "▾"}</span>
+          </button>
+          {!kpiOpen && (
+            <span className="cockpeek mono">
+              TVCC {tvcc.toFixed(2)}× · IRR {(irr * 100).toFixed(1).replace(".", ",")} %
+            </span>
           )}
         </div>
-        {/* Kapital: womit lässt sich arbeiten. */}
-        <div className="cockgrp">
-          <div className="barrow">
-            <div>
-              <div className="stat">Dry Powder</div>
-              <div className="statv mono">
-                <AnimatedNumber value={investableOf(me, quarter)} format={eur} className={undefined} style={undefined} />
-                {/* Ohne Farbe, wie bei PortCos: Sinkendes Dry Powder heißt, dass
-                    investiert wurde — das ist der Zweck des Fonds und kein
-                    Rückschlag. Steigendes heißt, dass ein Exit Kapital
-                    zurückgebracht hat. Keine der beiden Richtungen ist für sich
-                    genommen gut oder schlecht. */}
-                <Delta value={d(investableOf(me, quarter), prev?.dryPowder)} eps={0.5} neutral
-                  format={eurDelta} />
-              </div>
+        {kpiOpen && (
+          <div className="cockmore">
+            <div className="cockkpi mono">
+              <span>TVCC {tvcc.toFixed(2)}×
+                <Delta value={d(tvcc, prev?.tvcc)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+              <span>IRR {(irr * 100).toFixed(1).replace(".", ",")} %
+                <Delta value={d(irr, prev?.irr)} eps={0.0005}
+                  format={(v) => (v * 100).toFixed(1).replace(".", ",") + " pp"} /></span>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="stat">PortCos</div>
-              <div className="statv mono">
-                {me.holdings.length}<span style={{ opacity: .5 }}>/{MAX_SLOTS}</span>
+            <div className="cockkpi mono">
+              <span>TVPI {tvpi.toFixed(2)}×
+                <Delta value={d(tvpi, prev?.tvpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+              <span>DPI {dpi.toFixed(2)}×
+                <Delta value={d(dpi, prev?.dpi)} eps={0.005} format={(v) => v.toFixed(2) + "×"} /></span>
+            </div>
+            <div className="cockkpi mono">
+              <span>Dry Powder {eur(investableOf(me, quarter))}
+                <Delta value={d(investableOf(me, quarter), prev?.dryPowder)} eps={0.5} neutral format={eurDelta} /></span>
+              <span>PortCos {me.holdings.length}/{MAX_SLOTS}
                 <Delta value={d(me.holdings.length, prev?.portcos)} eps={0.5} neutral
-                  format={(v) => String(Math.round(v))} />
-              </div>
+                  format={(v) => String(Math.round(v))} /></span>
+            </div>
+            <div className="cockkpi mono">
+              <span>
+                {eur(me.undrawn ?? CAPITAL)} offenes Commitment{(me.recyc || 0) > 0.5 ? ` + ${eur(me.recyc)} einbehalten` : ""}
+              </span>
             </div>
           </div>
+        )}
+        {/* Gegen Ende der Laufzeit steht neben der Bewertung des Bestands, was
+            davon nach der Zwangsverwertung übrig bliebe — immer sichtbar,
+            sonst springt die Wertung erst in der Endabrechnung. */}
+        {PERIODS - quarter <= END_PRESSURE_FROM + PROC_Q && (
           <div className="cockkpi mono">
-            <span>
-              {eur(me.undrawn ?? CAPITAL)} offenes Commitment{(me.recyc || 0) > 0.5 ? ` + ${eur(me.recyc)} einbehalten` : ""}
-            </span>
-            {(me.accrued || 0) > 0.5 && <span className="ox">{eur(me.accrued)} aufgelaufene Gebühren</span>}
+            <TailEndPeek fund={me} market={state.market} quarter={quarter} />
           </div>
-        </div>
+        )}
+        {(me.accrued || 0) > 0.5 && (
+          <div className="cockkpi mono"><span className="ox">{eur(me.accrued)} aufgelaufene Gebühren</span></div>
+        )}
         {!submitted && <div className="cockgrp"><div className="barrow" style={{ fontSize: 10.5, paddingBottom: 2 }}>
           <button
             className="mono"

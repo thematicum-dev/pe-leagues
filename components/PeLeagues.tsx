@@ -33,6 +33,7 @@ import {
 } from "@/components/pel/ui";
 import { HalfYearBriefing, type BriefPerf } from "@/components/pel/briefing";
 import { useFadeOnChange } from "@/components/pel/motion";
+import { usePelTheme } from "@/components/pel/prefs";
 
 /* Kennzahlen des eigenen Fonds (Platz 0) für den Halbjahresbericht */
 function perfOf(F, mk, q): BriefPerf {
@@ -75,7 +76,7 @@ export default function PeLeagues() {
   const [bids, setBids] = useState({});
   const [feed, setFeed] = useState([]);
   const [sheet, setSheet] = useState(null);
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = usePelTheme();
   const [dd, setDd] = useState({});
   const [landmark, setLandmark] = useState(null);
   const [openFund, setOpenFund] = useState(null);

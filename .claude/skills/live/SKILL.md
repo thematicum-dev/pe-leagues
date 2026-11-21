@@ -55,8 +55,9 @@ Vier Routen, vier Zwecke:
   (Admin-Übersicht mit Kennzahlen, Trichter, Tagesverlauf) und `?view=users`
   (Nutzerliste mit Suche, Filtern und CSV-Export), `?view=feedback`
   (Feedback-Formular), `?view=dashboard` (Dashboard mit laufender Partie, in der
-  man dran ist, Lobby und offener Lobby) und `?view=dashboard-new` (Dashboard
-  eines neuen Spielers ohne Partien). Startseite und Rechtstexte
+  man dran ist, Lobby und offener Lobby) `?view=dashboard-new` (Dashboard
+  eines neuen Spielers ohne Partien) und `?view=seasons` (Admin-Partienliste mit
+  Launch-Diagramm). Startseite und Rechtstexte
   (`/`, `/impressum`, `/datenschutz`, `/agb`) brauchen keine Daten und lassen
   sich direkt aufrufen.
 

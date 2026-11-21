@@ -33,6 +33,7 @@ import {
   CSS, haptic, AnimatedNumber, News, Coach, CoachCtx, Kpi, DealCard, Holding, Def, InitPicker,
   Shortlist, Sheet, Waterfall, KpiTiles,
 } from "@/components/pel/ui";
+import { usePelTheme } from "@/components/pel/prefs";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -1150,7 +1151,7 @@ function GuidedRun({ dark, setDark, back }) {
    Darstellung (hell/dunkel) gehört hierher, damit sie über beide Schritte
    erhalten bleibt. */
 export default function ExplainMode() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = usePelTheme();
   const [started, setStarted] = useState(false);
 
   if (!started) return <Briefing dark={dark} setDark={setDark} onStart={() => setStarted(true)} />;
