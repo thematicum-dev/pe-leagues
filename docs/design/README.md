@@ -40,7 +40,9 @@ Stufen-Delta (das Ticker-Dreieck in drei gleich hohen Stufen, Spitze in Gold) ne
 „PE LEAGUES“ in Archivo Black. Reinzeichnung, Maße und Farben in der Figma-Datei auf
 der Seite „Logo“, Rahmen „Final · PE Leagues Logo“.
 
-- Komponente: `components/Logo.tsx` (`Logo`, `LogoMark`)
-- Schrift: `public/fonts/archivo-900-latin.woff2`, selbst ausgeliefert (SIL OFL, `Archivo-OFL.txt`)
+- Komponente: `components/Logo.tsx` (`Logo`, `LogoMark`); `LOGO_VARIANT` wählt zwischen
+  `"ticker"` (Archivo Black) und `"bank"` (Cormorant Garamond, Rahmen „Alternative · Privatbank“)
+- Schriften: `public/fonts/archivo-900-latin.woff2` und `cormorant-garamond-600-latin.woff2`,
+  selbst ausgeliefert (SIL OFL, Lizenzdateien daneben)
 - Symbole: `app/icon.svg` und `public/icon.svg`, `app/favicon.ico` (16/32/48),
   `app/apple-icon.png` (180), `public/icon-192.png` und `public/icon-512.png` (Android, maskable)

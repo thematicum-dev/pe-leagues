@@ -155,6 +155,15 @@ body {
   src: url("/fonts/archivo-900-latin.woff2") format("woff2");
 }
 
+/* Schrift der Logo-Fassung "Privatbank" (SIL OFL, CormorantGaramond-OFL.txt) */
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/cormorant-garamond-600-latin.woff2") format("woff2");
+}
+
 /* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Archivo Black.
    Alle Maße in em, damit `size` am Logo genügt. */
 .brandmark {
@@ -178,6 +187,23 @@ body {
   letter-spacing: -0.01em;
   word-spacing: 0.1em;
   white-space: nowrap;
+}
+
+/* Fassung "Privatbank": Zeichen | feine Goldlinie | gesperrte Garamond-Versalien */
+.brandmark-bank {
+  gap: 0.5em;
+}
+.brandmark-bank .brandrule {
+  display: block;
+  width: 1px;
+  height: 1.05em;
+  background: #d4b26a;
+}
+.brandmark-bank .brandword {
+  font-family: "Cormorant Garamond", "Garamond", "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  word-spacing: 0;
 }
 
 .tagline {
