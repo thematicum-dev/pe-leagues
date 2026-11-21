@@ -4,9 +4,14 @@
    Das Zeichen ist das Ticker-Dreieck, in drei gleich hohe Stufen geteilt, die
    Spitze in Gold: steigender Kurs, Gipfel, Ligatabelle. Reinzeichnungen in der
    Figma-Datei "PE-Leagues – Ist-Stand", Seite "Logo":
-   - "Final · PE Leagues Logo": Fassung "ticker", Wortmarke in Archivo Black
-   - "Alternative · Privatbank": Fassung "bank", gesperrte Versalien in
-     Cormorant Garamond hinter einer feinen Goldlinie
+   - "Logo in der App-Schrift", I1: Fassung "ticker", Versalien in Inter
+     ExtraBold
+   - "Logo in der App-Schrift", I2: Fassung "bank", weit gesperrte Versalien
+     in Inter SemiBold hinter einer feinen Goldlinie
+
+   Beide Wortmarken sind aus Inter gesetzt, der Schrift der ganzen App. Bis
+   zum 21.11.2026 standen sie in Archivo Black bzw. Cormorant Garamond und
+   wirkten neben der übrigen Oberfläche fremd.
 
    Welche Fassung die App zeigt, entscheidet LOGO_VARIANT. Die Stufen folgen
    der Textfarbe (currentColor), die Spitze ist immer Gold. `size` ist die
@@ -30,12 +35,12 @@ export default function Logo({ size = 22, withWordmark = true, variant = LOGO_VA
   size?: number; withWordmark?: boolean; variant?: LogoVariant;
 }) {
   if (variant === "bank") {
-    /* Die Garamond hat kleinere Versalien als die Archivo; 1,15-fach gesetzt
-       stehen beide Fassungen gleich groß im Layout. */
-    const fs = Math.round(size * 1.15);
+    /* Gesperrte Versalien brauchen einen kleineren Grad, damit die Wortmarke
+       nicht breiter wird als die Ticker-Fassung; das Zeichen bleibt gleich groß. */
+    const fs = Math.round(size * 0.82);
     return (
       <span className="brandmark brandmark-bank" style={{ fontSize: fs }} role="img" aria-label="PE Leagues">
-        <LogoMark height={Math.round(fs * 0.92)} />
+        <LogoMark height={Math.round(size * 0.96)} />
         {withWordmark && <>
           <i className="brandrule" aria-hidden="true" />
           <span className="brandword" aria-hidden="true">PE LEAGUES</span>

@@ -18,10 +18,7 @@ export const config = {
      * nichts zu tun und verfälscht obendrein die Messung: Die Schätzung des
      * Hinwegs geht von der halben Umlaufzeit aus, und eine Verarbeitung auf
      * dem Server, die vor dem Ablesen der Uhr passiert, ist eben kein Hinweg.
-     *
-     * Schriftdateien (woff2, die Wortmarke des Logos) wie Bilder: statisch,
-     * ohne Sitzung.
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/time|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/time|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

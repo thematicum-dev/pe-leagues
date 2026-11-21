@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 html,
 body {
@@ -144,28 +144,8 @@ body {
   }
 }
 
-/* Schrift der Wortmarke, selbst ausgeliefert (public/fonts, SIL Open Font
-   License, siehe Archivo-OFL.txt). Nur Latin und nur der eine Schnitt: Die
-   Wortmarke ist "PE LEAGUES", mehr braucht es nicht. */
-@font-face {
-  font-family: "Archivo";
-  font-style: normal;
-  font-weight: 900;
-  font-display: swap;
-  src: url("/fonts/archivo-900-latin.woff2") format("woff2");
-}
-
-/* Schrift der Logo-Fassung "Privatbank" (SIL OFL, CormorantGaramond-OFL.txt) */
-@font-face {
-  font-family: "Cormorant Garamond";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/cormorant-garamond-600-latin.woff2") format("woff2");
-}
-
-/* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Archivo Black.
-   Alle Maße in em, damit `size` am Logo genügt. */
+/* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Inter, der Schrift
+   der App. Alle Maße in em, damit `size` am Logo genügt. */
 .brandmark {
   display: inline-flex;
   align-items: center;
@@ -181,11 +161,11 @@ body {
 }
 
 .brandword {
-  font-family: "Archivo", "Arial Black", "Helvetica Neue", system-ui, sans-serif;
-  font-weight: 900;
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 800;
   font-size: 1em;
   letter-spacing: -0.01em;
-  word-spacing: 0.1em;
+  word-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -200,9 +180,8 @@ body {
   background: #d4b26a;
 }
 .brandmark-bank .brandword {
-  font-family: "Cormorant Garamond", "Garamond", "Times New Roman", serif;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   word-spacing: 0;
 }
 
