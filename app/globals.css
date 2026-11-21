@@ -144,17 +144,40 @@ body {
   }
 }
 
+/* Schrift der Wortmarke, selbst ausgeliefert (public/fonts, SIL Open Font
+   License, siehe Archivo-OFL.txt). Nur Latin und nur der eine Schnitt: Die
+   Wortmarke ist "PE LEAGUES", mehr braucht es nicht. */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/archivo-900-latin.woff2") format("woff2");
+}
+
+/* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Archivo Black.
+   Alle Maße in em, damit `size` am Logo genügt. */
 .brandmark {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.32em;
   margin-bottom: 16px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.brandmark .logomark {
+  flex: none;
+  display: block;
 }
 
 .brandword {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.02em;
+  font-family: "Archivo", "Arial Black", "Helvetica Neue", system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 1em;
+  letter-spacing: -0.01em;
+  word-spacing: 0.1em;
+  white-space: nowrap;
 }
 
 .tagline {

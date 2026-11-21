@@ -33,3 +33,14 @@ jede Ansicht dort in dunkel und hell.
 
 Startseite, Anmeldung, Dashboard, Profil, Rangliste und Admin folgen denselben
 Grundsätzen über den Abschnitt „Redesign v1“ am Ende von `app/globals.css`.
+
+## Logo
+
+Stufen-Delta (das Ticker-Dreieck in drei gleich hohen Stufen, Spitze in Gold) neben
+„PE LEAGUES“ in Archivo Black. Reinzeichnung, Maße und Farben in der Figma-Datei auf
+der Seite „Logo“, Rahmen „Final · PE Leagues Logo“.
+
+- Komponente: `components/Logo.tsx` (`Logo`, `LogoMark`)
+- Schrift: `public/fonts/archivo-900-latin.woff2`, selbst ausgeliefert (SIL OFL, `Archivo-OFL.txt`)
+- Symbole: `app/icon.svg` und `public/icon.svg`, `app/favicon.ico` (16/32/48),
+  `app/apple-icon.png` (180), `public/icon-192.png` und `public/icon-512.png` (Android, maskable)
