@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 html,
 body {
@@ -144,17 +144,45 @@ body {
   }
 }
 
+/* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Inter, der Schrift
+   der App. Alle Maße in em, damit `size` am Logo genügt. */
 .brandmark {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.32em;
   margin-bottom: 16px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.brandmark .logomark {
+  flex: none;
+  display: block;
 }
 
 .brandword {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.02em;
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 1em;
+  letter-spacing: -0.01em;
+  word-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* Fassung "Privatbank": Zeichen | feine Goldlinie | gesperrte Garamond-Versalien */
+.brandmark-bank {
+  gap: 0.5em;
+}
+.brandmark-bank .brandrule {
+  display: block;
+  width: 1px;
+  height: 1.05em;
+  background: #d4b26a;
+}
+.brandmark-bank .brandword {
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  word-spacing: 0;
 }
 
 .tagline {

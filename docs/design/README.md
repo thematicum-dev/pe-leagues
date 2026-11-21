@@ -33,3 +33,14 @@ jede Ansicht dort in dunkel und hell.
 
 Startseite, Anmeldung, Dashboard, Profil, Rangliste und Admin folgen denselben
 Grundsätzen über den Abschnitt „Redesign v1“ am Ende von `app/globals.css`.
+
+## Logo
+
+Stufen-Delta (das Ticker-Dreieck in drei gleich hohen Stufen, Spitze in Gold) neben
+„PE LEAGUES“ in Inter, der Schrift der App. Reinzeichnungen in der Figma-Datei auf der
+Seite „Logo“, Rahmen „Logo in der App-Schrift“.
+
+- Komponente: `components/Logo.tsx` (`Logo`, `LogoMark`); `LOGO_VARIANT` wählt zwischen
+  `"ticker"` (Inter ExtraBold, Vorgabe) und `"bank"` (Inter SemiBold, gesperrt, Goldlinie)
+- Symbole: `app/icon.svg` und `public/icon.svg`, `app/favicon.ico` (16/32/48),
+  `app/apple-icon.png` (180), `public/icon-192.png` und `public/icon-512.png` (Android, maskable)
