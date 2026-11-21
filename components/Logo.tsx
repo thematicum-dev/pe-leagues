@@ -15,7 +15,12 @@
 
    Welche Fassung die App zeigt, entscheidet LOGO_VARIANT. Die Stufen folgen
    der Textfarbe (currentColor), die Spitze ist immer Gold. `size` ist die
-   Grundgröße der Wortmarke; Zeichen und Abstände skalieren in em mit. */
+   Grundgröße der Wortmarke; Zeichen und Abstände skalieren in em mit.
+
+   Das Zeichen ist genau so hoch wie die Versalien von Inter (0,727 em) und
+   steht auf der Grundlinie der Schrift: unten bündig mit der Schriftlinie,
+   oben mit den Großbuchstaben. */
+const CAP = 0.727;
 export type LogoVariant = "ticker" | "bank";
 export const LOGO_VARIANT: LogoVariant = "ticker";
 export const LOGO_GOLD = "#D4B26A";
@@ -36,11 +41,11 @@ export default function Logo({ size = 22, withWordmark = true, variant = LOGO_VA
 }) {
   if (variant === "bank") {
     /* Gesperrte Versalien brauchen einen kleineren Grad, damit die Wortmarke
-       nicht breiter wird als die Ticker-Fassung; das Zeichen bleibt gleich groß. */
+       nicht breiter wird als die Ticker-Fassung. */
     const fs = Math.round(size * 0.82);
     return (
       <span className="brandmark brandmark-bank" style={{ fontSize: fs }} role="img" aria-label="PE Leagues">
-        <LogoMark height={Math.round(size * 0.96)} />
+        <LogoMark height={Math.round(fs * CAP)} />
         {withWordmark && <>
           <i className="brandrule" aria-hidden="true" />
           <span className="brandword" aria-hidden="true">PE LEAGUES</span>
@@ -50,7 +55,7 @@ export default function Logo({ size = 22, withWordmark = true, variant = LOGO_VA
   }
   return (
     <span className="brandmark" style={{ fontSize: size }} role="img" aria-label="PE Leagues">
-      <LogoMark height={Math.round(size * 0.96)} />
+      <LogoMark height={Math.round(size * CAP)} />
       {withWordmark && <span className="brandword" aria-hidden="true">PE LEAGUES</span>}
     </span>
   );

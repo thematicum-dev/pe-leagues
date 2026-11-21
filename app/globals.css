@@ -146,10 +146,12 @@ body {
 
 /* Logo (components/Logo.tsx): Stufen-Delta + Wortmarke in Inter, der Schrift
    der App. Alle Maße in em, damit `size` am Logo genügt. */
+/* align-items: baseline setzt die Unterkante des Zeichens (ein SVG hat seine
+   Grundlinie unten) auf die Grundlinie der Schrift. */
 .brandmark {
   display: inline-flex;
-  align-items: center;
-  gap: 0.32em;
+  align-items: baseline;
+  gap: 0.28em;
   margin-bottom: 16px;
   color: var(--ink);
   line-height: 1;
@@ -176,7 +178,7 @@ body {
 .brandmark-bank .brandrule {
   display: block;
   width: 1px;
-  height: 1.05em;
+  height: 0.727em;
   background: #d4b26a;
 }
 .brandmark-bank .brandword {
